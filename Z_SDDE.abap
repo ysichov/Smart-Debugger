@@ -4,8 +4,8 @@
 *&---------------------------------------------------------------------*
 *& version: beta 0.1.67.74
 *& Git https://github.com/ysichov/SDDE
-*& RU description  
-*& EN description  
+*& RU description
+*& EN description
 
 *& Written by Yurii Sychov
 *& e-mail:   ysichov@gmail.com
@@ -19,7 +19,6 @@
 *& https://github.com/ysichov/SDE_abapgit - Simple Data Explorer
 *& https://github.com/larshp/ABAP-Object-Visualizer - Abap Object Visualizer
 *& https://gist.github.com/AtomKrieg/7f4ec2e2f49b82def162e85904b7e25b - data object visualizer
-
 
 CLASS lcl_data_receiver DEFINITION DEFERRED.
 CLASS lcl_data_transmitter DEFINITION DEFERRED.
@@ -627,8 +626,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
             READ TABLE mt_obj WITH KEY name = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
             IF sy-subrc = 0.
-
-              go_tree->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
+              DATA l_name TYPE string.
+              IF i_shortname IS NOT INITIAL.
+                l_name = i_shortname.
+              ELSE.
+                l_name = i_name.
+              ENDIF.
+              go_tree->add_obj_var( EXPORTING iv_name = CONV #( l_name )
                                               iv_full = <ls_symobjref>-instancename
                                                 iv_key = i_new_node ).
               RETURN.
@@ -717,7 +721,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             ENDTRY.
           ELSE.
             IF i_new_node IS NOT INITIAL.
-              go_tree->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
+              IF i_shortname IS NOT INITIAL.
+                l_name = i_shortname.
+              ELSE.
+                l_name = i_name.
+              ENDIF.
+              go_tree->add_obj_var( EXPORTING iv_name = CONV #( l_name )
                                               iv_value = <ls_symobjref>-instancename
                                                 iv_key = i_new_node ).
               RETURN.
@@ -1336,6 +1345,9 @@ CLASS lcl_table_viewer IMPLEMENTATION.
 
     mo_alv = NEW #( i_parent = mo_alv_parent ).
     mt_alv_catalog = create_field_cat( m_tabname ).
+    IF mt_alv_catalog IS INITIAL.
+      RETURN. "todo show tables without structure
+    ENDIF.
     ASSIGN mr_table->* TO <f_tab>.
     set_header( ).
     ls_layout-cwidth_opt = abap_true.
@@ -1478,9 +1490,17 @@ CLASS lcl_table_viewer IMPLEMENTATION.
                    <field> TYPE any.
     ASSIGN mr_table->* TO <tab>.
     CREATE DATA lr_temp LIKE LINE OF <tab>.
+
+    "read table <tab> index 1 ASSIGNING <struc>.
+    "get REFERENCE OF <struc> into lr_temp.
     ASSIGN lr_temp->* TO <struc>.
 
-    lr_table_descr ?= cl_abap_typedescr=>describe_by_data_ref( lr_temp ).
+    TRY.
+        lr_table_descr ?= cl_abap_typedescr=>describe_by_data_ref( lr_temp ).
+      CATCH cx_root.
+        RETURN.
+    ENDTRY.
+
     it_tabdescr[] = lr_table_descr->components[].
     lcl_ddic=>get_text_table( EXPORTING i_tname = i_tname IMPORTING e_tab = l_texttab ).
     l_replace = l_texttab && '_'.
@@ -1672,16 +1692,18 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       ENDLOOP.
     ENDLOOP.
 
-    CALL METHOD mo_alv->set_filter_criteria
-      EXPORTING
-        it_filter = lt_filter.
+    IF mo_sel->mt_sel_tab IS NOT INITIAL.
+      CALL METHOD mo_alv->set_filter_criteria
+        EXPORTING
+          it_filter = lt_filter.
+      lcl_alv_common=>refresh( mo_sel->mo_sel_alv ).
+      lcl_alv_common=>refresh( mo_alv ).
+      mo_sel->mo_viewer->handle_user_command( 'SHOW' ).
+      LOOP AT mo_column_emitters INTO DATA(l_emit).
+        l_emit-emitter->emit_col( l_emit-column ).
+      ENDLOOP.
+    ENDIF.
 
-    lcl_alv_common=>refresh( mo_sel->mo_sel_alv ).
-    lcl_alv_common=>refresh( mo_alv ).
-    mo_sel->mo_viewer->handle_user_command( 'SHOW' ).
-    LOOP AT mo_column_emitters INTO DATA(l_emit).
-      l_emit-emitter->emit_col( l_emit-column ).
-    ENDLOOP.
   ENDMETHOD.
 ENDCLASS.
 
@@ -2544,6 +2566,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       l_key = main_node_key.
     ENDIF.
 
+    IF l_key IS INITIAL.
+      l_key = main_node_key.
+    ENDIF.
+    IF iv_name IS INITIAL.
+      BREAK-POINT.
+    ENDIF.
+
     er_key = tree->get_nodes( )->add_node(
       related_node   = l_key
       relationship   = if_salv_c_node_relation=>last_child
@@ -2567,8 +2596,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     LOOP AT lt_nodes INTO DATA(l_node).
       READ TABLE lt_sub WITH KEY node = l_node-node TRANSPORTING NO FIELDS.
       IF sy-subrc NE 0.
-        l_node-node->expand( ).
-        lt_sub = l_node-node->get_subtree( ).
+        TRY.
+            l_node-node->expand( ).
+            lt_sub = l_node-node->get_subtree( ).
+          CATCH cx_root.
+        ENDTRY.
       ENDIF.
     ENDLOOP.
 
