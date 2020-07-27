@@ -9,3 +9,5 @@ Multi-windows program for viewing all objects and data structures in debug
 - можно открывать таблицы в отдельном окне
 - двойной щелчок на переменной типа string откроет окно с ее полным содержимым (в отладчике видно до 255 символов)
 - отображается содержимое ООП объектов
+
+Более подробное описание по ссылке - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
