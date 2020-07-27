@@ -15,10 +15,10 @@
 *&---------------------------------------------------------------------*
 
 *& External resources
-*& https://github.com/bizhuka/eui - ALV listboxes
 *& https://github.com/ysichov/SDE_abapgit - Simple Data Explorer
 *& https://github.com/larshp/ABAP-Object-Visualizer - Abap Object Visualizer
 *& https://gist.github.com/AtomKrieg/7f4ec2e2f49b82def162e85904b7e25b - data object visualizer
+*& https://github.com/bizhuka/eui - ALV listboxes
 
 CLASS lcl_data_receiver DEFINITION DEFERRED.
 CLASS lcl_data_transmitter DEFINITION DEFERRED.
