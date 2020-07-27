@@ -1154,7 +1154,13 @@ CLASS lcl_text_viewer IMPLEMENTATION.
     FIELD-SYMBOLS <str> TYPE string.
     ASSIGN ir_str->* TO <str>.
     DATA lt_string TYPE TABLE OF char255.
-    SPLIT <str> AT cl_abap_char_utilities=>cr_lf INTO TABLE lt_string.
+*    data l_len type i.
+*    l_len = strlen( <str> ).
+    While strlen( <str> ) > 255.
+     append <str>+0(255) to lt_string.
+     shift <str> left BY 255 PLACES.
+    ENDWHILE.
+     append <str> to lt_string.
     mo_text->set_text_as_r3table( lt_string ).
     CALL METHOD cl_gui_cfw=>flush.
     mo_text->set_focus( mo_box ).
