@@ -2,7 +2,7 @@
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
-*& version: beta 0.1.67.74
+*& version: alpha 0.1.67.74
 *& Git https://github.com/ysichov/SDDE
 *& RU description
 *& EN description
