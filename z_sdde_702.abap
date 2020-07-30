@@ -2,7 +2,7 @@
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
-*& version: alpha 0.1.72.81
+*& version: alpha 0.1.70.80
 *& Git https://github.com/ysichov/SDDE
 *& RU description
 *& EN description
@@ -20,7 +20,6 @@
 *& https://gist.github.com/AtomKrieg/7f4ec2e2f49b82def162e85904b7e25b - data object visualizer
 *& https://github.com/bizhuka/eui - ALV listboxes
 
-include <icon>.
 CLASS lcl_data_receiver DEFINITION DEFERRED.
 CLASS lcl_data_transmitter DEFINITION DEFERRED.
 CLASS lcl_rtti_tree DEFINITION DEFERRED.
@@ -1729,7 +1728,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       ASSIGN COMPONENT ls-name OF STRUCTURE <struc> TO <field>.
       GET REFERENCE OF <field> INTO lr_field.
       lr_data_descr ?= cl_abap_typedescr=>describe_by_data_ref( lr_field ).
-      DATA: l_name TYPE string.
+      DATA: l_name TYPE DDOBJNAME.
       l_name = lr_data_descr->absolute_name.
       REPLACE ALL OCCURRENCES OF '\TYPE=' IN l_name WITH ''.
 
