@@ -2,7 +2,7 @@
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
-*& version: alpha 0.1.67.74
+*& version: beta 0.1.67.74
 *& Git https://github.com/ysichov/SDDE
 *& RU description
 *& EN description
@@ -512,10 +512,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     ASSIGN er_struc->* TO FIELD-SYMBOL(<new_struc>).
 
-    LOOP AT comp_full INTO DATA(comp).
-      ASSIGN comp-symbquick-quickdata TO <lv_value>.
+    LOOP AT comp_full INTO l_comp.
+      ASSIGN l_comp-symbquick-quickdata TO <lv_value>.
       lr_symbsimple ?= <lv_value>.
-      ASSIGN COMPONENT comp-compname OF STRUCTURE <new_struc> TO FIELD-SYMBOL(<new>).
+      ASSIGN COMPONENT l_comp-compname OF STRUCTURE <new_struc> TO FIELD-SYMBOL(<new>).
       <new> = lr_symbsimple->valstring.
     ENDLOOP.
   ENDMETHOD.
@@ -558,22 +558,37 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ASSIGN comp-symbquick-quickdata TO <lv_value>.
           ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO <new>.
           GET REFERENCE OF <new> INTO lr_struc.
-          TRY.
-              lr_symbstruc ?= <lv_value>.
-              get_deep_struc( EXPORTING i_name = |{ i_name }-{ comp-compname }|
-                               r_obj = lr_struc ).
-            CATCH cx_root.
-          ENDTRY.
+          "TRY.
+          lr_symbstruc ?= <lv_value>.
+          get_deep_struc( EXPORTING i_name = |{ i_name }-{ comp-compname }|
+                           r_obj = lr_struc ).
+          "CATCH cx_root.
+          "ENDTRY.
 
         WHEN cl_tpda_script_data_descr=>mt_tab.
-          TRY.
-              ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO <new>.
-              lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ i_name }-{ comp-compname }| ).
-              table_clone = lo_table_descr->elem_clone( ).
-              ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
-              <new> = <f>.
-            CATCH cx_root.
-          ENDTRY.
+          "TRY.
+          FIELD-SYMBOLS: <f>         TYPE ANY TABLE,
+                         <new_table> TYPE STANDARD  TABLE.
+          ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO <new_table>.
+          lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ i_name }-{ comp-compname }| ).
+          table_clone = lo_table_descr->elem_clone( ).
+
+          ASSIGN table_clone->* TO <f>.
+          LOOP AT <f> ASSIGNING FIELD-SYMBOL(<fs>).
+            APPEND INITIAL LINE TO <new_table> ASSIGNING FIELD-SYMBOL(<new_line>).
+            DO.
+              ASSIGN COMPONENT sy-index OF STRUCTURE <fs> TO FIELD-SYMBOL(<from>).
+              IF sy-subrc NE 0.
+                EXIT.
+              ENDIF.
+              ASSIGN COMPONENT sy-index OF STRUCTURE <new_line> TO FIELD-SYMBOL(<to>).
+              DESCRIBE FIELD <from> TYPE DATA(from_type).
+              DESCRIBE FIELD   <to> TYPE DATA(to_type).
+              IF from_type = to_type.
+                <to> = <from>.
+              ENDIF.
+            ENDDO.
+          ENDLOOP.
       ENDCASE.
     ENDLOOP.
   ENDMETHOD.
@@ -922,7 +937,7 @@ CLASS lcl_rtti IMPLEMENTATION.
           lt_components TYPE abap_component_tab,
           lt_field_info TYPE TABLE OF dfies.
 
-    lcl_ddic=>get_text_table( EXPORTING i_tname = i_tname IMPORTING e_tab = DATA(l_texttab) ).
+    "lcl_ddic=>get_text_table( EXPORTING i_tname = i_tname IMPORTING e_tab = DATA(l_texttab) ).
 
     cl_abap_typedescr=>describe_by_name( EXPORTING p_name          = i_tname
                                       RECEIVING p_descr_ref     = DATA(lo_descr)
@@ -931,40 +946,6 @@ CLASS lcl_rtti IMPLEMENTATION.
       e_handle ?= lo_descr.
     ELSE.
       RETURN.
-    ENDIF.
-
-    IF l_texttab IS NOT INITIAL.
-      DATA(lo_texttab)  = CAST cl_abap_structdescr( cl_abap_typedescr=>describe_by_name( l_texttab ) ).
-      LOOP AT e_handle->components INTO DATA(l_descr).
-        ls_comp-name = l_descr-name.
-        ls_comp-type ?= e_handle->get_component_type( ls_comp-name ).
-        APPEND ls_comp TO lt_components.
-      ENDLOOP.
-
-      LOOP AT lo_texttab->components INTO l_descr.
-
-        CALL FUNCTION 'DDIF_FIELDINFO_GET'
-          EXPORTING
-            tabname        = l_texttab
-            fieldname      = l_descr-name
-            langu          = sy-langu
-          TABLES
-            dfies_tab      = lt_field_info
-          EXCEPTIONS
-            not_found      = 1
-            internal_error = 2
-            OTHERS         = 3.
-
-        CHECK sy-subrc = 0.
-        IF lt_field_info[ 1 ]-keyflag = abap_false.
-          ls_comp-name =  l_texttab && '_' && l_descr-name.
-          ls_comp-type ?= lo_texttab->get_component_type( l_descr-name ).
-          APPEND: ls_comp TO lt_components,
-                  ls_comp TO e_t_comp.
-
-        ENDIF.
-      ENDLOOP.
-      e_handle  = cl_abap_structdescr=>create( lt_components ).
     ENDIF.
   ENDMETHOD.
 
@@ -1156,11 +1137,11 @@ CLASS lcl_text_viewer IMPLEMENTATION.
     DATA lt_string TYPE TABLE OF char255.
 *    data l_len type i.
 *    l_len = strlen( <str> ).
-    While strlen( <str> ) > 255.
-     append <str>+0(255) to lt_string.
-     shift <str> left BY 255 PLACES.
+    WHILE strlen( <str> ) > 255.
+      APPEND <str>+0(255) TO lt_string.
+      SHIFT <str> LEFT BY 255 PLACES.
     ENDWHILE.
-     append <str> to lt_string.
+    APPEND <str> TO lt_string.
     mo_text->set_text_as_r3table( lt_string ).
     CALL METHOD cl_gui_cfw=>flush.
     mo_text->set_focus( mo_box ).
