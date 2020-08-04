@@ -4,8 +4,8 @@
 *&---------------------------------------------------------------------*
 *& version: alpha 0.1.70.80
 *& Git https://github.com/ysichov/SDDE
-*& RU description
-*& EN description
+*& RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
+*& EN description - https://github.com/ysichov/SDDE/wiki
 
 *& Written by Yurii Sychov
 *& e-mail:   ysichov@gmail.com
