@@ -1,3 +1,4 @@
+
 *&---------------------------------------------------------------------*
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
@@ -257,15 +258,29 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
     METHODS: transfer_variable IMPORTING i_name      TYPE string
                                          i_shortname TYPE string OPTIONAL
                                          i_new_node  TYPE salv_de_node_key OPTIONAL,
+
       create_simple_var IMPORTING i_name        TYPE string
                         RETURNING VALUE(er_var) TYPE REF TO data,
+
       create_simple_string IMPORTING i_name          TYPE string
                            RETURNING VALUE(e_string) TYPE string,
+
       create_struc         IMPORTING  i_name          TYPE string
                            RETURNING  VALUE(er_struc) TYPE REF TO data
                            EXCEPTIONS type_not_found,
+
+      create_struc2         IMPORTING i_name      TYPE string
+                                      i_shortname TYPE string OPTIONAL
+                                      i_new_node  TYPE salv_de_node_key OPTIONAL,
+
+      create_reference         IMPORTING i_name      TYPE string
+                                         i_shortname TYPE string OPTIONAL
+                                         i_new_node  TYPE salv_de_node_key OPTIONAL
+                                         i_quick     TYPE TPDA_SCR_QUICK_INFO,
+
       get_deep_struc       IMPORTING i_name TYPE string
                                      r_obj  TYPE REF TO data,
+
       get_table  IMPORTING i_name TYPE string
                  CHANGING  c_obj  TYPE REF TO data.
 
@@ -661,18 +676,69 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           go_tree->add_variable( EXPORTING iv_root_name = i_name iv_key = i_new_node CHANGING io_var =  <f>  ).
 
         ELSEIF quick-typid = 'r'. "reference
+          BREAK-POINT.
+           create_reference( EXPORTING i_name = i_name
+                                       i_shortname = l_name
+                                       i_new_node = i_new_node
+                                       i_quick = quick ).
 
-          DATA: lv_public_key    TYPE salv_de_node_key,
+        ELSEIF quick-typid = 'v' OR quick-typid = 'u' ."deep structure or structure
+
+          DATA deep_ref TYPE REF TO cl_abap_typedescr.
+          CALL METHOD cl_abap_complexdescr=>describe_by_name
+            EXPORTING
+              p_name         = quick-abstypename
+            RECEIVING
+              p_descr_ref    = deep_ref
+            EXCEPTIONS
+              type_not_found = 1.
+
+          IF sy-subrc = 0.
+            DATA: lo_deep_handle TYPE REF TO cl_abap_datadescr.
+            lo_deep_handle ?= deep_ref.
+            CREATE DATA lr_struc TYPE HANDLE lo_deep_handle.
+
+            get_deep_struc( EXPORTING i_name = i_name r_obj = lr_struc ).
+            ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_deep>).
+
+            go_tree->add_variable( EXPORTING iv_root_name = l_name iv_key = i_new_node CHANGING io_var =  <new_deep>  ).
+          ELSE.
+            create_struc2( EXPORTING i_name = i_name i_shortname = l_name i_new_node = i_new_node ).
+          ENDIF.
+
+        ELSEIF quick-typid = 'g'."string
+          data(new_string) = create_simple_string( i_name ).
+          go_tree->add_variable( EXPORTING iv_root_name = i_name CHANGING io_var =  new_string ).
+        ELSE.
+          lr_struc = create_simple_var( i_name ).
+          ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_elem>).
+          IF i_shortname IS NOT INITIAL.
+            l_name = i_shortname.
+          ELSE.
+            l_name = i_name.
+          ENDIF.
+          go_tree->add_variable( EXPORTING iv_root_name = l_name iv_key = i_new_node CHANGING io_var =  <new_elem>  ).
+        ENDIF.
+      CATCH cx_root.
+    ENDTRY.
+  ENDMETHOD.
+
+  method create_reference.
+             DATA: ls_obj         LIKE LINE OF mt_obj,
+                   lr_struc       TYPE REF TO data,
+                   lv_public_key    TYPE salv_de_node_key,
                 lv_protected_key TYPE salv_de_node_key,
-                lv_private_key   TYPE salv_de_node_key.
+                lv_private_key   TYPE salv_de_node_key,
+                lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
+          table_clone    TYPE REF TO data.
 
           FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
-          ASSIGN quick-quickdata->* TO <ls_symobjref>.
+          ASSIGN i_quick-quickdata->* TO <ls_symobjref>.
           IF <ls_symobjref>-instancename <> '{O:initial}'.
 
             READ TABLE mt_obj WITH KEY name = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
             IF sy-subrc = 0.
-              go_tree->add_obj_var( EXPORTING iv_name = CONV #( l_name )
+              go_tree->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
                                               iv_full = <ls_symobjref>-instancename
                                                 iv_key = i_new_node ).
               RETURN.
@@ -680,19 +746,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             ls_obj-name = <ls_symobjref>-instancename.
             COLLECT ls_obj INTO mt_obj.
 
-            DATA: lv_name TYPE string.
-            IF i_shortname IS SUPPLIED.
-              lv_name = i_shortname.
-            ELSE.
-              lv_name = i_name.
-            ENDIF.
-
             TRY.
                 CALL METHOD cl_tpda_script_data_descr=>get_quick_info
                   EXPORTING
                     p_var_name   = <ls_symobjref>-instancename
                   RECEIVING
-                    p_symb_quick = quick.
+                    p_symb_quick = data(quick).
 
                 DATA: lo_object     TYPE REF TO cl_tpda_script_objectdescr,
                       lo_descr      TYPE REF TO cl_tpda_script_data_descr,
@@ -705,14 +764,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
                 lt_attributes = lo_object->attributes( ).
 
-                go_tree->add_obj_nodes( EXPORTING iv_name = CONV #( lv_name )
+                go_tree->add_obj_nodes( EXPORTING iv_name = CONV #( i_shortname )
                                            iv_full = <ls_symobjref>-instancename
                                            i_new_node = i_new_node
                                            it_attr = lt_attributes
                                  IMPORTING ev_public_key = lv_public_key
                                            ev_protected_key = lv_protected_key
                                            ev_private_key = lv_private_key ).
-
 
                 LOOP AT lt_attributes ASSIGNING FIELD-SYMBOL(<ls_attribute>).
 
@@ -742,7 +800,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                     WHEN cl_tpda_script_data_descr=>mt_tab.
                       lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
                       table_clone = lo_table_descr->elem_clone( ).
-                      ASSIGN table_clone->* TO <f>.
+                      ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
                       go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name
                                              iv_key = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )
                                                CHANGING io_var =  <f> ).
@@ -761,97 +819,57 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             ENDTRY.
           ELSE.
             IF i_new_node IS NOT INITIAL.
-              IF i_shortname IS NOT INITIAL.
-                l_name = i_shortname.
-              ELSE.
-                l_name = i_name.
-              ENDIF.
-              go_tree->add_obj_var( EXPORTING iv_name = CONV #( l_name )
+              go_tree->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
                                               iv_value = <ls_symobjref>-instancename
                                                 iv_key = i_new_node ).
               RETURN.
             ENDIF.
           ENDIF.
 
-        ELSEIF quick-typid = 'v' OR quick-typid = 'u' ."deep structure or structure
+  ENDMETHOD.
 
-          DATA deep_ref TYPE REF TO cl_abap_typedescr.
-          CALL METHOD cl_abap_complexdescr=>describe_by_name
-            EXPORTING
-              p_name         = quick-abstypename
-            RECEIVING
-              p_descr_ref    = deep_ref
-            EXCEPTIONS
-              type_not_found = 1.
+  METHOD create_struc2.
+    DATA: lo_struc_descr TYPE REF TO cl_tpda_script_structdescr,
+          lt_components  TYPE abap_component_tab,
+          comp_full      TYPE  tpda_scr_struct_comp_it,
+          ls_comp        TYPE abap_componentdescr,
+          comp_it        TYPE tpda_script_struc_componentsit,
+          structdescr    TYPE REF TO cl_abap_structdescr,
+          r_data         TYPE REF TO data.
 
-          IF sy-subrc = 0.
-            DATA: lo_deep_handle TYPE REF TO cl_abap_datadescr.
-            lo_deep_handle ?= deep_ref.
-            CREATE DATA lr_struc TYPE HANDLE lo_deep_handle.
+    FIELD-SYMBOLS: <str> TYPE any.
+    lo_struc_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
+    lo_struc_descr->components( IMPORTING p_components_it = comp_it p_components_full_it = comp_full ).
 
-            get_deep_struc( EXPORTING i_name = i_name r_obj = lr_struc ).
-            ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_deep>).
+    LOOP AT comp_it INTO DATA(l_comp).
+      ls_comp-name = l_comp-compname.
+      IF l_comp-typid = 'u'.
+        r_data = create_struc( EXPORTING i_name = |{ l_comp-longname }| ).
+      ELSE.
+        r_data = create_simple_var( EXPORTING i_name = |{ l_comp-longname }| ).
+      ENDIF.
+      ASSIGN r_data->* TO FIELD-SYMBOL(<item>).
 
-            go_tree->add_variable( EXPORTING iv_root_name = l_name iv_key = i_new_node CHANGING io_var =  <new_deep>  ).
-          ELSE.
-            DATA: lo_struc_descr TYPE REF TO cl_tpda_script_structdescr,
-                  lt_components TYPE abap_component_tab,
-                  comp_full      TYPE  tpda_scr_struct_comp_it,
-                  ls_comp        TYPE abap_componentdescr,
-                  comp_it        TYPE tpda_script_struc_componentsit,
-                  structdescr TYPE REF TO cl_abap_structdescr,
-                  r_data         TYPE REF TO data.
+      CALL METHOD cl_abap_complexdescr=>describe_by_data
+        EXPORTING
+          p_data      = <item>
+        RECEIVING
+          p_descr_ref = DATA(lo_type).
 
-            FIELD-SYMBOLS: <str> type any.
-            lo_struc_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
-            lo_struc_descr->components( IMPORTING p_components_it = comp_it p_components_full_it = comp_full ).
+      ls_comp-type ?= lo_type.
+      APPEND ls_comp TO lt_components.
+    ENDLOOP.
 
-            LOOP AT comp_it INTO DATA(l_comp).
-              ls_comp-name = l_comp-compname.
-              IF l_comp-typid = 'u'.
-                r_data = create_struc( EXPORTING i_name = |{ l_comp-longname }| ).
-              ELSE.
-                r_data = create_simple_var( EXPORTING i_name = |{ l_comp-longname }| ).
-              ENDIF.
-              ASSIGN r_data->* TO FIELD-SYMBOL(<item>).
+    structdescr = cl_abap_structdescr=>create( lt_components ).
+    CREATE DATA r_data TYPE HANDLE structdescr.
+    ASSIGN r_data->* TO <str>.
 
-              CALL METHOD cl_abap_complexdescr=>describe_by_data
-                EXPORTING
-                  p_data      = <item>
-                RECEIVING
-                  p_descr_ref = DATA(lo_type).
 
-              ls_comp-type ?= lo_type.
-              APPEND ls_comp to lt_components.
-            ENDLOOP.
+    get_deep_struc( EXPORTING i_name = i_name r_obj = r_data ).
+    ASSIGN r_data->* TO FIELD-SYMBOL(<new_deep>).
 
-            structdescr = cl_abap_structdescr=>create( lt_components ).
-            create data r_data type handle structdescr.
-            ASSIGN r_data->* to <str>.
-            BREAK-POINT.
+    go_tree->add_variable( EXPORTING iv_root_name = i_shortname iv_key = i_new_node CHANGING io_var =  <new_deep>  ).
 
-            get_deep_struc( EXPORTING i_name = i_name r_obj = r_data ).
-            ASSIGN r_data->* TO <new_deep>.
-
-            go_tree->add_variable( EXPORTING iv_root_name = l_name iv_key = i_new_node CHANGING io_var =  <new_deep>  ).
-
-          ENDIF.
-
-        ELSEIF quick-typid = 'g'."string
-          new_string = create_simple_string( i_name ).
-          go_tree->add_variable( EXPORTING iv_root_name = i_name CHANGING io_var =  new_string ).
-        ELSE.
-          lr_struc = create_simple_var( i_name ).
-          ASSIGN lr_struc->* TO <new_elem>.
-          IF i_shortname IS NOT INITIAL.
-            l_name = i_shortname.
-          ELSE.
-            l_name = i_name.
-          ENDIF.
-          go_tree->add_variable( EXPORTING iv_root_name = l_name iv_key = i_new_node CHANGING io_var =  <new_elem>  ).
-        ENDIF.
-      CATCH cx_root.
-    ENDTRY.
   ENDMETHOD.
 
   METHOD script.
