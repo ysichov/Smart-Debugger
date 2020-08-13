@@ -1,4 +1,3 @@
-
 *&---------------------------------------------------------------------*
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
@@ -276,7 +275,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
       create_reference         IMPORTING i_name      TYPE string
                                          i_shortname TYPE string OPTIONAL
                                          i_new_node  TYPE salv_de_node_key OPTIONAL
-                                         i_quick     TYPE TPDA_SCR_QUICK_INFO,
+                                         i_quick     TYPE tpda_scr_quick_info,
 
       get_deep_struc       IMPORTING i_name TYPE string
                                      r_obj  TYPE REF TO data,
@@ -676,11 +675,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           go_tree->add_variable( EXPORTING iv_root_name = i_name iv_key = i_new_node CHANGING io_var =  <f>  ).
 
         ELSEIF quick-typid = 'r'. "reference
-          BREAK-POINT.
-           create_reference( EXPORTING i_name = i_name
-                                       i_shortname = l_name
-                                       i_new_node = i_new_node
-                                       i_quick = quick ).
+          create_reference( EXPORTING i_name = i_name
+                                      i_shortname = l_name
+                                      i_new_node = i_new_node
+                                      i_quick = quick ).
 
         ELSEIF quick-typid = 'v' OR quick-typid = 'u' ."deep structure or structure
 
@@ -707,7 +705,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
 
         ELSEIF quick-typid = 'g'."string
-          data(new_string) = create_simple_string( i_name ).
+          DATA(new_string) = create_simple_string( i_name ).
           go_tree->add_variable( EXPORTING iv_root_name = i_name CHANGING io_var =  new_string ).
         ELSE.
           lr_struc = create_simple_var( i_name ).
@@ -723,108 +721,108 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDTRY.
   ENDMETHOD.
 
-  method create_reference.
-             DATA: ls_obj         LIKE LINE OF mt_obj,
-                   lr_struc       TYPE REF TO data,
-                   lv_public_key    TYPE salv_de_node_key,
-                lv_protected_key TYPE salv_de_node_key,
-                lv_private_key   TYPE salv_de_node_key,
-                lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
-          table_clone    TYPE REF TO data.
+  METHOD create_reference.
+    DATA: ls_obj           LIKE LINE OF mt_obj,
+          lr_struc         TYPE REF TO data,
+          lv_public_key    TYPE salv_de_node_key,
+          lv_protected_key TYPE salv_de_node_key,
+          lv_private_key   TYPE salv_de_node_key,
+          lo_table_descr   TYPE REF TO cl_tpda_script_tabledescr,
+          table_clone      TYPE REF TO data.
 
-          FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
-          ASSIGN i_quick-quickdata->* TO <ls_symobjref>.
-          IF <ls_symobjref>-instancename <> '{O:initial}'.
+    FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
+    ASSIGN i_quick-quickdata->* TO <ls_symobjref>.
+    IF <ls_symobjref>-instancename <> '{O:initial}'.
 
-            READ TABLE mt_obj WITH KEY name = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
-            IF sy-subrc = 0.
-              go_tree->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
-                                              iv_full = <ls_symobjref>-instancename
-                                                iv_key = i_new_node ).
-              RETURN.
-            ENDIF.
-            ls_obj-name = <ls_symobjref>-instancename.
-            COLLECT ls_obj INTO mt_obj.
+      READ TABLE mt_obj WITH KEY name = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
+      IF sy-subrc = 0.
+        go_tree->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
+                                        iv_full = <ls_symobjref>-instancename
+                                          iv_key = i_new_node ).
+        RETURN.
+      ENDIF.
+      ls_obj-name = <ls_symobjref>-instancename.
+      COLLECT ls_obj INTO mt_obj.
 
-            TRY.
-                CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-                  EXPORTING
-                    p_var_name   = <ls_symobjref>-instancename
-                  RECEIVING
-                    p_symb_quick = data(quick).
+      TRY.
+          CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+            EXPORTING
+              p_var_name   = <ls_symobjref>-instancename
+            RECEIVING
+              p_symb_quick = DATA(quick).
 
-                DATA: lo_object     TYPE REF TO cl_tpda_script_objectdescr,
-                      lo_descr      TYPE REF TO cl_tpda_script_data_descr,
-                      lt_attributes TYPE tpda_script_object_attribut_it.
+          DATA: lo_object     TYPE REF TO cl_tpda_script_objectdescr,
+                lo_descr      TYPE REF TO cl_tpda_script_data_descr,
+                lt_attributes TYPE tpda_script_object_attribut_it.
 
-                lo_descr = cl_tpda_script_data_descr=>factory( <ls_symobjref>-instancename ).
-                ls_obj-name = <ls_symobjref>-instancename.
-                COLLECT ls_obj INTO mt_obj.
-                lo_object ?= lo_descr.
+          lo_descr = cl_tpda_script_data_descr=>factory( <ls_symobjref>-instancename ).
+          ls_obj-name = <ls_symobjref>-instancename.
+          COLLECT ls_obj INTO mt_obj.
+          lo_object ?= lo_descr.
 
-                lt_attributes = lo_object->attributes( ).
+          lt_attributes = lo_object->attributes( ).
 
-                go_tree->add_obj_nodes( EXPORTING iv_name = CONV #( i_shortname )
-                                           iv_full = <ls_symobjref>-instancename
-                                           i_new_node = i_new_node
-                                           it_attr = lt_attributes
-                                 IMPORTING ev_public_key = lv_public_key
-                                           ev_protected_key = lv_protected_key
-                                           ev_private_key = lv_private_key ).
+          go_tree->add_obj_nodes( EXPORTING iv_name = CONV #( i_shortname )
+                                     iv_full = <ls_symobjref>-instancename
+                                     i_new_node = i_new_node
+                                     it_attr = lt_attributes
+                           IMPORTING ev_public_key = lv_public_key
+                                     ev_protected_key = lv_protected_key
+                                     ev_private_key = lv_private_key ).
 
-                LOOP AT lt_attributes ASSIGNING FIELD-SYMBOL(<ls_attribute>).
+          LOOP AT lt_attributes ASSIGNING FIELD-SYMBOL(<ls_attribute>).
 
-                  lo_descr = cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
-                  DATA(ls_info) = cl_tpda_script_data_descr=>get_quick_info( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
+            lo_descr = cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
+            DATA(ls_info) = cl_tpda_script_data_descr=>get_quick_info( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
 
-                  CASE ls_info-metatype.
-                    WHEN cl_tpda_script_data_descr=>mt_simple.
-                      lr_struc = create_simple_var( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
-                      ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_elem>).
-                      go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name
-                         iv_key = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )
-                          CHANGING io_var =  <new_elem> ).
-                    WHEN cl_tpda_script_data_descr=>mt_struct.
-                      lr_struc = create_struc(  EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
-                      IF lr_struc IS NOT INITIAL.
-                        ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_struc>).
-                        go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name
-                          iv_key = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )
-                            CHANGING io_var =  <new_struc> ).
-                      ENDIF.
-                    WHEN cl_tpda_script_data_descr=>mt_string.
-                      DATA(new_string) = create_simple_string( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
-                      go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name
-                        iv_key = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )
-                          CHANGING io_var =  new_string ).
-                    WHEN cl_tpda_script_data_descr=>mt_tab.
-                      lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
-                      table_clone = lo_table_descr->elem_clone( ).
-                      ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
-                      go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name
-                                             iv_key = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )
-                                               CHANGING io_var =  <f> ).
-                    WHEN OTHERS.
+            CASE ls_info-metatype.
+              WHEN cl_tpda_script_data_descr=>mt_simple.
+                lr_struc = create_simple_var( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
+                ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_elem>).
+                go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name
+                   iv_key = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )
+                    CHANGING io_var =  <new_elem> ).
+              WHEN cl_tpda_script_data_descr=>mt_struct.
+                lr_struc = create_struc(  EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
+                IF lr_struc IS NOT INITIAL.
+                  ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_struc>).
+                  go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name
+                    iv_key = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )
+                      CHANGING io_var =  <new_struc> ).
+                ENDIF.
+              WHEN cl_tpda_script_data_descr=>mt_string.
+                DATA(new_string) = create_simple_string( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
+                go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name
+                  iv_key = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )
+                    CHANGING io_var =  new_string ).
+              WHEN cl_tpda_script_data_descr=>mt_tab.
+                lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
+                table_clone = lo_table_descr->elem_clone( ).
+                ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
+                go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name
+                                       iv_key = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )
+                                         CHANGING io_var =  <f> ).
+              WHEN OTHERS.
 *
 
-                      READ TABLE mt_obj WITH KEY name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| TRANSPORTING NO FIELDS.
-                      IF sy-subrc NE 0.
-                        transfer_variable( EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }|
-                                                     i_shortname = <ls_attribute>-name
-                                                     i_new_node = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )  ).
-                      ENDIF.
-                  ENDCASE.
-                ENDLOOP.
-              CATCH cx_tpda_varname .
-            ENDTRY.
-          ELSE.
-            IF i_new_node IS NOT INITIAL.
-              go_tree->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
-                                              iv_value = <ls_symobjref>-instancename
-                                                iv_key = i_new_node ).
-              RETURN.
-            ENDIF.
-          ENDIF.
+                READ TABLE mt_obj WITH KEY name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| TRANSPORTING NO FIELDS.
+                IF sy-subrc NE 0.
+                  transfer_variable( EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }|
+                                               i_shortname = <ls_attribute>-name
+                                               i_new_node = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )  ).
+                ENDIF.
+            ENDCASE.
+          ENDLOOP.
+        CATCH cx_tpda_varname .
+      ENDTRY.
+    ELSE.
+      IF i_new_node IS NOT INITIAL.
+        go_tree->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
+                                        iv_value = <ls_symobjref>-instancename
+                                          iv_key = i_new_node ).
+        RETURN.
+      ENDIF.
+    ENDIF.
 
   ENDMETHOD.
 
