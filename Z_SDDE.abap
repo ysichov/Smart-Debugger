@@ -1,4 +1,3 @@
-*&---------------------------------------------------------------------*
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
@@ -1669,6 +1668,9 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     APPEND VALUE #( function = 'TECH' icon = icon_wd_caption quickinfo = 'Tech names'  butn_type = 0 ) TO lt_toolbar.
 
     LOOP AT lcl_appl=>mt_lang INTO DATA(lang).
+      IF sy-tabix > 10.
+        EXIT.
+      ENDIF.
       APPEND VALUE #( function = lang-spras icon = icon_foreign_trade quickinfo = lang-sptxt butn_type = 0 text = lang-sptxt ) TO lt_toolbar.
     ENDLOOP.
 
