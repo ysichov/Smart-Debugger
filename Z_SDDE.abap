@@ -2,7 +2,7 @@
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
-*& version: beta 0.1.88.95
+*& version: beta 0.1.96.102
 *& Git https://github.com/ysichov/SDDE
 *& RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *& EN description - https://github.com/ysichov/SDDE/wiki
@@ -56,9 +56,7 @@ CLASS lcl_appl DEFINITION.
 
     CLASS-METHODS:
       init_icons_table,
-      init_lang,
-      suppress_run_button,
-      exit.
+      init_lang.
 ENDCLASS.
 
 CLASS lcl_popup DEFINITION.
@@ -99,7 +97,6 @@ CLASS lcl_popup IMPLEMENTATION.
         top                         = l_top
         left                        = l_left
         caption                     = i_name
-        "style                       = 1
       EXCEPTIONS
         cntl_error                  = 1
         cntl_system_error           = 2
@@ -239,14 +236,14 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
              name TYPE string,
            END OF t_obj.
 
-    DATA mt_obj TYPE TABLE OF t_obj.
+    DATA: mt_obj  TYPE TABLE OF t_obj,
+          go_tree TYPE REF TO lcl_rtti_tree.
 
-    DATA: go_tree TYPE REF TO lcl_rtti_tree.
     METHODS: prologue  REDEFINITION,
       init    REDEFINITION,
       script  REDEFINITION,
       end     REDEFINITION,
-      script2,
+      run_script,
       f5,
       f6,
       f7,
@@ -290,7 +287,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
 
     TYPES: BEGIN OF ts_table,
              ref      TYPE REF TO data,
-
              kind(1),
              value    TYPE string,
              fullname TYPE string,
@@ -306,6 +302,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
           m_correction TYPE i,
           m_hide       TYPE x,
           mo_debugger  TYPE REF TO lcl_debugger_script.
+
     METHODS constructor
       IMPORTING
         i_header TYPE clike DEFAULT 'View'.
@@ -343,7 +340,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
                 iv_icon       TYPE  salv_de_tree_image OPTIONAL
       RETURNING VALUE(er_key) TYPE salv_de_node_key.
 
-
     METHODS display IMPORTING io_debugger TYPE REF TO lcl_debugger_script OPTIONAL.
 
   PRIVATE SECTION.
@@ -356,9 +352,9 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
                  ref    LIKE cl_abap_typedescr=>kind_ref VALUE cl_abap_typedescr=>kind_ref,
                END OF c_kind.
 
-    DATA tree TYPE REF TO cl_salv_tree.
-    DATA tree_table TYPE tt_table.
-    DATA main_node_key TYPE salv_de_node_key.
+    DATA: tree          TYPE REF TO cl_salv_tree,
+          tree_table    TYPE tt_table,
+          main_node_key TYPE salv_de_node_key.
 
     METHODS traverse
       IMPORTING
@@ -406,7 +402,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD create_simple_var.
 
-    DATA: lr_symbsimple TYPE REF TO tpda_sys_symbsimple.
+    DATA: lr_symbsimple TYPE REF TO tpda_sys_symbsimple,
+          lo_elem       TYPE REF TO cl_abap_elemdescr.
 
     CALL METHOD cl_tpda_script_data_descr=>get_quick_info
       EXPORTING
@@ -424,7 +421,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       RECEIVING
         p_descr_ref = DATA(lo_type).
 
-    DATA: lo_elem TYPE REF TO cl_abap_elemdescr.
     lo_elem ?= lo_type.
     CREATE DATA er_var TYPE HANDLE lo_elem.
     ASSIGN er_var->* TO FIELD-SYMBOL(<new_elem>).
@@ -432,11 +428,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD create_simple_string.
-    DATA lr_string TYPE REF TO tpda_sys_symbstring.
+    DATA: lr_string TYPE REF TO tpda_sys_symbstring,
+          lr_struc  TYPE REF TO data,
+          lo_elem   TYPE REF TO cl_abap_elemdescr..
+
     FIELD-SYMBOLS: <string>   TYPE tpda_sys_symbstring,
                    <lv_value> TYPE any.
-
-    DATA: lr_struc      TYPE REF TO data.
 
     CALL METHOD cl_tpda_script_data_descr=>get_quick_info
       EXPORTING
@@ -454,7 +451,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       RECEIVING
         p_descr_ref = DATA(lo_type).
 
-    DATA: lo_elem TYPE REF TO cl_abap_elemdescr.
     lo_elem ?= lo_type.
 
     CREATE DATA lr_struc TYPE HANDLE lo_elem.
@@ -464,17 +460,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD create_struc.
-    DATA: lo_new_type   TYPE REF TO cl_abap_structdescr,
-          ls_comp       TYPE abap_componentdescr,
-          lt_components TYPE abap_component_tab,
-          lr_symbsimple TYPE REF TO tpda_sys_symbsimple.
-
-    DATA: lo_struc_descr TYPE REF TO cl_tpda_script_structdescr,
+    DATA: lo_new_type    TYPE REF TO cl_abap_structdescr,
+          ls_comp        TYPE abap_componentdescr,
+          lt_components  TYPE abap_component_tab,
+          lr_symbsimple  TYPE REF TO tpda_sys_symbsimple,
+          lo_struc_descr TYPE REF TO cl_tpda_script_structdescr,
           comp_full      TYPE  tpda_scr_struct_comp_it,
           comp_it        TYPE tpda_script_struc_componentsit.
 
     FIELD-SYMBOLS: <lv_value> TYPE any,
                    <simple>   TYPE tpda_sys_symbsimple.
+
     CLEAR er_struc.
     CALL METHOD cl_tpda_script_data_descr=>get_quick_info
       EXPORTING
@@ -537,7 +533,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           comp_it        TYPE tpda_script_struc_componentsit,
           lr_symbsimple  TYPE REF TO tpda_sys_symbsimple,
           lr_symbstring  TYPE REF TO tpda_sys_symbstring,
-          lr_symbstruc   TYPE REF TO tpda_sys_symbstruct.
+          lr_symbstruc   TYPE REF TO tpda_sys_symbstruct,
+          r_data         TYPE REF TO data.
 
     FIELD-SYMBOLS: <lv_value> TYPE any.
 
@@ -548,7 +545,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     LOOP AT comp_full INTO DATA(comp).
       CASE comp-symbquick-metatype.
         WHEN cl_tpda_script_data_descr=>mt_simple.
-
           ASSIGN comp-symbquick-quickdata TO <lv_value>.
           lr_symbsimple ?= <lv_value>.
           ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO FIELD-SYMBOL(<new>).
@@ -564,18 +560,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ASSIGN comp-symbquick-quickdata TO <lv_value>.
           ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO <new>.
           GET REFERENCE OF <new> INTO lr_struc.
-          "TRY.
           lr_symbstruc ?= <lv_value>.
           get_deep_struc( EXPORTING i_name = |{ i_name }-{ comp-compname }|
                            r_obj = lr_struc ).
 
         WHEN cl_tpda_script_data_descr=>mt_tab.
-          DATA: r_data TYPE REF TO data.
-
           FIELD-SYMBOLS: <new_table> TYPE STANDARD TABLE.
           ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO <new_table>.
           GET REFERENCE OF <new_table> INTO r_data.
-
           get_table( EXPORTING i_name = |{ i_name }-{ comp-compname }|
                      CHANGING c_obj = r_data ).
       ENDCASE.
@@ -587,7 +579,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
           table_clone    TYPE REF TO data,
           lo_tabl        TYPE REF TO cl_abap_tabledescr,
-          lo_struc       TYPE REF TO cl_abap_structdescr.
+          lo_struc       TYPE REF TO cl_abap_structdescr,
+          r_struc        TYPE REF TO data.
 
     FIELD-SYMBOLS: <f>         TYPE ANY TABLE,
                    <new_table> TYPE ANY TABLE.
@@ -614,9 +607,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             IF sy-subrc NE 0.
               EXIT.
             ENDIF.
+
             ASSIGN COMPONENT sy-index OF STRUCTURE <new_line> TO FIELD-SYMBOL(<to>).
             DESCRIBE FIELD <from> TYPE DATA(from_type).
             DESCRIBE FIELD   <to> TYPE DATA(to_type).
+
             IF from_type = to_type.
               <to> = <from>.
             ELSEIF to_type = 'h'.
@@ -625,14 +620,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
               GET REFERENCE OF <to> INTO r_data.
               get_table( EXPORTING i_name = |{ i_name }[ { l_count } ]-{ ls_comp-name }|
                          CHANGING c_obj = r_data ).
-
             ENDIF.
           ENDDO.
           INSERT <new_line> INTO TABLE <new_table>.
         ENDLOOP.
       CATCH cx_root.
         DATA(l_cnt) = lo_table_descr->linecnt( ).
-        DATA r_struc TYPE REF TO data.
         DO l_cnt TIMES.
           r_struc = create_struc( i_name = |{ i_name }[{ sy-index }]| ).
           ASSIGN r_struc->* TO <new_line>.
@@ -642,10 +635,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD transfer_variable.
-    DATA: ls_obj         LIKE LINE OF mt_obj,
-          lr_struc       TYPE REF TO data,
+    DATA: lr_struc       TYPE REF TO data,
           lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
-          table_clone    TYPE REF TO data.
+          table_clone    TYPE REF TO data,
+          l_name         TYPE string,
+          lo_deep_handle TYPE REF TO cl_abap_datadescr,
+          deep_ref       TYPE REF TO cl_abap_typedescr.
 
     FIELD-SYMBOLS: <lv_value> TYPE any.
 
@@ -658,7 +653,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_varname .
     ENDTRY.
 
-    DATA l_name TYPE string.
     IF i_shortname IS NOT INITIAL.
       l_name = i_shortname.
     ELSE.
@@ -682,7 +676,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
         ELSEIF quick-typid = 'v' OR quick-typid = 'u' ."deep structure or structure
 
-          DATA deep_ref TYPE REF TO cl_abap_typedescr.
           CALL METHOD cl_abap_complexdescr=>describe_by_name
             EXPORTING
               p_name         = quick-abstypename
@@ -692,13 +685,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
               type_not_found = 1.
 
           IF sy-subrc = 0.
-            DATA: lo_deep_handle TYPE REF TO cl_abap_datadescr.
             lo_deep_handle ?= deep_ref.
             CREATE DATA lr_struc TYPE HANDLE lo_deep_handle.
-
             get_deep_struc( EXPORTING i_name = i_name r_obj = lr_struc ).
             ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_deep>).
-
             go_tree->add_variable( EXPORTING iv_root_name = l_name iv_key = i_new_node CHANGING io_var =  <new_deep>  ).
           ELSE.
             create_struc2( EXPORTING i_name = i_name i_shortname = l_name i_new_node = i_new_node ).
@@ -710,11 +700,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ELSE.
           lr_struc = create_simple_var( i_name ).
           ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_elem>).
-          IF i_shortname IS NOT INITIAL.
-            l_name = i_shortname.
-          ELSE.
-            l_name = i_name.
-          ENDIF.
           go_tree->add_variable( EXPORTING iv_root_name = l_name iv_key = i_new_node CHANGING io_var =  <new_elem>  ).
         ENDIF.
       CATCH cx_root.
@@ -725,12 +710,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     DATA: ls_obj           LIKE LINE OF mt_obj,
           lr_struc         TYPE REF TO data,
           lv_public_key    TYPE salv_de_node_key,
+          lv_node_key      TYPE salv_de_node_key,
           lv_protected_key TYPE salv_de_node_key,
           lv_private_key   TYPE salv_de_node_key,
           lo_table_descr   TYPE REF TO cl_tpda_script_tabledescr,
-          table_clone      TYPE REF TO data.
+          table_clone      TYPE REF TO data,
+          lo_object        TYPE REF TO cl_tpda_script_objectdescr,
+          lo_descr         TYPE REF TO cl_tpda_script_data_descr,
+          lt_attributes    TYPE tpda_script_object_attribut_it.
 
     FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
+
     ASSIGN i_quick-quickdata->* TO <ls_symobjref>.
     IF <ls_symobjref>-instancename <> '{O:initial}'.
 
@@ -751,10 +741,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             RECEIVING
               p_symb_quick = DATA(quick).
 
-          DATA: lo_object     TYPE REF TO cl_tpda_script_objectdescr,
-                lo_descr      TYPE REF TO cl_tpda_script_data_descr,
-                lt_attributes TYPE tpda_script_object_attribut_it.
-
           lo_descr = cl_tpda_script_data_descr=>factory( <ls_symobjref>-instancename ).
           ls_obj-name = <ls_symobjref>-instancename.
           COLLECT ls_obj INTO mt_obj.
@@ -771,6 +757,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                      ev_private_key = lv_private_key ).
 
           LOOP AT lt_attributes ASSIGNING FIELD-SYMBOL(<ls_attribute>).
+            CASE <ls_attribute>-acckind.
+              WHEN '1'.
+                lv_node_key = lv_public_key.
+              WHEN '2'.
+                lv_node_key = lv_private_key.
+              WHEN '3'.
+                lv_node_key =  lv_protected_key.
+            ENDCASE.
 
             lo_descr = cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
             DATA(ls_info) = cl_tpda_script_data_descr=>get_quick_info( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
@@ -779,37 +773,25 @@ CLASS lcl_debugger_script IMPLEMENTATION.
               WHEN cl_tpda_script_data_descr=>mt_simple.
                 lr_struc = create_simple_var( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
                 ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_elem>).
-                go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name
-                   iv_key = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )
-                    CHANGING io_var =  <new_elem> ).
+                go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key CHANGING io_var =  <new_elem> ).
               WHEN cl_tpda_script_data_descr=>mt_struct.
                 lr_struc = create_struc(  EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
                 IF lr_struc IS NOT INITIAL.
                   ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_struc>).
-                  go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name
-                    iv_key = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )
-                      CHANGING io_var =  <new_struc> ).
+                  go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key CHANGING io_var =  <new_struc> ).
                 ENDIF.
               WHEN cl_tpda_script_data_descr=>mt_string.
                 DATA(new_string) = create_simple_string( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
-                go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name
-                  iv_key = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )
-                    CHANGING io_var =  new_string ).
+                go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key CHANGING io_var =  new_string ).
               WHEN cl_tpda_script_data_descr=>mt_tab.
                 lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
                 table_clone = lo_table_descr->elem_clone( ).
                 ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
-                go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name
-                                       iv_key = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )
-                                         CHANGING io_var =  <f> ).
+                go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key CHANGING io_var =  <f> ).
               WHEN OTHERS.
-*
-
                 READ TABLE mt_obj WITH KEY name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| TRANSPORTING NO FIELDS.
                 IF sy-subrc NE 0.
-                  transfer_variable( EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }|
-                                               i_shortname = <ls_attribute>-name
-                                               i_new_node = SWITCH #( <ls_attribute>-acckind WHEN '1' THEN lv_public_key WHEN '3' THEN lv_protected_key WHEN '2' THEN lv_private_key )  ).
+                  transfer_variable( EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| i_shortname = <ls_attribute>-name i_new_node = lv_node_key  ).
                 ENDIF.
             ENDCASE.
           ENDLOOP.
@@ -823,7 +805,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         RETURN.
       ENDIF.
     ENDIF.
-
   ENDMETHOD.
 
   METHOD create_struc2.
@@ -836,6 +817,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           r_data         TYPE REF TO data.
 
     FIELD-SYMBOLS: <str> TYPE any.
+
     lo_struc_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
     lo_struc_descr->components( IMPORTING p_components_it = comp_it p_components_full_it = comp_full ).
 
@@ -862,56 +844,54 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     CREATE DATA r_data TYPE HANDLE structdescr.
     ASSIGN r_data->* TO <str>.
 
-
     get_deep_struc( EXPORTING i_name = i_name r_obj = r_data ).
     ASSIGN r_data->* TO FIELD-SYMBOL(<new_deep>).
 
     go_tree->add_variable( EXPORTING iv_root_name = i_shortname iv_key = i_new_node CHANGING io_var =  <new_deep>  ).
-
   ENDMETHOD.
 
   METHOD script.
-    script2( ).
+    run_script( ).
   ENDMETHOD.
 
-  METHOD script2.
+  METHOD run_script.
+    DATA: l_name(40),
+          lt_compo   TYPE TABLE OF scompo,
+          lt_inc     TYPE TABLE OF  d010inc,
+          l_class    TYPE seu_name.
+
     go_tree->clear( ).
     CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = DATA(locals).
 
-    go_tree->add_node( 'locals' ).
+    go_tree->add_node( 'Locals' ).
     LOOP AT locals INTO DATA(ls_local).
       transfer_variable( ls_local-name ).
     ENDLOOP.
 
     CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = DATA(globals).
 
-    go_tree->add_node( 'globals' ).
+    go_tree->add_node( 'Globals' ).
     transfer_variable( 'SYST' ).
-
-    DATA: g_name(40),
-          gt_compo   TYPE TABLE OF scompo,
-          gt_inc     TYPE TABLE OF  d010inc.
 
     CALL METHOD abap_source->program
       RECEIVING
         p_prg = DATA(l_program).
 
-    g_name = l_program.
+    l_name = l_program.
     CALL FUNCTION 'RS_PROGRAM_INDEX'
       EXPORTING
-        pg_name      = g_name
+        pg_name      = l_name
       TABLES
-        compo        = gt_compo
-        inc          = gt_inc
+        compo        = lt_compo
+        inc          = lt_inc
       EXCEPTIONS
         syntax_error = 1
         OTHERS       = 2.
 
-    DELETE gt_compo WHERE  type NE '+' OR exposure NE 2.
-    SORT gt_compo BY class.
+    DELETE lt_compo WHERE  type NE '+' OR exposure NE 2.
+    SORT lt_compo BY class.
 
-    DATA : l_class TYPE seu_name.
-    LOOP AT gt_compo ASSIGNING FIELD-SYMBOL(<compo>).
+    LOOP AT lt_compo ASSIGNING FIELD-SYMBOL(<compo>).
       TRY.
           CALL METHOD cl_tpda_script_data_descr=>get_quick_info
             EXPORTING
@@ -923,13 +903,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDTRY.
     ENDLOOP.
 
-    LOOP AT gt_compo ASSIGNING <compo> WHERE type = '+'.
-
+    LOOP AT lt_compo ASSIGNING <compo> WHERE type = '+'.
       IF l_class NE <compo>-class.
         l_class = <compo>-class.
         go_tree->add_obj_var( EXPORTING iv_name = CONV #( <compo>-class ) RECEIVING er_key = DATA(l_key) ).
       ENDIF.
-
       transfer_variable( EXPORTING i_name = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
                                    i_shortname = CONV #( <compo>-name )
                                     i_new_node = l_key ).
@@ -945,23 +923,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info(
            IMPORTING
-             p_prg_info  = DATA(l_prg)
-             "p_dynp_info = DATA(l_dyn)
-              ).
+             p_prg_info  = DATA(l_prg) ).
 
         go_tree->add_variable( EXPORTING iv_root_name = 'code line' CHANGING io_var =  l_prg-line ).
         go_tree->add_variable( EXPORTING iv_root_name = 'event' CHANGING io_var =  l_prg-eventname ).
         go_tree->add_variable( EXPORTING iv_root_name = 'include' CHANGING io_var =  l_prg-include ).
-
       CATCH cx_tpda_src_info.
     ENDTRY.
 
     go_tree->display( me ).
     me->break( ).
   ENDMETHOD.                    "script
-
-  METHOD end.
-  ENDMETHOD.                    "end
 
   METHOD f5.
     CLEAR mt_obj[].
@@ -972,7 +944,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
-    me->script2( ).
+    me->run_script( ).
   ENDMETHOD.
 
   METHOD f6.
@@ -984,7 +956,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
-    me->script2( ).
+    me->run_script( ).
   ENDMETHOD.
 
   METHOD f7.
@@ -996,7 +968,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
-    me->script2( ).
+    me->run_script( ).
   ENDMETHOD.
 
   METHOD f8.
@@ -1008,7 +980,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
-    me->script2( ).
+    me->run_script( ).
   ENDMETHOD.
 
   METHOD break2.
@@ -1185,7 +1157,6 @@ CLASS lcl_table_viewer DEFINITION INHERITING FROM lcl_popup.
       constructor IMPORTING i_tname           TYPE any OPTIONAL
                             i_additional_name TYPE string OPTIONAL
                             ir_tab            TYPE REF TO data OPTIONAL,
-      get_where RETURNING VALUE(c_where) TYPE string,
       refresh_table FOR EVENT selection_done OF lcl_sel_opt.
 
   PRIVATE SECTION.
@@ -1206,7 +1177,6 @@ ENDCLASS.
 CLASS lcl_text_viewer DEFINITION FINAL INHERITING FROM lcl_popup.
   PUBLIC SECTION.
     DATA: mo_text     TYPE REF TO cl_gui_textedit.
-
     METHODS: constructor IMPORTING ir_str TYPE REF TO data.
 ENDCLASS.
 
@@ -1247,12 +1217,9 @@ CLASS lcl_text_viewer IMPLEMENTATION.
 
     mo_text->set_readonly_mode( ).
 
-    DATA ct_data TYPE  tline.
     FIELD-SYMBOLS <str> TYPE string.
     ASSIGN ir_str->* TO <str>.
     DATA lt_string TYPE TABLE OF char255.
-*    data l_len type i.
-*    l_len = strlen( <str> ).
     WHILE strlen( <str> ) > 255.
       APPEND <str>+0(255) TO lt_string.
       SHIFT <str> LEFT BY 255 PLACES.
@@ -1306,6 +1273,7 @@ CLASS lcl_data_receiver IMPLEMENTATION.
 
   METHOD  update.
     DATA: l_updated.
+
     READ TABLE lo_sel_to->mt_sel_tab ASSIGNING FIELD-SYMBOL(<to>) WITH KEY field_label = m_to_field.
     IF <to>-range[] = e_row-range[].
       l_updated = abap_true."so as not to have an infinite event loop
@@ -1320,6 +1288,7 @@ CLASS lcl_data_receiver IMPLEMENTATION.
   METHOD update_col.
     DATA: l_updated,
           lt_sel_row   TYPE lcl_types=>t_sel_row.
+
     FIELD-SYMBOLS: <tab>   TYPE STANDARD TABLE,
                    <field> TYPE any.
 
@@ -1396,6 +1365,13 @@ CLASS lcl_table_viewer IMPLEMENTATION.
           lv_s            TYPE string,
           lv_data         TYPE REF TO data.
 
+    DATA: l_notab   TYPE REF TO data,
+          l_tab2str TYPE REF TO data.
+
+    DATA: handle_notab   TYPE REF TO cl_abap_structdescr,
+          handle_tab2str TYPE REF TO cl_abap_structdescr,
+          lo_new_tab     TYPE REF TO cl_abap_tabledescr.
+
     FIELD-SYMBOLS: <notab>   TYPE STANDARD TABLE,
                    <tab2str> TYPE STANDARD TABLE,
                    <any_tab> TYPE ANY TABLE,
@@ -1417,9 +1393,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       lo_tabl ?= cl_abap_typedescr=>describe_by_data( <any> ).
       TRY.
           lo_struc ?= lo_tabl->get_table_line_type( ).
-
           ASSIGN ir_tab->* TO <any_tab>.
-
           TRY.
               LOOP AT lo_struc->components INTO DATA(comp).
 
@@ -1442,17 +1416,9 @@ CLASS lcl_table_viewer IMPLEMENTATION.
             CATCH cx_sy_move_cast_error.
           ENDTRY.
 
-          DATA: l_notab   TYPE REF TO data,
-                l_tab2str TYPE REF TO data.
-
-          DATA: handle_notab   TYPE REF TO cl_abap_structdescr,
-                handle_tab2str TYPE REF TO cl_abap_structdescr.
-
           TRY.
               handle_notab  = cl_abap_structdescr=>create( lt_comp_notab ).
               handle_tab2str  = cl_abap_structdescr=>create( lt_comp_tab2str ).
-
-              DATA: lo_new_tab  TYPE REF TO cl_abap_tabledescr.
 
               lo_new_tab = cl_abap_tabledescr=>create(
                               p_line_type  = handle_notab
@@ -1495,7 +1461,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
           APPEND ls_comp TO lt_comp_tab2str.
 
           handle_tab2str  = cl_abap_structdescr=>create( lt_comp_tab2str ).
-
           lo_new_tab = cl_abap_tabledescr=>create(
                                p_line_type  = handle_tab2str
                                p_table_kind = cl_abap_tabledescr=>tablekind_std
@@ -1504,6 +1469,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
           CREATE DATA l_tab2str TYPE HANDLE lo_new_tab.
           ASSIGN l_tab2str->* TO <tab2str>.
           ASSIGN ir_tab->* TO <any_tab>.
+
           LOOP AT <any_tab> ASSIGNING <old_struc>.
             APPEND INITIAL LINE TO <tab2str> ASSIGNING <new_struc>.
             ASSIGN COMPONENT 'FIELD' OF STRUCTURE <new_struc> TO <field>.
@@ -1556,13 +1522,16 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     DATA: ls_layout TYPE lvc_s_layo,
           effect    TYPE i,
           lt_f4     TYPE lvc_t_f4.
+
     FIELD-SYMBOLS: <f_tab>   TYPE table.
 
     mo_alv = NEW #( i_parent = mo_alv_parent ).
     mt_alv_catalog = create_field_cat( m_tabname ).
+
     IF mt_alv_catalog IS INITIAL.
       RETURN. "todo show tables without structure
     ENDIF.
+
     ASSIGN mr_table->* TO <f_tab>.
     set_header( ).
     ls_layout-cwidth_opt = abap_true.
@@ -1602,6 +1571,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       DATA(ls_f4) = VALUE  lvc_s_f4( register   = abap_true chngeafter = abap_true fieldname  = <catalog>-fieldname ).
       INSERT ls_f4 INTO TABLE lt_f4.
     ENDLOOP.
+
     mo_alv->register_f4_for_fields( it_f4 = lt_f4 ).
     mo_alv->set_frontend_fieldcatalog( EXPORTING it_fieldcatalog = mt_alv_catalog ).
 
@@ -1616,14 +1586,12 @@ CLASS lcl_table_viewer IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD translate_field.
-    DATA: lt_field_info TYPE TABLE OF dfies.
     DATA: l_dd04 TYPE dd04v.
 
-
     READ TABLE mt_fields INTO DATA(l_field) WITH KEY field = c_fld-fieldname.
-
     CHECK l_field-elem IS NOT INITIAL.
     CLEAR l_dd04.
+
     CALL FUNCTION 'DDIF_DTEL_GET'
       EXPORTING
         name          = CONV ddobjname( l_field-elem )
@@ -1689,22 +1657,22 @@ CLASS lcl_table_viewer IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD create_field_cat.
-    DATA: lr_struc       TYPE REF TO data,
-          lr_field       TYPE REF TO data,
+    DATA: lr_field       TYPE REF TO data,
           lr_table_descr TYPE REF TO cl_abap_structdescr,
           lr_data_descr  TYPE REF TO cl_abap_datadescr,
           it_tabdescr    TYPE abap_compdescr_tab,
           l_replace      TYPE string,
           l_texttab      TYPE tabname,
           lr_temp        TYPE REF TO data,
-          lo_str         TYPE REF TO cl_abap_structdescr.
+          l_name         TYPE string,
+          l_dd04         TYPE dd04v.
 
     FIELD-SYMBOLS: <tab>   TYPE STANDARD TABLE,
                    <struc> TYPE any,
                    <field> TYPE any.
+
     ASSIGN mr_table->* TO <tab>.
     CREATE DATA lr_temp LIKE LINE OF <tab>.
-
     ASSIGN lr_temp->* TO <struc>.
 
     TRY.
@@ -1714,7 +1682,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     ENDTRY.
 
     it_tabdescr[] = lr_table_descr->components[].
-
     lcl_ddic=>get_text_table( EXPORTING i_tname = i_tname IMPORTING e_tab = l_texttab ).
     l_replace = l_texttab && '_'.
 
@@ -1726,13 +1693,10 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       ASSIGN COMPONENT ls-name OF STRUCTURE <struc> TO <field>.
       GET REFERENCE OF <field> INTO lr_field.
       lr_data_descr ?= cl_abap_typedescr=>describe_by_data_ref( lr_field ).
-      DATA: l_name TYPE string.
       l_name = lr_data_descr->absolute_name.
       REPLACE ALL OCCURRENCES OF '\TYPE=' IN l_name WITH ''.
-
       APPEND VALUE #( field = ls-name elem = l_name ) TO mt_fields.
 
-      DATA: l_dd04 TYPE dd04v.
       CLEAR l_dd04.
       CALL FUNCTION 'DDIF_DTEL_GET'
         EXPORTING
@@ -1761,13 +1725,13 @@ CLASS lcl_table_viewer IMPLEMENTATION.
 
   METHOD handle_doubleclick.
     FIELD-SYMBOLS: <f_tab>  TYPE STANDARD TABLE.
+
     CHECK es_row_no-row_id IS NOT INITIAL.
     ASSIGN mr_table->* TO  <f_tab>.
     READ TABLE <f_tab> INDEX es_row_no-row_id ASSIGNING FIELD-SYMBOL(<tab>).
 
     ASSIGN COMPONENT |{ e_column-fieldname }_REF| OF STRUCTURE <tab> TO FIELD-SYMBOL(<ref>).
     IF sy-subrc = 0.
-      "ASSIGN <ref>->* TO <f_tab>.
       APPEND INITIAL LINE TO lcl_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
       <obj>-alv_viewer = NEW #(  i_additional_name = CONV #( e_column-fieldname ) ir_tab = <ref>  ).
       <obj>-alv_viewer->mo_sel->raise_selection_done( ).
@@ -1812,8 +1776,8 @@ CLASS lcl_table_viewer IMPLEMENTATION.
         ELSE.
           CLEAR m_show_empty.
         ENDIF.
-
       ENDIF.
+
       LOOP AT it_fields ASSIGNING FIELD-SYMBOL(<fields>) WHERE domname NE 'MANDT'.
         <fields>-col_pos = sy-tabix.
         CASE e_ucomm.
@@ -1868,36 +1832,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     ENDIF.
   ENDMETHOD.                           "handle_user_command
 
-  METHOD get_where."dynamic where clause
-    DATA: lt_where TYPE rsds_twhere,
-          lt_range TYPE rsds_trange.
-
-    IF  mo_sel IS NOT INITIAL.
-      APPEND INITIAL LINE TO lt_range ASSIGNING FIELD-SYMBOL(<tabl>).
-      <tabl>-tablename = m_tabname.
-      LOOP AT mo_sel->mt_sel_tab INTO DATA(ls_tab) WHERE range IS NOT INITIAL.
-        APPEND INITIAL LINE TO <tabl>-frange_t ASSIGNING FIELD-SYMBOL(<t_range>).
-        IF sy-subrc = 0.
-          <t_range>-fieldname = ls_tab-field_label.
-          <t_range>-selopt_t  = ls_tab-range.
-        ENDIF.
-      ENDLOOP.
-
-      CALL FUNCTION 'FREE_SELECTIONS_RANGE_2_WHERE'
-        EXPORTING
-          field_ranges  = lt_range
-        IMPORTING
-          where_clauses = lt_where.
-
-      LOOP AT lt_where INTO DATA(ls_where) WHERE tablename = m_tabname.
-        LOOP AT ls_where-where_tab INTO DATA(l_where).
-          CONDENSE l_where-line.
-          c_where = |{ c_where } { l_where-line }|.
-        ENDLOOP.
-      ENDLOOP.
-    ENDIF.
-  ENDMETHOD.
-
   METHOD refresh_table.
     DATA: ls_row    TYPE lcl_types=>t_sel_row,
           lt_filter TYPE lvc_t_filt.
@@ -1930,7 +1864,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
         l_emit-emitter->emit_col( l_emit-column ).
       ENDLOOP.
     ENDIF.
-
   ENDMETHOD.
 ENDCLASS.
 
@@ -2016,9 +1949,10 @@ CLASS lcl_sel_opt IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD raise_selection_done.
+    DATA: ls_row TYPE lcl_types=>t_sel_row.
+
     lcl_alv_common=>refresh( mo_sel_alv ).
     RAISE EVENT selection_done.
-    DATA: ls_row TYPE lcl_types=>t_sel_row.
     LOOP AT mt_sel_tab  ASSIGNING FIELD-SYMBOL(<sel>).
       IF <sel>-transmitter IS NOT INITIAL.
         MOVE-CORRESPONDING <sel> TO ls_row.
@@ -2037,21 +1971,21 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       DATA(lv_ind) = sy-tabix.
       APPEND INITIAL LINE TO mt_sel_tab ASSIGNING FIELD-SYMBOL(<sel_tab>).
       READ TABLE lt_copy INTO DATA(ls_copy) WITH KEY field_label = l_catalog-fieldname.
+
       IF sy-subrc = 0.
         MOVE-CORRESPONDING ls_copy TO <sel_tab>.
       ELSE.
         <sel_tab>-option_icon = icon_led_inactive.
         <sel_tab>-more_icon = icon_enter_more.
       ENDIF.
+
       <sel_tab>-ind = lv_ind.
       <sel_tab>-field_label = l_catalog-fieldname.
-
       <sel_tab>-int_type = l_catalog-inttype.
       <sel_tab>-element = l_catalog-rollname.
       <sel_tab>-domain =  l_catalog-domname.
       <sel_tab>-datatype = l_catalog-datatype.
       <sel_tab>-length = l_catalog-outputlen.
-
       lcl_alv_common=>translate_field( EXPORTING i_lang = mo_viewer->m_lang CHANGING c_fld = l_catalog ).
       <sel_tab>-name = l_catalog-scrtext_l.
     ENDLOOP.
@@ -2093,6 +2027,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
 
   METHOD handle_doubleclick.
     DATA: it_bdcdata TYPE TABLE OF  bdcdata.
+
     CHECK es_row_no-row_id IS NOT INITIAL.
 
     READ TABLE mt_sel_tab INDEX es_row_no-row_id INTO DATA(l_sel).
@@ -2343,7 +2278,9 @@ CLASS lcl_sel_opt IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD on_data_changed.
-    DATA: l_start TYPE i.
+    DATA: l_start TYPE i,
+          lv_time TYPE sy-uzeit.
+
     FIELD-SYMBOLS: <field> TYPE any.
 
     LOOP AT er_data_changed->mt_good_cells ASSIGNING FIELD-SYMBOL(<ls_cells>).
@@ -2352,7 +2289,6 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       READ TABLE mo_viewer->mt_alv_catalog WITH KEY fieldname = <tab>-field_label INTO DATA(l_cat).
 
       IF <field> IS NOT INITIAL AND <ls_cells>-value IS INITIAL.
-
         READ TABLE <tab>-range INTO DATA(l_second) INDEX 2.
         IF sy-subrc = 0.
           IF ( <ls_cells>-fieldname = 'LOW' AND <tab>-high IS INITIAL ) OR  ( <ls_cells>-fieldname = 'HIGH' AND <tab>-low IS INITIAL  ).
@@ -2387,7 +2323,6 @@ CLASS lcl_sel_opt IMPLEMENTATION.
             <ls_cells>-value = |{ lv_date DATE = USER }|.
           ENDIF.
         ELSEIF <tab>-int_type = 'T'.
-          DATA: lv_time TYPE sy-uzeit.
           CALL FUNCTION 'CONVERT_TIME_INPUT'
             EXPORTING
               input                     = <ls_cells>-value
@@ -2550,38 +2485,6 @@ CLASS lcl_appl IMPLEMENTATION.
       WHERE t~spras = sy-langu
       ORDER BY c~ladatum DESCENDING c~lauzeit DESCENDING.
   ENDMETHOD.
-
-  METHOD suppress_run_button.
-    DATA itab TYPE TABLE OF sy-ucomm.
-
-    itab = VALUE #( ( 'ONLI' ) ( 'WB_EXEC' ) ).
-    CALL FUNCTION 'RS_SET_SELSCREEN_STATUS'
-      EXPORTING
-        p_status  = sy-pfkey
-      TABLES
-        p_exclude = itab.
-  ENDMETHOD.
-
-  METHOD exit.
-    DATA: l_answer.
-    DESCRIBE TABLE lcl_appl=>mt_obj.
-    IF sy-tfill NE 0.
-      CALL FUNCTION 'POPUP_TO_CONFIRM'
-        EXPORTING
-          titlebar       = 'Exit'
-          text_question  = 'Do you want to exit?'
-        IMPORTING
-          answer         = l_answer
-        EXCEPTIONS
-          text_not_found = 1
-          OTHERS         = 2.
-      IF l_answer = '1'.
-        LEAVE PROGRAM.
-      ELSE.
-        CALL SCREEN 101.
-      ENDIF.
-    ENDIF.
-  ENDMETHOD.
 ENDCLASS.
 
 CLASS lcl_rtti_tree IMPLEMENTATION.
@@ -2626,7 +2529,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lo_columns->get_column( 'FULLNAME' )->set_output_length( 40 ).
 
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
-    "lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
 
     DATA(lo_functions) = tree->get_functions( ).
     lo_functions->set_all( ).
@@ -2690,7 +2592,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD add_obj_nodes.
-
     DATA l_new_node TYPE salv_de_node_key.
     DATA lv_text TYPE lvc_value.
     DATA lv_node_key TYPE salv_de_node_key.
@@ -2868,9 +2769,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           lr_struc TYPE REF TO data,
           l_name   TYPE string,
           l_key    TYPE salv_de_node_key.
+
     FIELD-SYMBOLS: <new>      TYPE any,
                    <tab_from> TYPE ANY TABLE,
                    <tab_to>   TYPE STANDARD TABLE.
+
     l_name = iv_root_name.
     DESCRIBE FIELD io_var TYPE DATA(lv_type).
     IF lv_type NE cl_abap_typedescr=>typekind_table.
@@ -2924,18 +2827,16 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD traverse_struct.
-    DATA lt_component TYPE abap_component_tab.
-    DATA ls_component LIKE LINE OF lt_component.
-    DATA lo_struct_descr TYPE REF TO cl_abap_structdescr.
-    DATA ls_tree TYPE ts_table.
-    DATA lv_text TYPE lvc_value.
-    DATA lv_node_key TYPE salv_de_node_key.
-    DATA lo_nodes TYPE REF TO cl_salv_nodes.
-    DATA lv_icon TYPE salv_de_tree_image.
-    "DATA lr_struc      TYPE REF TO data.
+    DATA: lt_component    TYPE abap_component_tab,
+          ls_component    LIKE LINE OF lt_component,
+          lo_struct_descr TYPE REF TO cl_abap_structdescr,
+          ls_tree         TYPE ts_table,
+          lv_text         TYPE lvc_value,
+          lv_node_key     TYPE salv_de_node_key,
+          lv_icon         TYPE salv_de_tree_image.
 
     lo_struct_descr ?= io_type_descr.
-    ls_tree-ref =  ir_up."m_variable.
+    ls_tree-ref =  ir_up.
     ls_tree-typename = lo_struct_descr->absolute_name.
     REPLACE FIRST OCCURRENCE OF '\TYPE=' IN ls_tree-typename+0(6) WITH ''.
     IF ls_tree-typename+0(1) = '%'.
@@ -2983,13 +2884,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD traverse_elem.
-    DATA lo_elem_descr TYPE REF TO cl_abap_elemdescr.
-    DATA ls_tree TYPE ts_table.
-    DATA lv_text TYPE lvc_value.
-    DATA lv_icon TYPE salv_de_tree_image.
+    DATA: lo_elem_descr TYPE REF TO cl_abap_elemdescr,
+          ls_tree       TYPE ts_table,
+          lv_text       TYPE lvc_value,
+          lv_icon       TYPE salv_de_tree_image.
 
     lo_elem_descr ?= io_type_descr.
-    ls_tree-ref = ir_up."m_variable.
+    ls_tree-ref = ir_up.
 
     ls_tree-typename = lo_elem_descr->absolute_name.
     REPLACE FIRST OCCURRENCE OF '\TYPE=' IN ls_tree-typename WITH ''.
@@ -3030,6 +2931,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     IF ls_tree-value IS INITIAL AND m_hide IS NOT INITIAL.
       RETURN.
     ENDIF.
+
     tree->get_nodes( )->add_node(
       related_node   = iv_parent_key
       relationship   = if_salv_c_node_relation=>last_child
@@ -3041,12 +2943,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD traverse_table.
-    DATA lo_table_descr TYPE REF TO cl_abap_tabledescr.
-    DATA ls_tree TYPE ts_table.
-    DATA lv_text TYPE lvc_value.
-    DATA lv_node_key TYPE salv_de_node_key.
-    DATA lo_nodes TYPE REF TO cl_salv_nodes.
-    DATA lv_icon TYPE salv_de_tree_image.
+    DATA: lo_table_descr TYPE REF TO cl_abap_tabledescr,
+     ls_tree TYPE ts_table,
+     lv_text TYPE lvc_value,
+     lv_node_key TYPE salv_de_node_key,
+     lv_icon TYPE salv_de_tree_image.
 
     FIELD-SYMBOLS: <tab> TYPE ANY TABLE.
 
@@ -3059,7 +2960,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ls_tree-fullname = |{ iv_name } ({ lines })|.
     ls_tree-kind = lo_table_descr->type_kind.
     ls_tree-typename = replace(  val = lo_table_descr->absolute_name sub = '\TYPE=' with = ''   ).
-
     lv_icon = icon_view_table.
 
     IF iv_name IS NOT INITIAL.
