@@ -1,3 +1,4 @@
+
 *&---------------------------------------------------------------------*
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
@@ -301,6 +302,8 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
           m_object     TYPE REF TO object,
           m_correction TYPE i,
           m_hide       TYPE x,
+          m_globals    TYPE x,
+          m_class_data TYPE x,
           mo_debugger  TYPE REF TO lcl_debugger_script.
 
     METHODS constructor
@@ -316,9 +319,11 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
 
     METHODS clear.
 
+    METHODS add_buttons.
     METHODS add_node
       IMPORTING
-        iv_name TYPE lvc_value.
+        iv_name TYPE lvc_value
+        iv_icon TYPE SALV_DE_TREE_IMAGE OPTIONAL.
 
     METHODS add_obj_nodes
       IMPORTING
@@ -860,64 +865,72 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lt_inc     TYPE TABLE OF  d010inc,
           l_class    TYPE seu_name.
 
-    go_tree->clear( ).
-    CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = DATA(locals).
-
-    go_tree->add_node( 'Locals' ).
-    LOOP AT locals INTO DATA(ls_local).
-      transfer_variable( ls_local-name ).
-    ENDLOOP.
-
-    CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = DATA(globals).
-
-    go_tree->add_node( 'Globals' ).
-    transfer_variable( 'SYST' ).
-
     CALL METHOD abap_source->program
       RECEIVING
         p_prg = DATA(l_program).
 
-    l_name = l_program.
-    CALL FUNCTION 'RS_PROGRAM_INDEX'
-      EXPORTING
-        pg_name      = l_name
-      TABLES
-        compo        = lt_compo
-        inc          = lt_inc
-      EXCEPTIONS
-        syntax_error = 1
-        OTHERS       = 2.
+    go_tree->clear( ).
+    CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = DATA(locals).
 
-    DELETE lt_compo WHERE  type NE '+' OR exposure NE 2.
-    SORT lt_compo BY class.
-
-    LOOP AT lt_compo ASSIGNING FIELD-SYMBOL(<compo>).
-      TRY.
-          CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-            EXPORTING
-              p_var_name   = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
-            RECEIVING
-              p_symb_quick = DATA(quick).
-        CATCH cx_tpda_varname .
-          CLEAR <compo>-type.
-      ENDTRY.
+    go_tree->add_node( iv_name = 'Locals' iv_icon = conv #( icon_life_events ) ).
+    LOOP AT locals INTO DATA(ls_local).
+      transfer_variable( ls_local-name ).
     ENDLOOP.
 
-    LOOP AT lt_compo ASSIGNING <compo> WHERE type = '+'.
-      IF l_class NE <compo>-class.
-        l_class = <compo>-class.
-        go_tree->add_obj_var( EXPORTING iv_name = CONV #( <compo>-class ) RECEIVING er_key = DATA(l_key) ).
-      ENDIF.
-      transfer_variable( EXPORTING i_name = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
-                                   i_shortname = CONV #( <compo>-name )
-                                    i_new_node = l_key ).
-    ENDLOOP.
+    IF go_tree->m_class_data IS NOT INITIAL.
+      go_tree->add_node( iv_name = 'Class-data global variables' iv_icon = conv #( icon_oo_class_attribute ) ).
 
-    LOOP AT globals INTO DATA(ls_global).
-      transfer_variable( ls_global-name ).
-    ENDLOOP.
 
-    go_tree->add_node( 'extra data' ).
+      l_name = l_program.
+      CALL FUNCTION 'RS_PROGRAM_INDEX'
+        EXPORTING
+          pg_name      = l_name
+        TABLES
+          compo        = lt_compo
+          inc          = lt_inc
+        EXCEPTIONS
+          syntax_error = 1
+          OTHERS       = 2.
+
+      DELETE lt_compo WHERE  type NE '+' OR exposure NE 2.
+      SORT lt_compo BY class.
+
+      LOOP AT lt_compo ASSIGNING FIELD-SYMBOL(<compo>).
+        TRY.
+            CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+              EXPORTING
+                p_var_name   = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
+              RECEIVING
+                p_symb_quick = DATA(quick).
+          CATCH cx_tpda_varname .
+            CLEAR <compo>-type.
+        ENDTRY.
+      ENDLOOP.
+
+      LOOP AT lt_compo ASSIGNING <compo> WHERE type = '+'.
+        IF l_class NE <compo>-class.
+          l_class = <compo>-class.
+          go_tree->add_obj_var( EXPORTING iv_name = CONV #( <compo>-class ) RECEIVING er_key = DATA(l_key) ).
+        ENDIF.
+        transfer_variable( EXPORTING i_name = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
+                                     i_shortname = CONV #( <compo>-name )
+                                      i_new_node = l_key ).
+      ENDLOOP.
+
+    ENDIF.
+
+    IF go_tree->m_globals IS NOT INITIAL.
+      CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = DATA(globals).
+
+      go_tree->add_node( iv_name = 'Globals' iv_icon = conv #( icon_foreign_trade ) ).
+      transfer_variable( 'SYST' ).
+
+      LOOP AT globals INTO DATA(ls_global).
+        transfer_variable( ls_global-name ).
+      ENDLOOP.
+
+    ENDIF.
+    go_tree->add_node( iv_name = 'extra data' iv_icon = conv #( icon_folder ) ).
     go_tree->add_variable( EXPORTING iv_root_name = 'current program' CHANGING io_var =  l_program ).
 
     TRY.
@@ -2527,9 +2540,18 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lo_columns->get_column( 'VALUE' )->set_output_length( 40 ).
     lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full Name' ).
     lo_columns->get_column( 'FULLNAME' )->set_output_length( 40 ).
-
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
 
+    add_buttons( ).
+
+    tree->get_nodes( )->expand_all( ).
+    DATA(lo_event) = tree->get_event( ) .
+    SET HANDLER hndl_double_click
+                hndl_user_command FOR lo_event.
+
+  ENDMETHOD.
+
+  METHOD add_buttons.
     DATA(lo_functions) = tree->get_functions( ).
     lo_functions->set_all( ).
 
@@ -2538,6 +2560,20 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
        icon     = CONV #( icon_start_viewer )
        text     = 'Initials'
        tooltip  = 'Show/hide initial values'
+       position = if_salv_c_function_position=>right_of_salv_functions ).
+
+    lo_functions->add_function(
+       name     = 'GLOBALS'
+       icon     = CONV #( icon_foreign_trade )
+       text     = 'Globals'
+       tooltip  = 'Show/hide global variables'
+       position = if_salv_c_function_position=>right_of_salv_functions ).
+
+    lo_functions->add_function(
+       name     = 'CLASS_DATA'
+       icon     = CONV #( icon_oo_class_attribute )
+       text     = 'CLASS-DATA'
+       tooltip  = 'Show/hide Class-Data variables (global)'
        position = if_salv_c_function_position=>right_of_salv_functions ).
 
     lo_functions->add_function(
@@ -2568,11 +2604,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
        tooltip  = 'Continue'
        position = if_salv_c_function_position=>left_of_salv_functions ).
 
-    tree->get_nodes( )->expand_all( ).
-    DATA(lo_event) = tree->get_event( ) .
-    SET HANDLER hndl_double_click
-                hndl_user_command FOR lo_event.
-
   ENDMETHOD.
 
   METHOD clear.
@@ -2584,6 +2615,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     main_node_key =
           tree->get_nodes( )->add_node(
             related_node   = ''
+            collapsed_icon = iv_icon
+            expanded_icon = iv_icon
             relationship   = if_salv_c_node_relation=>last_child
             row_style = if_salv_c_tree_style=>emphasized_b
             text           = iv_name
@@ -2740,6 +2773,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     CASE e_salv_function.
       WHEN 'INITIALS'."Show/hide empty variables
         m_hide = m_hide BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'GLOBALS'."Show/hide global variables
+        m_globals = m_globals BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
+        m_class_data = m_class_data BIT-XOR c_mask.
+        mo_debugger->run_script( ).
       WHEN 'F5'.
         mo_debugger->f5( ).
       WHEN 'F6'.
@@ -2944,10 +2984,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
   METHOD traverse_table.
     DATA: lo_table_descr TYPE REF TO cl_abap_tabledescr,
-     ls_tree TYPE ts_table,
-     lv_text TYPE lvc_value,
-     lv_node_key TYPE salv_de_node_key,
-     lv_icon TYPE salv_de_tree_image.
+          ls_tree        TYPE ts_table,
+          lv_text        TYPE lvc_value,
+          lv_node_key    TYPE salv_de_node_key,
+          lv_icon        TYPE salv_de_tree_image.
 
     FIELD-SYMBOLS: <tab> TYPE ANY TABLE.
 
