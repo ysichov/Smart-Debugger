@@ -1,4 +1,3 @@
-
 *&---------------------------------------------------------------------*
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
@@ -304,6 +303,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
           m_hide       TYPE x,
           m_globals    TYPE x,
           m_class_data TYPE x,
+          m_ldb        TYPE x,
           mo_debugger  TYPE REF TO lcl_debugger_script.
 
     METHODS constructor
@@ -323,7 +323,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
     METHODS add_node
       IMPORTING
         iv_name TYPE lvc_value
-        iv_icon TYPE SALV_DE_TREE_IMAGE OPTIONAL.
+        iv_icon TYPE salv_de_tree_image OPTIONAL.
 
     METHODS add_obj_nodes
       IMPORTING
@@ -861,41 +861,42 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD run_script.
     DATA: l_name(40),
-          lt_compo   TYPE TABLE OF scompo,
-          lt_inc     TYPE TABLE OF  d010inc,
-          l_class    TYPE seu_name.
+          lt_compo     TYPE TABLE OF scompo,
+          lt_compo_tmp TYPE TABLE OF scompo,
+          lt_inc       TYPE TABLE OF  d010inc,
+          l_class      TYPE seu_name.
 
     CALL METHOD abap_source->program
       RECEIVING
         p_prg = DATA(l_program).
 
+    l_name = l_program.
+    CALL FUNCTION 'RS_PROGRAM_INDEX'
+      EXPORTING
+        pg_name      = l_name
+      TABLES
+        compo        = lt_compo
+        inc          = lt_inc
+      EXCEPTIONS
+        syntax_error = 1
+        OTHERS       = 2.
+
     go_tree->clear( ).
     CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = DATA(locals).
 
-    go_tree->add_node( iv_name = 'Locals' iv_icon = conv #( icon_life_events ) ).
+    go_tree->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
     LOOP AT locals INTO DATA(ls_local).
       transfer_variable( ls_local-name ).
     ENDLOOP.
 
     IF go_tree->m_class_data IS NOT INITIAL.
-      go_tree->add_node( iv_name = 'Class-data global variables' iv_icon = conv #( icon_oo_class_attribute ) ).
+      go_tree->add_node( iv_name = 'Class-data global variables' iv_icon = CONV #( icon_oo_class_attribute ) ).
 
+      lt_compo_tmp = lt_compo.
+      DELETE lt_compo_tmp WHERE  type NE '+' OR exposure NE 2.
+      SORT lt_compo_tmp BY class.
 
-      l_name = l_program.
-      CALL FUNCTION 'RS_PROGRAM_INDEX'
-        EXPORTING
-          pg_name      = l_name
-        TABLES
-          compo        = lt_compo
-          inc          = lt_inc
-        EXCEPTIONS
-          syntax_error = 1
-          OTHERS       = 2.
-
-      DELETE lt_compo WHERE  type NE '+' OR exposure NE 2.
-      SORT lt_compo BY class.
-
-      LOOP AT lt_compo ASSIGNING FIELD-SYMBOL(<compo>).
+      LOOP AT lt_compo_tmp ASSIGNING FIELD-SYMBOL(<compo>).
         TRY.
             CALL METHOD cl_tpda_script_data_descr=>get_quick_info
               EXPORTING
@@ -907,7 +908,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDTRY.
       ENDLOOP.
 
-      LOOP AT lt_compo ASSIGNING <compo> WHERE type = '+'.
+      LOOP AT lt_compo_tmp ASSIGNING <compo> WHERE type = '+'.
         IF l_class NE <compo>-class.
           l_class = <compo>-class.
           go_tree->add_obj_var( EXPORTING iv_name = CONV #( <compo>-class ) RECEIVING er_key = DATA(l_key) ).
@@ -916,21 +917,36 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                      i_shortname = CONV #( <compo>-name )
                                       i_new_node = l_key ).
       ENDLOOP.
+    ENDIF.
 
+    lt_compo_tmp = lt_compo.
+    DELETE lt_compo_tmp WHERE  type NE 'D'.
+    CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = DATA(globals).
+
+    IF go_tree->m_ldb IS NOT INITIAL.
+      go_tree->add_node( iv_name = 'LDB' iv_icon = CONV #( icon_time ) ).
+
+      LOOP AT globals INTO DATA(ls_global).
+        READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
+        IF sy-subrc NE 0.
+          transfer_variable( ls_global-name ).
+        ENDIF.
+      ENDLOOP.
     ENDIF.
 
     IF go_tree->m_globals IS NOT INITIAL.
-      CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = DATA(globals).
-
-      go_tree->add_node( iv_name = 'Globals' iv_icon = conv #( icon_foreign_trade ) ).
+      go_tree->add_node( iv_name = 'Globals' iv_icon = CONV #( icon_foreign_trade ) ).
       transfer_variable( 'SYST' ).
 
-      LOOP AT globals INTO DATA(ls_global).
-        transfer_variable( ls_global-name ).
+      LOOP AT globals INTO ls_global.
+        READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0.
+          transfer_variable( ls_global-name ).
+        ENDIF.
       ENDLOOP.
 
     ENDIF.
-    go_tree->add_node( iv_name = 'extra data' iv_icon = conv #( icon_folder ) ).
+    go_tree->add_node( iv_name = 'extra data' iv_icon = CONV #( icon_folder ) ).
     go_tree->add_variable( EXPORTING iv_root_name = 'current program' CHANGING io_var =  l_program ).
 
     TRY.
@@ -2576,6 +2592,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
        tooltip  = 'Show/hide Class-Data variables (global)'
        position = if_salv_c_function_position=>right_of_salv_functions ).
 
+lo_functions->add_function(
+       name     = 'LDB'
+       icon     = CONV #( icon_database_table )
+       text     = 'LDB'
+       tooltip  = 'Show/hide Local Data Base variables (global)'
+       position = if_salv_c_function_position=>right_of_salv_functions ).
+
     lo_functions->add_function(
        name     = 'F5'
        icon     = CONV #( icon_debugger_step_into )
@@ -2760,6 +2783,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           CATCH cx_root.
         ENDTRY.
       ENDIF.
+      EXIT.
     ENDLOOP.
 
     tree->display( ).
@@ -2779,6 +2803,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         mo_debugger->run_script( ).
       WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
         m_class_data = m_class_data BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'LDB'."Show/hide LDB variables (globals)
+        m_ldb = m_ldb BIT-XOR c_mask.
         mo_debugger->run_script( ).
       WHEN 'F5'.
         mo_debugger->f5( ).
