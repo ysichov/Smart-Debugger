@@ -1,3 +1,4 @@
+*&---------------------------------------------------------------------*
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
@@ -303,6 +304,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
           m_globals    TYPE x,
           m_class_data TYPE x,
           m_ldb        TYPE x,
+          m_icon       TYPE salv_de_tree_image,
           mo_debugger  TYPE REF TO lcl_debugger_script.
 
     METHODS constructor
@@ -313,6 +315,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
       IMPORTING
         iv_root_name TYPE string
         iv_key       TYPE salv_de_node_key OPTIONAL
+        i_icon       TYPE salv_de_tree_image OPTIONAL
       CHANGING
         io_var       TYPE any  .
 
@@ -644,7 +647,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           table_clone    TYPE REF TO data,
           l_name         TYPE string,
           lo_deep_handle TYPE REF TO cl_abap_datadescr,
-          deep_ref       TYPE REF TO cl_abap_typedescr.
+          deep_ref       TYPE REF TO cl_abap_typedescr,
+          lo_tabl        TYPE REF TO cl_abap_tabledescr,
+          lo_struc       TYPE REF TO cl_abap_structdescr,
+          r_header       TYPE REF TO data,
+          r_elem         TYPE REF TO data.
 
     FIELD-SYMBOLS: <lv_value> TYPE any.
 
@@ -670,6 +677,38 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lo_table_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
           table_clone = lo_table_descr->elem_clone( ).
           ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
+
+          "check header area
+          DATA td       TYPE sydes_desc.
+          DESCRIBE FIELD <f> INTO td.
+
+          READ TABLE td-names INTO DATA(l_names) INDEX 1.
+          IF sy-subrc = 0.
+            TRY.
+                CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+                  EXPORTING
+                    p_var_name   = |{ i_name }-{ l_names-name }|
+                  RECEIVING
+                    p_symb_quick = DATA(l_quick).
+
+                lo_tabl ?= cl_abap_typedescr=>describe_by_data( <f> ).
+                lo_struc ?= lo_tabl->get_table_line_type( ).
+                CREATE DATA r_header TYPE HANDLE lo_struc.
+                ASSIGN r_header->* TO FIELD-SYMBOL(<header>).
+                LOOP AT td-names INTO l_names.
+                  r_elem = create_simple_var( EXPORTING i_name = |{ i_name }-{ l_names-name }| ).
+                  ASSIGN r_elem->* TO FIELD-SYMBOL(<elem>).
+                  ASSIGN COMPONENT l_names-name OF STRUCTURE <header> TO FIELD-SYMBOL(<to>).
+                  <to> = <elem>.
+                ENDLOOP.
+                go_tree->add_variable( EXPORTING iv_root_name = i_name iv_key = i_new_node i_icon = conv #( icon_header )
+                                       CHANGING io_var =  <header>  ).
+                RETURN.
+              CATCH cx_tpda_varname .
+
+            ENDTRY.
+          ENDIF.
+
           go_tree->add_variable( EXPORTING iv_root_name = i_name iv_key = i_new_node CHANGING io_var =  <f>  ).
 
         ELSEIF quick-typid = 'r'. "reference
@@ -678,7 +717,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                       i_new_node = i_new_node
                                       i_quick = quick ).
 
-        ELSEIF quick-typid = 'v' OR quick-typid = 'u' ."deep structure or structure
+        ELSEIF quick-typid = 'v' OR quick-typid = 'u'."deep structure or structure
 
           CALL METHOD cl_abap_complexdescr=>describe_by_name
             EXPORTING
@@ -882,6 +921,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     go_tree->clear( ).
     CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = DATA(locals).
+    SORT locals.
 
     go_tree->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
     LOOP AT locals INTO DATA(ls_local).
@@ -921,6 +961,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     lt_compo_tmp = lt_compo.
     DELETE lt_compo_tmp WHERE  type NE 'D'.
     CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = DATA(globals).
+    SORT globals.
 
     IF go_tree->m_ldb IS NOT INITIAL.
       go_tree->add_node( iv_name = 'LDB' iv_icon = CONV #( icon_time ) ).
@@ -2594,12 +2635,12 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
        tooltip  = 'Show/hide Class-Data variables (global)'
        position = if_salv_c_function_position=>right_of_salv_functions ).
 
-lo_functions->add_function(
-       name     = 'LDB'
-       icon     = CONV #( icon_database_table )
-       text     = 'LDB'
-       tooltip  = 'Show/hide Local Data Base variables (global)'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
+    lo_functions->add_function(
+           name     = 'LDB'
+           icon     = CONV #( icon_database_table )
+           text     = 'LDB'
+           tooltip  = 'Show/hide Local Data Base variables (global)'
+           position = if_salv_c_function_position=>right_of_salv_functions ).
 
     lo_functions->add_function(
        name     = 'F5'
@@ -2843,6 +2884,12 @@ lo_functions->add_function(
                    <tab_from> TYPE ANY TABLE,
                    <tab_to>   TYPE STANDARD TABLE.
 
+    IF i_icon IS SUPPLIED.
+      m_icon = i_icon.
+    ELSE.
+      CLEAR m_icon.
+    ENDIF.
+
     l_name = iv_root_name.
     DESCRIBE FIELD io_var TYPE DATA(lv_type).
     IF lv_type NE cl_abap_typedescr=>typekind_table.
@@ -2913,7 +2960,13 @@ lo_functions->add_function(
     ENDIF.
 
     ls_tree-kind = lo_struct_descr->type_kind.
-    lv_icon = icon_structure.
+
+    IF m_icon IS INITIAL.
+      lv_icon = icon_structure.
+    ELSE.
+      lv_icon = m_icon.
+    ENDIF.
+
     IF iv_name IS NOT INITIAL.
       lv_text = iv_name.
     ELSE.
