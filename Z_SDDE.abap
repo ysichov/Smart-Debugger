@@ -2662,6 +2662,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
            position = if_salv_c_function_position=>right_of_salv_functions ).
 
     lo_functions->add_function(
+       name     = 'REFRESH'
+       icon     = CONV #( icon_refresh )
+       text     = ''
+       tooltip  = 'Refresh'
+       position = if_salv_c_function_position=>left_of_salv_functions ).
+
+    lo_functions->add_function(
        name     = 'F5'
        icon     = CONV #( icon_debugger_step_into )
        text     = ''
@@ -2857,6 +2864,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   METHOD hndl_user_command.
     CONSTANTS: c_mask TYPE x VALUE '01'.
     CASE e_salv_function.
+      WHEN 'REFRESH'."
+        mo_debugger->run_script( ).
       WHEN 'INITIALS'."Show/hide empty variables
         m_hide = m_hide BIT-XOR c_mask.
         mo_debugger->run_script( ).
