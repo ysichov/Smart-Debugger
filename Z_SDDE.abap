@@ -2582,7 +2582,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     super->constructor( ).
     m_hide = '01'.
-    mo_box = create( i_name = 'SDDE Simple Debugger Data explorer beta v. 0.1' i_width = 800 i_hight = 300 ).
+    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.1' i_width = 800 i_hight = 300 ).
     CREATE OBJECT mo_splitter ##FM_SUBRC_OK
       EXPORTING
         parent  = mo_box
