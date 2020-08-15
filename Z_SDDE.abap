@@ -713,7 +713,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                 ENDLOOP.
                 go_tree->add_variable( EXPORTING iv_root_name = i_name iv_key = i_new_node i_icon = CONV #( icon_header )
                                        CHANGING io_var =  <header>  ).
-                RETURN.
+                "RETURN.
               CATCH cx_tpda_varname .
 
             ENDTRY.
@@ -936,8 +936,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF go_tree->m_no_refresh IS INITIAL.
       go_tree->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
     ENDIF.
-
+    "BREAK-POINT.
     LOOP AT locals INTO DATA(ls_local).
+      check NOT ls_local-name CA '[]'.
       transfer_variable( ls_local-name ).
     ENDLOOP.
 
@@ -978,7 +979,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF go_tree->m_ldb IS NOT INITIAL AND go_tree->m_no_refresh IS INITIAL.
       go_tree->add_node( iv_name = 'LDB' iv_icon = CONV #( icon_time ) ).
-
+      "BREAK-POINT.
       LOOP AT globals INTO DATA(ls_global).
         READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
         IF sy-subrc NE 0.
@@ -990,7 +991,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF go_tree->m_globals IS NOT INITIAL AND go_tree->m_no_refresh IS INITIAL.
       go_tree->add_node( iv_name = 'Globals' iv_icon = CONV #( icon_foreign_trade ) ).
       transfer_variable( 'SYST' ).
-
+      "BREAK-POINT.
       LOOP AT globals INTO ls_global.
         READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
