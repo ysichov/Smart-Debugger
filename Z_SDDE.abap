@@ -285,6 +285,11 @@ ENDCLASS.
 CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
   PUBLIC SECTION.
 
+    TYPES: BEGIN OF var_table,
+             name TYPE string,
+             key  TYPE salv_de_node_key,
+           END OF var_table.
+
     TYPES: BEGIN OF ts_table,
              ref      TYPE REF TO data,
              kind(1),
@@ -297,7 +302,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
           WITH NON-UNIQUE DEFAULT KEY.
 
     DATA: m_variable   TYPE REF TO data,
-
           m_object     TYPE REF TO object,
           m_correction TYPE i,
           m_hide       TYPE x,
@@ -305,7 +309,9 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
           m_class_data TYPE x,
           m_ldb        TYPE x,
           m_icon       TYPE salv_de_tree_image,
-          mo_debugger  TYPE REF TO lcl_debugger_script.
+          mo_debugger  TYPE REF TO lcl_debugger_script,
+          mt_vars      TYPE STANDARD TABLE OF var_table,
+          m_no_refresh TYPE xfeld.
 
     METHODS constructor
       IMPORTING
@@ -365,32 +371,36 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
 
     METHODS traverse
       IMPORTING
-        io_type_descr TYPE REF TO cl_abap_typedescr
-        iv_parent_key TYPE salv_de_node_key
-        iv_name       TYPE clike
-        ir_up         TYPE REF TO data OPTIONAL.
+        io_type_descr  TYPE REF TO cl_abap_typedescr
+        iv_parent_key  TYPE salv_de_node_key
+        iv_name        TYPE clike
+        ir_up          TYPE REF TO data OPTIONAL
+        iv_parent_name TYPE string OPTIONAL.
 
     METHODS traverse_struct
       IMPORTING
-        io_type_descr TYPE REF TO cl_abap_typedescr
-        iv_parent_key TYPE salv_de_node_key
-        iv_name       TYPE clike
-        ir_up         TYPE REF TO data OPTIONAL.
+        io_type_descr  TYPE REF TO cl_abap_typedescr
+        iv_parent_key  TYPE salv_de_node_key
+        iv_name        TYPE clike
+        ir_up          TYPE REF TO data OPTIONAL
+        iv_parent_name TYPE string OPTIONAL.
 
     METHODS traverse_elem
       IMPORTING
-        io_type_descr TYPE REF TO cl_abap_typedescr
-        iv_parent_key TYPE salv_de_node_key
-        iv_name       TYPE clike
-        iv_value      TYPE any OPTIONAL
-        ir_up         TYPE REF TO data OPTIONAL.
+        io_type_descr  TYPE REF TO cl_abap_typedescr
+        iv_parent_key  TYPE salv_de_node_key
+        iv_name        TYPE clike
+        iv_value       TYPE any OPTIONAL
+        ir_up          TYPE REF TO data OPTIONAL
+        iv_parent_name TYPE string OPTIONAL      .
 
     METHODS traverse_table
       IMPORTING
-        io_type_descr TYPE REF TO cl_abap_typedescr
-        iv_parent_key TYPE salv_de_node_key
-        iv_name       TYPE clike
-        ir_up         TYPE REF TO data OPTIONAL.
+        io_type_descr  TYPE REF TO cl_abap_typedescr
+        iv_parent_key  TYPE salv_de_node_key
+        iv_name        TYPE clike
+        ir_up          TYPE REF TO data OPTIONAL
+        iv_parent_name TYPE string OPTIONAL.
 
     METHODS: hndl_double_click FOR EVENT double_click OF cl_salv_events_tree IMPORTING node_key,
       hndl_user_command FOR EVENT added_function OF cl_salv_events IMPORTING e_salv_function .
@@ -701,7 +711,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                   ASSIGN COMPONENT l_names-name OF STRUCTURE <header> TO FIELD-SYMBOL(<to>).
                   <to> = <elem>.
                 ENDLOOP.
-                go_tree->add_variable( EXPORTING iv_root_name = i_name iv_key = i_new_node i_icon = conv #( icon_header )
+                go_tree->add_variable( EXPORTING iv_root_name = i_name iv_key = i_new_node i_icon = CONV #( icon_header )
                                        CHANGING io_var =  <header>  ).
                 RETURN.
               CATCH cx_tpda_varname .
@@ -923,12 +933,15 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = DATA(locals).
     SORT locals.
 
-    go_tree->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
+    IF go_tree->m_no_refresh IS INITIAL.
+      go_tree->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
+    ENDIF.
+
     LOOP AT locals INTO DATA(ls_local).
       transfer_variable( ls_local-name ).
     ENDLOOP.
 
-    IF go_tree->m_class_data IS NOT INITIAL.
+    IF go_tree->m_class_data IS NOT INITIAL AND go_tree->m_no_refresh IS INITIAL.
       go_tree->add_node( iv_name = 'Class-data global variables' iv_icon = CONV #( icon_oo_class_attribute ) ).
 
       lt_compo_tmp = lt_compo.
@@ -963,7 +976,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = DATA(globals).
     SORT globals.
 
-    IF go_tree->m_ldb IS NOT INITIAL.
+    IF go_tree->m_ldb IS NOT INITIAL AND go_tree->m_no_refresh IS INITIAL.
       go_tree->add_node( iv_name = 'LDB' iv_icon = CONV #( icon_time ) ).
 
       LOOP AT globals INTO DATA(ls_global).
@@ -974,7 +987,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDLOOP.
     ENDIF.
 
-    IF go_tree->m_globals IS NOT INITIAL.
+    IF go_tree->m_globals IS NOT INITIAL AND go_tree->m_no_refresh IS INITIAL.
       go_tree->add_node( iv_name = 'Globals' iv_icon = CONV #( icon_foreign_trade ) ).
       transfer_variable( 'SYST' ).
 
@@ -986,20 +999,25 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDLOOP.
 
     ENDIF.
-    go_tree->add_node( iv_name = 'extra data' iv_icon = CONV #( icon_folder ) ).
-    go_tree->add_variable( EXPORTING iv_root_name = 'current program' CHANGING io_var =  l_program ).
 
-    TRY.
-        cl_tpda_script_abapdescr=>get_abap_src_info(
-           IMPORTING
-             p_prg_info  = DATA(l_prg) ).
+    IF go_tree->m_no_refresh IS INITIAL.
 
-        go_tree->add_variable( EXPORTING iv_root_name = 'code line' CHANGING io_var =  l_prg-line ).
-        go_tree->add_variable( EXPORTING iv_root_name = 'event' CHANGING io_var =  l_prg-eventname ).
-        go_tree->add_variable( EXPORTING iv_root_name = 'include' CHANGING io_var =  l_prg-include ).
-      CATCH cx_tpda_src_info.
-    ENDTRY.
+      go_tree->add_node( iv_name = 'extra data' iv_icon = CONV #( icon_folder ) ).
+      go_tree->add_variable( EXPORTING iv_root_name = 'current program' CHANGING io_var =  l_program ).
 
+      TRY.
+          cl_tpda_script_abapdescr=>get_abap_src_info(
+             IMPORTING
+               p_prg_info  = DATA(l_prg) ).
+
+          go_tree->add_variable( EXPORTING iv_root_name = 'code line' CHANGING io_var =  l_prg-line ).
+          go_tree->add_variable( EXPORTING iv_root_name = 'event' CHANGING io_var =  l_prg-eventname ).
+          go_tree->add_variable( EXPORTING iv_root_name = 'include' CHANGING io_var =  l_prg-include ).
+        CATCH cx_tpda_src_info.
+      ENDTRY.
+    ENDIF.
+
+    "go_tree->m_no_refresh = 'X'.
     go_tree->display( me ).
     me->break( ).
   ENDMETHOD.                    "script
@@ -2564,7 +2582,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     super->constructor( ).
     m_hide = '01'.
-    mo_box = create( i_name = 'text' i_width = 800 i_hight = 300 ).
+    mo_box = create( i_name = 'SDDE Simple Debugger Data explorer beta v. 0.1' i_width = 800 i_hight = 300 ).
     CREATE OBJECT mo_splitter ##FM_SUBRC_OK
       EXPORTING
         parent  = mo_box
@@ -2928,14 +2946,15 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       io_type_descr = cl_abap_typedescr=>describe_by_data_ref( m_variable )
       iv_parent_key = l_key
       iv_name = l_name
-      ir_up = m_variable ).
+      ir_up = m_variable
+      iv_parent_name = l_name ).
   ENDMETHOD.
 
   METHOD traverse.
     CASE io_type_descr->kind.
-      WHEN c_kind-struct. traverse_struct( io_type_descr = io_type_descr iv_parent_key = iv_parent_key iv_name = iv_name ir_up = ir_up ).
-      WHEN c_kind-table.  traverse_table( io_type_descr = io_type_descr iv_parent_key = iv_parent_key iv_name = iv_name ir_up = ir_up ).
-      WHEN c_kind-elem.   traverse_elem( io_type_descr = io_type_descr iv_parent_key = iv_parent_key  iv_name = iv_name  ir_up = ir_up ).
+      WHEN c_kind-struct. traverse_struct( io_type_descr = io_type_descr iv_parent_key = iv_parent_key iv_name = iv_name ir_up = ir_up iv_parent_name = iv_parent_name ).
+      WHEN c_kind-table.  traverse_table( io_type_descr = io_type_descr iv_parent_key = iv_parent_key iv_name = iv_name ir_up = ir_up iv_parent_name = iv_parent_name ).
+      WHEN c_kind-elem.   traverse_elem( io_type_descr = io_type_descr iv_parent_key = iv_parent_key  iv_name = iv_name  ir_up = ir_up iv_parent_name = iv_parent_name ).
       WHEN c_kind-class.
       WHEN c_kind-intf.
       WHEN c_kind-ref.
@@ -2973,17 +2992,26 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       lv_text = ls_tree-typename.
     ENDIF.
 
+    ls_tree-fullname = iv_parent_name.
     IF lv_text IS NOT INITIAL.
-      lv_node_key =
-        tree->get_nodes( )->add_node(
-          related_node   = iv_parent_key
-          relationship   = if_salv_c_node_relation=>last_child
-          collapsed_icon = lv_icon
-          expanded_icon  = lv_icon
-          data_row       = ls_tree
-          text           = lv_text
-          folder         = abap_true
-        )->get_key( ).
+      READ TABLE mt_vars WITH KEY name = iv_parent_name TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
+
+        lv_node_key =
+          tree->get_nodes( )->add_node(
+            related_node   = iv_parent_key
+            relationship   = if_salv_c_node_relation=>last_child
+            collapsed_icon = lv_icon
+            expanded_icon  = lv_icon
+            data_row       = ls_tree
+            text           = lv_text
+            folder         = abap_true
+          )->get_key( ).
+
+*        APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+*        <vars>-name = iv_parent_name.
+*        <vars>-key = lv_node_key.
+      ENDIF.
     ENDIF.
 
     lt_component = lo_struct_descr->get_components( ).
@@ -3001,7 +3029,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         io_type_descr = ls_component-type
         iv_parent_key = lv_node_key
         iv_name = ls_component-name
-        ir_up = lr_new_struc ).
+        ir_up = lr_new_struc
+        iv_parent_name = |{ iv_parent_name }-{ ls_component-name }| ).
     ENDLOOP.
   ENDMETHOD.
 
@@ -3009,7 +3038,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     DATA: lo_elem_descr TYPE REF TO cl_abap_elemdescr,
           ls_tree       TYPE ts_table,
           lv_text       TYPE lvc_value,
-          lv_icon       TYPE salv_de_tree_image.
+          lv_icon       TYPE salv_de_tree_image,
+          lv_node_key   TYPE salv_de_node_key.
 
     lo_elem_descr ?= io_type_descr.
     ls_tree-ref = ir_up.
@@ -3054,14 +3084,41 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    tree->get_nodes( )->add_node(
-      related_node   = iv_parent_key
-      relationship   = if_salv_c_node_relation=>last_child
-      data_row       = ls_tree
-      collapsed_icon = lv_icon
-      expanded_icon  = lv_icon
-      text           = lv_text
-      folder         = abap_false ).
+    ls_tree-fullname = iv_parent_name.
+
+    READ TABLE mt_vars WITH KEY name = iv_parent_name INTO DATA(l_var).
+    IF sy-subrc NE 0.
+
+      lv_node_key = tree->get_nodes( )->add_node(
+        related_node   = iv_parent_key
+        relationship   = if_salv_c_node_relation=>last_child
+        data_row       = ls_tree
+        collapsed_icon = lv_icon
+        expanded_icon  = lv_icon
+        text           = lv_text
+        folder         = abap_false )->get_key( ).
+
+*      APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+*      <vars>-name = iv_parent_name.
+*      <vars>-key = lv_node_key.
+    ELSE.
+      DATA(lo_nodes) = tree->get_nodes( ).
+      DATA(lt_nodes) =  lo_nodes->get_all_nodes( ).
+      DATA r_row TYPE REF TO data.
+      "expanding only first level nodes.
+      READ TABLE lt_nodes WITH KEY key = l_var-key INTO DATA(l_node).
+      IF sy-subrc = 0.
+        TRY.
+            r_row = l_node-node->get_data_row( ).
+            ASSIGN r_row->* TO FIELD-SYMBOL(<row>).
+            ASSIGN COMPONENT 'VALUE' OF STRUCTURE <row> TO FIELD-SYMBOL(<field>).
+            <field> = ls_tree-value.
+            l_node-node->set_data_row( <row> ).
+          CATCH cx_root.
+        ENDTRY.
+      ENDIF.
+    ENDIF.
+
   ENDMETHOD.
 
   METHOD traverse_table.
@@ -3091,16 +3148,25 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDIF.
 
     IF lines > 0 OR  m_hide IS INITIAL.
-      lv_node_key =
-        tree->get_nodes( )->add_node(
-          related_node   = iv_parent_key
-          relationship   = if_salv_c_node_relation=>last_child
-          collapsed_icon = lv_icon
-          expanded_icon  = lv_icon
-          data_row       = ls_tree
-          text           = lv_text
-          folder         = abap_true
-        )->get_key( ).
+      READ TABLE mt_vars WITH KEY name = iv_parent_name TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
+
+        ls_tree-fullname = iv_parent_name.
+        lv_node_key =
+          tree->get_nodes( )->add_node(
+            related_node   = iv_parent_key
+            relationship   = if_salv_c_node_relation=>last_child
+            collapsed_icon = lv_icon
+            expanded_icon  = lv_icon
+            data_row       = ls_tree
+            text           = lv_text
+            folder         = abap_true
+          )->get_key( ).
+
+*        APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+*        <vars>-name = iv_parent_name.
+*        <vars>-key = lv_node_key.
+      ENDIF.
     ENDIF.
   ENDMETHOD.
 ENDCLASS.
@@ -3239,7 +3305,7 @@ CLASS lcl_dragdrop IMPLEMENTATION.
     ENDIF.
 
     DATA(lo_alv) = CAST cl_gui_alv_grid( e_dragdropobj->dragsourcectrl ).
-    lcl_alv_common=>refresh( EXPORTING i_obj = lo_alv i_soft = abap_true ).
+    lcl_alv_common=>refresh( EXPORTING i_obj = lo_alv ).
 
     lo_alv ?= e_dragdropobj->droptargetctrl.
     lo_to->raise_selection_done( ).
