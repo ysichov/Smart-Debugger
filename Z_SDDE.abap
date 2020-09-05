@@ -1056,6 +1056,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     LOOP AT locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
+
       transfer_variable( ls_local-name ).
     ENDLOOP.
 
@@ -3136,7 +3137,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ASSIGN m_variable->* TO FIELD-SYMBOL(<new_value>).
 
       READ TABLE mt_vars WITH KEY name = l_name INTO DATA(l_var).
-      "BREAK-POINT .
       IF sy-subrc = 0.
 
         DATA(lo_nodes) = tree->get_nodes( ).
@@ -3176,6 +3176,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                         l_node->delete( ).
                         RETURN.
                       ENDIF.
+                      "RETURN.
                     ELSE.
                       <state>-ref = m_variable.
                     ENDIF.
@@ -3204,6 +3205,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
               IF l_node is not INITIAL.
               l_node->delete( ).
               ENDIF.
+              RETURN.
             ELSE.
               <state>-ref = m_variable.
             ENDIF.
