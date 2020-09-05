@@ -1054,6 +1054,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       go_tree->main_node_key = go_tree->m_locals_key.
     ENDIF.
 
+    BREAK-POINT.
+
     LOOP AT locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
 
@@ -2778,13 +2780,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
        position = if_salv_c_function_position=>right_of_salv_functions ).
 
     lo_functions->add_function(
-       name     = 'CHANGED'
-       icon     = CONV #( icon_interchange )
-       text     = ''
-       tooltip  = 'Show only changed values/all values'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
        name     = 'GLOBALS'
        icon     = CONV #( icon_foreign_trade )
        text     = 'Globals'
@@ -2804,6 +2799,14 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
            text     = 'LDB'
            tooltip  = 'Show/hide Local Data Base variables (global)'
            position = if_salv_c_function_position=>right_of_salv_functions ).
+
+    lo_functions->add_function(
+       name     = 'CHANGED'
+       icon     = CONV #( icon_interchange )
+       text     = ''
+       tooltip  = 'Show only changed values/all values'
+       position = if_salv_c_function_position=>right_of_salv_functions ).
+
 
     lo_functions->add_function(
        name     = 'REFRESH'
