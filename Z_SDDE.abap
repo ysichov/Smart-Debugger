@@ -1054,8 +1054,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       go_tree->main_node_key = go_tree->m_locals_key.
     ENDIF.
 
-    BREAK-POINT.
-
     LOOP AT locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
 
