@@ -1,3 +1,4 @@
+*&---------------------------------------------------------------------*
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
@@ -290,6 +291,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
              leaf TYPE string,
              name TYPE string,
              key  TYPE salv_de_node_key,
+             ref  TYPE REF TO data,
            END OF var_table.
 
     TYPES: BEGIN OF ts_table,
@@ -312,6 +314,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
           m_globals     TYPE x,
           m_class_data  TYPE x,
           m_ldb         TYPE x,
+          m_changed     TYPE x,
           m_locals_key  TYPE salv_de_node_key,
           m_globals_key TYPE salv_de_node_key,
           m_class_key   TYPE salv_de_node_key,
@@ -320,6 +323,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
           m_icon        TYPE salv_de_tree_image,
           mo_debugger   TYPE REF TO lcl_debugger_script,
           mt_vars       TYPE STANDARD TABLE OF var_table,
+          mt_state      TYPE STANDARD TABLE OF var_table,
           m_new_node    TYPE salv_de_node_key,
           m_no_refresh  TYPE xfeld,
           m_ref         TYPE xfeld,
@@ -1015,6 +1019,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = DATA(l_prg) ).
         IF l_prg-event-eventname NE go_tree->m_prg_info-event-eventname.
           CLEAR go_tree->m_no_refresh.
+          CLEAR go_tree->mt_vars.
+          CLEAR go_tree->mt_state.
         ENDIF.
         go_tree->m_prg_info = l_prg.
       CATCH cx_tpda_src_info.
@@ -1145,6 +1151,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
+    IF go_tree->m_no_refresh IS INITIAL.
+      go_tree->mt_state = go_tree->mt_vars.
+    ENDIF.
     go_tree->m_no_refresh = 'X'.
     go_tree->display( me ).
     me->break( ).
@@ -2743,8 +2752,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lo_columns->set_optimize( abap_false ).
     lo_columns->get_column( 'VALUE' )->set_short_text( 'Value' ).
     lo_columns->get_column( 'VALUE' )->set_output_length( 40 ).
-    lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full Name' ).
-    lo_columns->get_column( 'FULLNAME' )->set_output_length( 40 ).
+    lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
+    "lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full Name' ).
+    "lo_columns->get_column( 'FULLNAME' )->set_output_length( 40 ).
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
 
     add_buttons( ).
@@ -2753,7 +2763,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     DATA(lo_event) = tree->get_event( ) .
     SET HANDLER hndl_double_click
                 hndl_user_command FOR lo_event.
-
   ENDMETHOD.
 
   METHOD add_buttons.
@@ -2765,6 +2774,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
        icon     = CONV #( icon_start_viewer )
        text     = 'Initials'
        tooltip  = 'Show/hide initial values'
+       position = if_salv_c_function_position=>right_of_salv_functions ).
+
+    lo_functions->add_function(
+       name     = 'CHANGED'
+       icon     = CONV #( icon_interchange )
+       text     = ''
+       tooltip  = 'Show only changed values/all values'
        position = if_salv_c_function_position=>right_of_salv_functions ).
 
     lo_functions->add_function(
@@ -3029,6 +3045,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
         m_class_data = m_class_data BIT-XOR c_mask.
         mo_debugger->run_script( ).
+      WHEN 'CHANGED'."Show only changed values/all values
+        m_changed = m_changed BIT-XOR c_mask.
+        mo_debugger->run_script( ).
       WHEN 'LDB'."Show/hide LDB variables (globals)
         m_ldb = m_ldb BIT-XOR c_mask.
         mo_debugger->run_script( ).
@@ -3044,9 +3063,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD hndl_double_click.
-    "DATA(ls_hier) = tree_table[ node_key - m_correction ].
-
-
     DATA(lo_nodes) = tree->get_nodes( ).
     DATA(l_node) =  lo_nodes->get_node( node_key ).
     DATA r_row TYPE REF TO data.
@@ -3116,7 +3132,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     l_rel = if_salv_c_node_relation=>last_child.
 
     IF m_ref IS INITIAL.
+
+      ASSIGN m_variable->* TO FIELD-SYMBOL(<new_value>).
+
       READ TABLE mt_vars WITH KEY name = l_name INTO DATA(l_var).
+      "BREAK-POINT .
       IF sy-subrc = 0.
 
         DATA(lo_nodes) = tree->get_nodes( ).
@@ -3124,26 +3144,45 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         DATA r_row TYPE REF TO data.
         DATA r_ref TYPE REF TO data.
 
-        "READ TABLE lt_nodes WITH KEY key = l_var-key INTO DATA(l_node).
         IF sy-subrc = 0.
           TRY.
               r_row = l_node->get_data_row( ).
               ASSIGN r_row->* TO FIELD-SYMBOL(<row>).
               ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
-
+              ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
               r_ref = <ref>.
               ASSIGN r_ref->* TO FIELD-SYMBOL(<old_value>).
-              ASSIGN m_variable->* TO FIELD-SYMBOL(<new_value>).
               IF <old_value> NE <new_value>.
                 l_key = l_var-key.
                 l_rel = if_salv_c_node_relation=>next_sibling.
-                DELETE mt_vars WHERE name = l_name.
-              ELSE.
-                IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
+                IF <kind> NE 'v' AND <kind> NE 'u'.
                   DELETE mt_vars WHERE name = l_name.
-                  l_node->delete( ).
                 ENDIF.
-                RETURN.
+              ELSE.
+                IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
+                  IF <kind> NE 'v' AND <kind> NE 'u'.
+                    DELETE mt_vars WHERE name = l_name.
+                    l_node->delete( ).
+                  ENDIF.
+                ENDIF.
+                IF m_changed IS NOT INITIAL and m_leaf+0(5) ne 'Debug'."check changed
+
+                  READ TABLE mt_state WITH KEY name = l_name ASSIGNING FIELD-SYMBOL(<state>).
+                  IF sy-subrc = 0.
+                    ASSIGN <state>-ref->* TO <old_value>.
+                    IF <old_value> = <new_value>.
+                      IF <kind> NE 'v' AND <kind> NE 'u'.
+                        DELETE mt_vars WHERE name = l_name.
+                        l_node->delete( ).
+                        RETURN.
+                      ENDIF.
+                    ELSE.
+                      <state>-ref = m_variable.
+                    ENDIF.
+                  ENDIF.
+                ENDIF.
+
+                "RETURN.
               ENDIF.
 
               IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
@@ -3155,6 +3194,21 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ENDTRY.
         ENDIF.
       ELSE.
+
+        IF m_changed IS NOT INITIAL and m_leaf+0(5) ne 'Debug'."check changed
+          READ TABLE mt_state WITH KEY name = iv_full_name ASSIGNING <state>.
+          IF sy-subrc = 0.
+            ASSIGN <state>-ref->* TO <old_value>.
+            IF <old_value> = <new_value>.
+              DELETE mt_vars WHERE name = l_name.
+              IF l_node is not INITIAL.
+              l_node->delete( ).
+              ENDIF.
+            ELSE.
+              <state>-ref = m_variable.
+            ENDIF.
+          ENDIF.
+        ENDIF.
 
         IF lv_type NE cl_abap_typedescr=>typekind_table.
           IF <new> IS INITIAL AND m_hide IS NOT INITIAL.
@@ -3188,17 +3242,29 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     <vars>-leaf = m_leaf.
     <vars>-name = l_full_name.
     <vars>-key = l_root_key.
+    <vars>-ref = m_variable.
+
+    IF m_changed IS NOT INITIAL."check changed
+      READ TABLE mt_state WITH KEY name = iv_full_name ASSIGNING <state>.
+      IF sy-subrc <> 0.
+        APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
+        <state> = <vars>.
+      ENDIF.
+    ENDIF.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling.
-      l_node->delete( ).
-
-      "expanding  node.
-      IF m_new_node IS NOT INITIAL.
-        lo_nodes = tree->get_nodes( ).
-        l_node =  lo_nodes->get_node( m_new_node ).
-        l_node->expand( ).
-        CLEAR m_new_node.
+      IF <kind> NE 'v' AND <kind> NE 'u'.
+        IF l_node is not INITIAL.
+        l_node->delete( ).
+        ENDIF.
       ENDIF.
+      "expanding  node.
+*      IF m_new_node IS NOT INITIAL.
+*        lo_nodes = tree->get_nodes( ).
+*        l_node =  lo_nodes->get_node( m_new_node ).
+*        l_node->expand( ).
+*        CLEAR m_new_node.
+*      ENDIF.
     ENDIF.
   ENDMETHOD.
 
@@ -3264,7 +3330,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     ls_tree-fullname = iv_fullname.
     IF lv_text IS NOT INITIAL.
-      READ TABLE mt_vars WITH KEY name = iv_parent_name TRANSPORTING NO FIELDS.
+
+      READ TABLE mt_vars WITH KEY name = iv_parent_name INTO DATA(l_var).
       IF sy-subrc NE 0.
 
         e_root_key = m_new_node = lv_node_key =
@@ -3277,6 +3344,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             text           = lv_text
             folder         = abap_true
           )->get_key( ).
+      ELSE.
+        lv_node_key = l_var-key.
       ENDIF.
     ENDIF.
 
@@ -3307,7 +3376,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ls_tree       TYPE ts_table,
           lv_text       TYPE lvc_value,
           lv_icon       TYPE salv_de_tree_image,
-          lv_node_key   TYPE salv_de_node_key.
+          lv_node_key   TYPE salv_de_node_key,
+          l_key         TYPE salv_de_node_key,
+          l_rel         TYPE salv_de_node_relation.
 
     lo_elem_descr ?= io_type_descr.
     ls_tree-ref = ir_up.
@@ -3354,14 +3425,134 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     ls_tree-fullname = iv_fullname.
 
+    IF iv_parent_key IS NOT INITIAL.
+      l_key = iv_parent_key.
+    ELSE.
+      l_key = main_node_key.
+    ENDIF.
+
+    l_rel = iv_rel.
+
+
+    ASSIGN ir_up->* TO FIELD-SYMBOL(<new_value>).
+
+    READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
+
+    IF sy-subrc = 0.
+
+      DATA(lo_nodes) = tree->get_nodes( ).
+      DATA(l_node) =  lo_nodes->get_node( l_var-key ).
+      DATA r_row TYPE REF TO data.
+      DATA r_ref TYPE REF TO data.
+
+      "IF sy-subrc = 0.
+
+      TRY.
+          r_row = l_node->get_data_row( ).
+          ASSIGN r_row->* TO FIELD-SYMBOL(<row>).
+          ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
+          ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
+          r_ref = <ref>.
+          ASSIGN r_ref->* TO FIELD-SYMBOL(<old_value>).
+          IF <old_value> NE <new_value>.
+            l_key = l_var-key.
+            l_rel = if_salv_c_node_relation=>next_sibling.
+            IF <kind> NE 'v' AND <kind> NE 'u'.
+              DELETE mt_vars WHERE name = iv_fullname.
+            ENDIF.
+          ELSE.
+            IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
+              IF <kind> NE 'v' AND <kind> NE 'u'.
+                DELETE mt_vars WHERE name = iv_fullname.
+                l_node->delete( ).
+              ENDIF.
+            ENDIF.
+            IF m_changed IS NOT INITIAL and m_leaf+0(5) ne 'Debug'."check changed
+
+              READ TABLE mt_state WITH KEY name = iv_fullname ASSIGNING FIELD-SYMBOL(<state>).
+              IF sy-subrc = 0.
+                ASSIGN <state>-ref->* TO <old_value>.
+                IF <old_value> = <new_value>.
+
+                  IF <kind> NE 'v' AND <kind> NE 'u'.
+                    DELETE mt_vars WHERE name = iv_fullname.
+                    l_node->delete( ).
+                  ENDIF.
+                  RETURN.
+                ELSE.
+                  <state>-ref = ir_up. "m_variable.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+
+            RETURN.
+          ENDIF.
+
+          IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
+            DELETE mt_vars WHERE name = iv_fullname.
+            l_node->delete( ).
+            RETURN.
+          ENDIF.
+        CATCH cx_root.
+      ENDTRY.
+      "ENDIF.
+    ELSE.
+
+      IF m_changed IS NOT INITIAL and m_leaf+0(5) ne 'Debug'."check changed
+
+        READ TABLE mt_state WITH KEY name = iv_fullname ASSIGNING <state>.
+        IF sy-subrc = 0.
+          ASSIGN <state>-ref->* TO <old_value>.
+          IF <old_value> = <new_value>.
+            DELETE mt_vars WHERE name = iv_fullname.
+            IF l_node IS NOT INITIAL.
+              l_node->delete( ).
+            ENDIF.
+            RETURN.
+          ELSE.
+            <state>-ref = ir_up. "m_variable.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      "IF lv_type NE cl_abap_typedescr=>typekind_table.
+      IF <var> IS INITIAL AND m_hide IS NOT INITIAL.
+        RETURN.
+      ENDIF.
+*        ELSE.
+*          IF <tab_to> IS INITIAL AND m_hide IS NOT INITIAL.
+*            RETURN.
+*          ENDIF.
+*        ENDIF.
+    ENDIF.
+
     e_root_key = tree->get_nodes( )->add_node(
-      related_node   = iv_parent_key
-      relationship   = iv_rel
-      data_row       = ls_tree
-      collapsed_icon = lv_icon
-      expanded_icon  = lv_icon
-      text           = lv_text
-      folder         = abap_false )->get_key( ).
+       related_node   = l_key
+       relationship   = l_rel
+       data_row       = ls_tree
+       collapsed_icon = lv_icon
+       expanded_icon  = lv_icon
+       text           = lv_text
+       folder         = abap_false )->get_key( ).
+
+    APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+    <vars>-leaf = m_leaf.
+    <vars>-name = iv_fullname.
+    <vars>-key = e_root_key.
+    <vars>-ref = ir_up.
+
+    IF m_changed IS NOT INITIAL."check changed
+
+      READ TABLE mt_state WITH KEY name = iv_fullname ASSIGNING <state>.
+      IF sy-subrc <> 0.
+        APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
+        <state> = <vars>.
+      ENDIF.
+    ENDIF.
+
+    IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
+      l_node->delete( ).
+    ENDIF.
   ENDMETHOD.
 
   METHOD traverse_table.
