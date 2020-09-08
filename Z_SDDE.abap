@@ -2,7 +2,7 @@
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
-*& version: beta 0.1.117.118
+*& version: beta 0.2.129.128
 *& Git https://github.com/ysichov/SDDE
 *& RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *& EN description - https://github.com/ysichov/SDDE/wiki
@@ -1058,7 +1058,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       go_tree->main_node_key = go_tree->m_locals_key.
     ENDIF.
 
-   LOOP AT locals INTO DATA(ls_local).
+    LOOP AT locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
 
       transfer_variable( ls_local-name ).
