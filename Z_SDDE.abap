@@ -65,6 +65,7 @@ CLASS lcl_popup DEFINITION.
     DATA: mo_box            TYPE REF TO cl_gui_dialogbox_container,
           mo_splitter       TYPE REF TO cl_gui_splitter_container,
           mo_parent         TYPE REF TO cl_gui_container,
+          mo_code_container TYPE REF TO cl_gui_container,
           m_additional_name TYPE string.
 
     METHODS: constructor IMPORTING i_tname           TYPE any OPTIONAL
@@ -305,34 +306,33 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
     TYPES tt_table TYPE STANDARD TABLE OF ts_table
           WITH NON-UNIQUE DEFAULT KEY.
 
-    DATA: main_node_key TYPE salv_de_node_key,
-          m_leaf        TYPE string,
-          m_variable    TYPE REF TO data,
-          m_object      TYPE REF TO object,
-          m_correction  TYPE i,
-          m_hide        TYPE x,
-          m_globals     TYPE x,
-          m_class_data  TYPE x,
-          m_ldb         TYPE x,
-          m_changed     TYPE x,
-          m_locals_key  TYPE salv_de_node_key,
-          m_globals_key TYPE salv_de_node_key,
-          m_class_key   TYPE salv_de_node_key,
-          m_ldb_key     TYPE salv_de_node_key,
-          m_debug_key   TYPE salv_de_node_key,
-          m_icon        TYPE salv_de_tree_image,
-          mo_debugger   TYPE REF TO lcl_debugger_script,
-          mt_vars       TYPE STANDARD TABLE OF var_table,
-          mt_state      TYPE STANDARD TABLE OF var_table,
-          m_new_node    TYPE salv_de_node_key,
-          m_no_refresh  TYPE xfeld,
-          m_ref         TYPE xfeld,
-          m_prg_info    TYPE tpda_scr_prg_info,
-          tree          TYPE REF TO cl_salv_tree.
+    DATA: main_node_key  TYPE salv_de_node_key,
+          m_leaf         TYPE string,
+          m_variable     TYPE REF TO data,
+          m_object       TYPE REF TO object,
+          m_correction   TYPE i,
+          m_hide         TYPE x,
+          m_globals      TYPE x,
+          m_class_data   TYPE x,
+          m_ldb          TYPE x,
+          m_changed      TYPE x,
+          m_locals_key   TYPE salv_de_node_key,
+          m_globals_key  TYPE salv_de_node_key,
+          m_class_key    TYPE salv_de_node_key,
+          m_ldb_key      TYPE salv_de_node_key,
+          m_debug_key    TYPE salv_de_node_key,
+          m_icon         TYPE salv_de_tree_image,
+          mo_debugger    TYPE REF TO lcl_debugger_script,
+          mt_vars        TYPE STANDARD TABLE OF var_table,
+          mt_state       TYPE STANDARD TABLE OF var_table,
+          m_new_node     TYPE salv_de_node_key,
+          m_no_refresh   TYPE xfeld,
+          m_ref          TYPE xfeld,
+          m_prg_info     TYPE tpda_scr_prg_info,
+          mo_code_viewer TYPE REF TO cl_gui_abapedit,
+          tree           TYPE REF TO cl_salv_tree.
 
-    METHODS constructor
-      IMPORTING
-        i_header TYPE clike DEFAULT 'View'.
+    METHODS constructor IMPORTING i_header TYPE clike DEFAULT 'View'.
 
     METHODS add_variable
       IMPORTING
@@ -375,7 +375,8 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
 
     METHODS delete_node IMPORTING iv_key TYPE salv_de_node_key.
     METHODS display IMPORTING io_debugger TYPE REF TO lcl_debugger_script OPTIONAL.
-
+    METHODS set_program IMPORTING iv_program TYPE program.
+    METHODS set_program_line IMPORTING iv_line LIKE sy-index.
   PRIVATE SECTION.
     CONSTANTS: BEGIN OF c_kind,
                  struct LIKE cl_abap_typedescr=>kind_struct VALUE cl_abap_typedescr=>kind_struct,
@@ -388,6 +389,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
 
     DATA: tree_table TYPE tt_table.
 
+    METHODS create_code_viewer.
 
     METHODS traverse
       IMPORTING
@@ -1023,6 +1025,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           CLEAR go_tree->mt_state.
         ENDIF.
         go_tree->m_prg_info = l_prg.
+        go_tree->set_program( conv #( l_prg-include ) ).
+        go_tree->set_program_line( l_prg-line ).
       CATCH cx_tpda_src_info.
     ENDTRY.
 
@@ -1054,7 +1058,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       go_tree->main_node_key = go_tree->m_locals_key.
     ENDIF.
 
-    LOOP AT locals INTO DATA(ls_local).
+   LOOP AT locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
 
       transfer_variable( ls_local-name ).
@@ -2720,21 +2724,28 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     super->constructor( ).
     m_hide = '01'.
-    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.1' i_width = 800 i_hight = 300 ).
+    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.2' i_width = 800 i_hight = 300 ).
     CREATE OBJECT mo_splitter ##FM_SUBRC_OK
       EXPORTING
         parent  = mo_box
-        rows    = 1
+        rows    = 2
         columns = 1
       EXCEPTIONS
         OTHERS  = 1.
 
     mo_splitter->get_container(
      EXPORTING
-       row       = 1
+       row       = 2
        column    = 1
      RECEIVING
        container = mo_parent ).
+
+    mo_splitter->get_container(
+     EXPORTING
+       row       = 1
+       column    = 1
+     RECEIVING
+       container = mo_code_container ).
 
     SET HANDLER on_box_close FOR mo_box.
 
@@ -2764,6 +2775,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     DATA(lo_event) = tree->get_event( ) .
     SET HANDLER hndl_double_click
                 hndl_user_command FOR lo_event.
+
+    create_code_viewer( ).
   ENDMETHOD.
 
   METHOD add_buttons.
@@ -3006,6 +3019,28 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDIF.
   ENDMETHOD.
 
+  METHOD set_program.
+    DATA gr_scan TYPE REF TO cl_ci_scan.
+    DATA(gr_source) = cl_ci_source_include=>create( p_name = iv_program ).
+    CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
+
+    mo_code_viewer->set_text( table = gr_source->lines  ).
+  ENDMETHOD.
+
+  METHOD set_program_line.
+
+    TYPES: lntab TYPE STANDARD TABLE OF i.
+    DATA lt_lines TYPE lntab.
+    APPEND INITIAL LINE TO lt_lines ASSIGNING FIELD-SYMBOL(<line>).
+
+
+    <line> = iv_line.
+    mo_code_viewer->set_marker( EXPORTING marker_number = 7  marker_lines = lt_lines ).
+*
+    mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
+
+  ENDMETHOD.
+
   METHOD display.
     mo_debugger = io_debugger.
     DATA(lo_columns) = tree->get_columns( ).
@@ -3084,6 +3119,39 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       WHEN cl_abap_datadescr=>typekind_string.
         NEW lcl_text_viewer( <ref> ).
     ENDCASE.
+  ENDMETHOD.
+
+  METHOD create_code_viewer.
+
+    CREATE OBJECT mo_code_viewer
+      EXPORTING
+        parent = mo_code_container.
+*       max_number_chars = 72
+
+    mo_code_viewer->init_completer( ).
+*
+    mo_code_viewer->upload_properties(
+           EXCEPTIONS
+             dp_error_create  = 1
+             dp_error_general = 2
+             dp_error_send    = 3
+             OTHERS           = 4 ).
+*
+    mo_code_viewer->set_tabbar_mode( tabbar_mode = cl_gui_abapedit=>false ).
+    mo_code_viewer->set_statusbar_mode( statusbar_mode = cl_gui_abapedit=>true ).
+
+    mo_code_viewer->create_document( ).
+
+    CALL METHOD mo_code_viewer->set_readonly_mode
+      EXPORTING
+        readonly_mode          = 1
+      EXCEPTIONS
+        error_cntl_call_method = 1
+        invalid_parameter      = 2.
+
+    "lo_edit->set_mode( EXPORTING mode =  0 ).
+    "lo_edit->set_enable( 'X' ).
+    "lo_edit->set_visible('X' ).
   ENDMETHOD.
 
   METHOD add_variable.
@@ -3166,7 +3234,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                     l_node->delete( ).
                   ENDIF.
                 ENDIF.
-                IF m_changed IS NOT INITIAL and m_leaf+0(5) ne 'Debug'."check changed
+                IF m_changed IS NOT INITIAL AND m_leaf+0(5) NE 'Debug'."check changed
 
                   READ TABLE mt_state WITH KEY name = l_name ASSIGNING FIELD-SYMBOL(<state>).
                   IF sy-subrc = 0.
@@ -3197,14 +3265,14 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         ENDIF.
       ELSE.
 
-        IF m_changed IS NOT INITIAL and m_leaf+0(5) ne 'Debug'."check changed
+        IF m_changed IS NOT INITIAL AND m_leaf+0(5) NE 'Debug'."check changed
           READ TABLE mt_state WITH KEY name = iv_full_name ASSIGNING <state>.
           IF sy-subrc = 0.
             ASSIGN <state>-ref->* TO <old_value>.
             IF <old_value> = <new_value>.
               DELETE mt_vars WHERE name = l_name.
-              IF l_node is not INITIAL.
-              l_node->delete( ).
+              IF l_node IS NOT INITIAL.
+                l_node->delete( ).
               ENDIF.
               RETURN.
             ELSE.
@@ -3257,8 +3325,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling.
       IF <kind> NE 'v' AND <kind> NE 'u'.
-        IF l_node is not INITIAL.
-        l_node->delete( ).
+        IF l_node IS NOT INITIAL.
+          l_node->delete( ).
         ENDIF.
       ENDIF.
       "expanding  node.
@@ -3470,7 +3538,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 l_node->delete( ).
               ENDIF.
             ENDIF.
-            IF m_changed IS NOT INITIAL and m_leaf+0(5) ne 'Debug'."check changed
+            IF m_changed IS NOT INITIAL AND m_leaf+0(5) NE 'Debug'."check changed
 
               READ TABLE mt_state WITH KEY name = iv_fullname ASSIGNING FIELD-SYMBOL(<state>).
               IF sy-subrc = 0.
@@ -3501,7 +3569,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       "ENDIF.
     ELSE.
 
-      IF m_changed IS NOT INITIAL and m_leaf+0(5) ne 'Debug'."check changed
+      IF m_changed IS NOT INITIAL AND m_leaf+0(5) NE 'Debug'."check changed
 
         READ TABLE mt_state WITH KEY name = iv_fullname ASSIGNING <state>.
         IF sy-subrc = 0.
