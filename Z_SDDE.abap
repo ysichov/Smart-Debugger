@@ -46,7 +46,16 @@ CLASS lcl_appl DEFINITION.
            BEGIN OF t_lang,
              spras(4),
              sptxt    TYPE sptxt,
-           END OF t_lang  .
+           END OF t_lang  ,
+           BEGIN OF t_stack,
+             stackpointer TYPE tpda_stack_pointer,
+             stacklevel   TYPE tpda_stack_level,
+             program      TYPE tpda_program,
+             include      TYPE tpda_include,
+             line         TYPE tpda_sc_line,
+             eventtype    TYPE tpda_event_type,
+             eventname    TYPE tpda_event,
+           END OF t_stack.
 
     CLASS-DATA: m_option_icons     TYPE TABLE OF sign_option_icon_s,
                 mt_lang            TYPE TABLE OF t_lang,
@@ -62,11 +71,14 @@ ENDCLASS.
 CLASS lcl_popup DEFINITION.
   PUBLIC SECTION.
     CLASS-DATA m_counter TYPE i.
-    DATA: mo_box            TYPE REF TO cl_gui_dialogbox_container,
-          mo_splitter       TYPE REF TO cl_gui_splitter_container,
-          mo_parent         TYPE REF TO cl_gui_container,
-          mo_code_container TYPE REF TO cl_gui_container,
-          m_additional_name TYPE string.
+    DATA: mo_box              TYPE REF TO cl_gui_dialogbox_container,
+          mo_splitter         TYPE REF TO cl_gui_splitter_container,
+          mo_splitter_code    TYPE REF TO cl_gui_splitter_container,
+          mo_parent           TYPE REF TO cl_gui_container,
+          mo_code_container   TYPE REF TO cl_gui_container,
+          mo_editor_container TYPE REF TO cl_gui_container,
+          mo_stack_container  TYPE REF TO cl_gui_container,
+          m_additional_name   TYPE string.
 
     METHODS: constructor IMPORTING i_tname           TYPE any OPTIONAL
                                    ir_tab            TYPE REF TO data OPTIONAL
@@ -325,14 +337,18 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
           mo_debugger    TYPE REF TO lcl_debugger_script,
           mt_vars        TYPE STANDARD TABLE OF var_table,
           mt_state       TYPE STANDARD TABLE OF var_table,
+          mo_salv_stack  TYPE REF TO cl_salv_table,
           m_new_node     TYPE salv_de_node_key,
           m_no_refresh   TYPE xfeld,
           m_ref          TYPE xfeld,
           m_prg_info     TYPE tpda_scr_prg_info,
           mo_code_viewer TYPE REF TO cl_gui_abapedit,
+          mt_stack       TYPE TABLE OF lcl_appl=>t_stack,
           tree           TYPE REF TO cl_salv_tree.
 
     METHODS constructor IMPORTING i_header TYPE clike DEFAULT 'View'.
+
+    METHODS show_stack.
 
     METHODS add_variable
       IMPORTING
@@ -1000,6 +1016,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     CLEAR mt_obj.
 
+    DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
+    MOVE-CORRESPONDING lt_stack TO go_tree->mt_stack.
+    go_tree->show_stack( ).
+
     CALL METHOD abap_source->program
       RECEIVING
         p_prg = DATA(l_program).
@@ -1018,12 +1038,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = DATA(l_prg) ).
         IF l_prg-event-eventname NE go_tree->m_prg_info-event-eventname.
+
           CLEAR go_tree->m_no_refresh.
           CLEAR go_tree->mt_vars.
           CLEAR go_tree->mt_state.
         ENDIF.
         go_tree->m_prg_info = l_prg.
-        go_tree->set_program( conv #( l_prg-include ) ).
+        go_tree->set_program( CONV #( l_prg-include ) ).
         go_tree->set_program_line( l_prg-line ).
       CATCH cx_tpda_src_info.
     ENDTRY.
@@ -2721,7 +2742,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     super->constructor( ).
     m_hide = '01'.
-    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.2' i_width = 800 i_hight = 300 ).
+    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.2' i_width = 1000 i_hight = 300 ).
     CREATE OBJECT mo_splitter ##FM_SUBRC_OK
       EXPORTING
         parent  = mo_box
@@ -2744,6 +2765,30 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
      RECEIVING
        container = mo_code_container ).
 
+    CREATE OBJECT mo_splitter_code ##FM_SUBRC_OK
+      EXPORTING
+        parent  = mo_code_container
+        rows    = 1
+        columns = 2
+      EXCEPTIONS
+        OTHERS  = 1.
+
+    mo_splitter_code->get_container(
+         EXPORTING
+           row       = 1
+           column    = 1
+         RECEIVING
+           container = mo_editor_container ).
+
+    mo_splitter_code->get_container(
+         EXPORTING
+           row       = 1
+           column    = 2
+         RECEIVING
+           container = mo_stack_container ).
+
+    mo_splitter_code->set_column_width( EXPORTING id = 1 width = 65 ).
+
     SET HANDLER on_box_close FOR mo_box.
 
     cl_salv_tree=>factory(
@@ -2758,7 +2803,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     DATA(lo_columns) = tree->get_columns( ).
     lo_columns->set_optimize( abap_true ).
-    lo_columns->set_optimize( abap_false ).
+    "lo_columns->set_optimize( abap_false ).
     lo_columns->get_column( 'VALUE' )->set_short_text( 'Value' ).
     lo_columns->get_column( 'VALUE' )->set_output_length( 40 ).
     lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
@@ -2772,6 +2817,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 hndl_user_command FOR lo_event.
 
     create_code_viewer( ).
+
   ENDMETHOD.
 
   METHOD add_buttons.
@@ -3115,7 +3161,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   METHOD create_code_viewer.
     CREATE OBJECT mo_code_viewer
       EXPORTING
-        parent = mo_code_container.
+        parent = mo_editor_container.
 *       max_number_chars = 72
 
     mo_code_viewer->init_completer( ).
@@ -3130,6 +3176,32 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     mo_code_viewer->set_statusbar_mode( statusbar_mode = cl_gui_abapedit=>true ).
     mo_code_viewer->create_document( ).
     mo_code_viewer->set_readonly_mode( 1 ).
+  ENDMETHOD.
+
+  METHOD show_stack.
+    IF mo_salv_stack IS INITIAL.
+      cl_salv_table=>factory(
+  EXPORTING
+    r_container = mo_stack_container
+  IMPORTING
+  r_salv_table = mo_salv_stack
+  CHANGING
+  t_table = mt_stack ).
+
+      DATA:  lo_column  TYPE REF TO cl_salv_column.
+
+      DATA(lo_columns) = mo_salv_stack->get_columns( ).
+      lo_columns->set_optimize( 'X' ).
+
+      lo_column ?= lo_columns->get_column( 'STACKPOINTER' ).
+      lo_column->set_output_length( '5' ).
+
+      lo_column ?= lo_columns->get_column( 'STACKLEVEL' ).
+      lo_column->set_output_length( '5' ).
+      mo_salv_stack->display( ).
+    ELSE.
+      mo_salv_stack->refresh( ).
+    ENDIF.
   ENDMETHOD.
 
   METHOD add_variable.
