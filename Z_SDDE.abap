@@ -2803,10 +2803,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     DATA(lo_columns) = tree->get_columns( ).
     lo_columns->set_optimize( abap_true ).
-    "lo_columns->set_optimize( abap_false ).
     lo_columns->get_column( 'VALUE' )->set_short_text( 'Value' ).
     lo_columns->get_column( 'VALUE' )->set_output_length( 40 ).
-    lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
+    lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full name' ).
+    "lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
 
     add_buttons( ).
