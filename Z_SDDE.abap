@@ -452,7 +452,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.                    "init
 
   METHOD create_simple_var.
-
     DATA: lr_symbsimple TYPE REF TO tpda_sys_symbsimple,
           lo_elem       TYPE REF TO cl_abap_elemdescr.
 
@@ -752,7 +751,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                        CHANGING io_var =  <header>  ).
 
                 l_name = l_name && '[]'.
-
               CATCH cx_tpda_varname .
             ENDTRY.
           ENDIF.
@@ -1034,19 +1032,19 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       go_tree->clear( ).
     ENDIF.
 
-    go_tree->m_leaf = 'Debug point'.
-    IF go_tree->m_debug_key IS INITIAL.
-      go_tree->add_node( iv_name = go_tree->m_leaf iv_icon = CONV #( icon_folder ) ).
-    ELSE.
-      go_tree->main_node_key = go_tree->m_debug_key.
-    ENDIF.
-
-    go_tree->add_variable( EXPORTING iv_root_name = 'current program' CHANGING io_var =  l_program ).
-    go_tree->add_variable( EXPORTING iv_root_name = 'include' CHANGING io_var =  l_prg-include ).
-    go_tree->add_variable( EXPORTING iv_root_name = 'class' CHANGING io_var =  l_prg-locclassname ).
-    go_tree->add_variable( EXPORTING iv_root_name = 'event_type' CHANGING io_var =  l_prg-eventtype ).
-    go_tree->add_variable( EXPORTING iv_root_name = 'event_name' CHANGING io_var =  l_prg-eventname ).
-    go_tree->add_variable( EXPORTING iv_root_name = 'code line' CHANGING io_var =  l_prg-line ).
+*    go_tree->m_leaf = 'Debug point'.
+*    IF go_tree->m_debug_key IS INITIAL.
+*      go_tree->add_node( iv_name = go_tree->m_leaf iv_icon = CONV #( icon_folder ) ).
+*    ELSE.
+*      go_tree->main_node_key = go_tree->m_debug_key.
+*    ENDIF.
+*
+*    go_tree->add_variable( EXPORTING iv_root_name = 'current program' CHANGING io_var =  l_program ).
+*    go_tree->add_variable( EXPORTING iv_root_name = 'include' CHANGING io_var =  l_prg-include ).
+*    go_tree->add_variable( EXPORTING iv_root_name = 'class' CHANGING io_var =  l_prg-locclassname ).
+*    go_tree->add_variable( EXPORTING iv_root_name = 'event_type' CHANGING io_var =  l_prg-eventtype ).
+*    go_tree->add_variable( EXPORTING iv_root_name = 'event_name' CHANGING io_var =  l_prg-eventname ).
+*    go_tree->add_variable( EXPORTING iv_root_name = 'code line' CHANGING io_var =  l_prg-line ).
 
     CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = DATA(locals).
     SORT locals.
@@ -1060,7 +1058,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     LOOP AT locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
-
       transfer_variable( ls_local-name ).
     ENDLOOP.
 
@@ -2765,8 +2762,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lo_columns->get_column( 'VALUE' )->set_short_text( 'Value' ).
     lo_columns->get_column( 'VALUE' )->set_output_length( 40 ).
     lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
-    "lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full Name' ).
-    "lo_columns->get_column( 'FULLNAME' )->set_output_length( 40 ).
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
 
     add_buttons( ).
@@ -3022,23 +3017,19 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   METHOD set_program.
     DATA gr_scan TYPE REF TO cl_ci_scan.
     DATA(gr_source) = cl_ci_source_include=>create( p_name = iv_program ).
-    CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
 
+    CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
     mo_code_viewer->set_text( table = gr_source->lines  ).
   ENDMETHOD.
 
   METHOD set_program_line.
-
     TYPES: lntab TYPE STANDARD TABLE OF i.
     DATA lt_lines TYPE lntab.
+
     APPEND INITIAL LINE TO lt_lines ASSIGNING FIELD-SYMBOL(<line>).
-
-
     <line> = iv_line.
     mo_code_viewer->set_marker( EXPORTING marker_number = 7  marker_lines = lt_lines ).
-*
     mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
-
   ENDMETHOD.
 
   METHOD display.
@@ -3122,7 +3113,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD create_code_viewer.
-
     CREATE OBJECT mo_code_viewer
       EXPORTING
         parent = mo_code_container.
@@ -3136,22 +3126,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
              dp_error_general = 2
              dp_error_send    = 3
              OTHERS           = 4 ).
-*
-    mo_code_viewer->set_tabbar_mode( tabbar_mode = cl_gui_abapedit=>false ).
+
     mo_code_viewer->set_statusbar_mode( statusbar_mode = cl_gui_abapedit=>true ).
-
     mo_code_viewer->create_document( ).
-
-    CALL METHOD mo_code_viewer->set_readonly_mode
-      EXPORTING
-        readonly_mode          = 1
-      EXCEPTIONS
-        error_cntl_call_method = 1
-        invalid_parameter      = 2.
-
-    "lo_edit->set_mode( EXPORTING mode =  0 ).
-    "lo_edit->set_enable( 'X' ).
-    "lo_edit->set_visible('X' ).
+    mo_code_viewer->set_readonly_mode( 1 ).
   ENDMETHOD.
 
   METHOD add_variable.
@@ -3245,14 +3223,12 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                         l_node->delete( ).
                         RETURN.
                       ENDIF.
-                      "RETURN.
+                      "RETURN."!!!!!!!!!!!!!!
                     ELSE.
                       <state>-ref = m_variable.
                     ENDIF.
                   ENDIF.
                 ENDIF.
-
-                "RETURN.
               ENDIF.
 
               IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
@@ -3330,11 +3306,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         ENDIF.
       ENDIF.
       "expanding  node.
-*      IF m_new_node IS NOT INITIAL.
-*        lo_nodes = tree->get_nodes( ).
-*        l_node =  lo_nodes->get_node( m_new_node ).
+*      IF m_new_node IS NOT INITIAL and m_changed is not INITIAL.
+*        l_node = tree->get_nodes( )->get_node( m_new_node ).
 *        l_node->expand( ).
-*        CLEAR m_new_node.
 *      ENDIF.
     ENDIF.
   ENDMETHOD.
@@ -3503,20 +3477,14 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDIF.
 
     l_rel = iv_rel.
-
-
     ASSIGN ir_up->* TO FIELD-SYMBOL(<new_value>).
-
     READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
-
     IF sy-subrc = 0.
 
       DATA(lo_nodes) = tree->get_nodes( ).
       DATA(l_node) =  lo_nodes->get_node( l_var-key ).
       DATA r_row TYPE REF TO data.
       DATA r_ref TYPE REF TO data.
-
-      "IF sy-subrc = 0.
 
       TRY.
           r_row = l_node->get_data_row( ).
@@ -3555,8 +3523,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 ENDIF.
               ENDIF.
             ENDIF.
-
-            RETURN.
           ENDIF.
 
           IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
@@ -3566,7 +3532,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ENDIF.
         CATCH cx_root.
       ENDTRY.
-      "ENDIF.
     ELSE.
 
       IF m_changed IS NOT INITIAL AND m_leaf+0(5) NE 'Debug'."check changed
@@ -3586,15 +3551,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         ENDIF.
       ENDIF.
 
-      "IF lv_type NE cl_abap_typedescr=>typekind_table.
       IF <var> IS INITIAL AND m_hide IS NOT INITIAL.
         RETURN.
       ENDIF.
-*        ELSE.
-*          IF <tab_to> IS INITIAL AND m_hide IS NOT INITIAL.
-*            RETURN.
-*          ENDIF.
-*        ENDIF.
     ENDIF.
 
     e_root_key = tree->get_nodes( )->add_node(
