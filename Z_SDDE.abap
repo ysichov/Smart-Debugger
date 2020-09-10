@@ -631,7 +631,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                            r_obj = lr_struc ).
 
         WHEN cl_tpda_script_data_descr=>mt_tab.
-          FIELD-SYMBOLS: <new_table> TYPE STANDARD TABLE.
+          FIELD-SYMBOLS: <new_table> TYPE ANY TABLE.
           ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO <new_table>.
           GET REFERENCE OF <new_table> INTO r_data.
           get_table( EXPORTING i_name = |{ i_name }-{ comp-compname }|
@@ -2347,13 +2347,14 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       IF c_sel_row-opti NE 'BT' AND c_sel_row-opti NE 'NB' .
         CLEAR c_sel_row-high.
       ENDIF.
-      IF c_sel_row-int_type = 'D'.
+            IF c_sel_row-int_type = 'D' OR c_sel_row-int_type = 'T' .
         DO 2 TIMES.
           ASSIGN COMPONENT  COND string( WHEN sy-index = 1 THEN 'LOW' ELSE 'HIGH'  ) OF STRUCTURE <range> TO FIELD-SYMBOL(<field>).
           IF <field> IS INITIAL.
             CONTINUE.
           ENDIF.
 
+          IF c_sel_row-int_type = 'D'.
           CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL' ##FM_SUBRC_OK
             EXPORTING
               date_external            = <field>
@@ -2362,6 +2363,9 @@ CLASS lcl_sel_opt IMPLEMENTATION.
             EXCEPTIONS
               date_external_is_invalid = 1
               OTHERS                   = 2.
+          ELSE.
+        REPLACE ALL OCCURRENCES OF ':' IN <field> WITH ''.
+        ENDIF.
         ENDDO.
       ENDIF.
     ENDIF.
