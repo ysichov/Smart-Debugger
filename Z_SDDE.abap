@@ -71,14 +71,20 @@ ENDCLASS.
 CLASS lcl_popup DEFINITION.
   PUBLIC SECTION.
     CLASS-DATA m_counter TYPE i.
-    DATA: mo_box              TYPE REF TO cl_gui_dialogbox_container,
-          mo_splitter         TYPE REF TO cl_gui_splitter_container,
-          mo_splitter_code    TYPE REF TO cl_gui_splitter_container,
-          mo_parent           TYPE REF TO cl_gui_container,
-          mo_code_container   TYPE REF TO cl_gui_container,
-          mo_editor_container TYPE REF TO cl_gui_container,
-          mo_stack_container  TYPE REF TO cl_gui_container,
-          m_additional_name   TYPE string.
+    DATA: mo_box                 TYPE REF TO cl_gui_dialogbox_container,
+          mo_splitter            TYPE REF TO cl_gui_splitter_container,
+          mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
+          mo_splitter_var        TYPE REF TO cl_gui_splitter_container,
+          mo_toolbar_container   TYPE REF TO cl_gui_container,
+          mo_variables_container TYPE REF TO cl_gui_container,
+          mo_importing_container TYPE REF TO cl_gui_container,
+          mo_locals_container    TYPE REF TO cl_gui_container,
+          mo_exporting_container TYPE REF TO cl_gui_container,
+          mo_code_container      TYPE REF TO cl_gui_container,
+          mo_editor_container    TYPE REF TO cl_gui_container,
+          mo_stack_container     TYPE REF TO cl_gui_container,
+          mo_toolbar             TYPE REF TO cl_gui_toolbar,
+          m_additional_name      TYPE string.
 
     METHODS: constructor IMPORTING i_tname           TYPE any OPTIONAL
                                    ir_tab            TYPE REF TO data OPTIONAL
@@ -362,6 +368,8 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
     METHODS clear.
 
     METHODS add_buttons.
+    METHODS add_toolbar_buttons.
+    METHODS hnd_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode.
     METHODS add_node
       IMPORTING
         iv_name TYPE string
@@ -1444,13 +1452,13 @@ CLASS lcl_text_viewer IMPLEMENTATION.
        row       = 1
        column    = 1
      RECEIVING
-       container = mo_parent ).
+       container = mo_variables_container ).
 
     SET HANDLER on_box_close FOR mo_box.
 
     CREATE OBJECT mo_text
       EXPORTING
-        parent                 = mo_parent
+        parent                 = mo_variables_container
       EXCEPTIONS
         error_cntl_create      = 1
         error_cntl_init        = 2
@@ -2347,7 +2355,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       IF c_sel_row-opti NE 'BT' AND c_sel_row-opti NE 'NB' .
         CLEAR c_sel_row-high.
       ENDIF.
-            IF c_sel_row-int_type = 'D' OR c_sel_row-int_type = 'T' .
+      IF c_sel_row-int_type = 'D' OR c_sel_row-int_type = 'T' .
         DO 2 TIMES.
           ASSIGN COMPONENT  COND string( WHEN sy-index = 1 THEN 'LOW' ELSE 'HIGH'  ) OF STRUCTURE <range> TO FIELD-SYMBOL(<field>).
           IF <field> IS INITIAL.
@@ -2355,17 +2363,17 @@ CLASS lcl_sel_opt IMPLEMENTATION.
           ENDIF.
 
           IF c_sel_row-int_type = 'D'.
-          CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL' ##FM_SUBRC_OK
-            EXPORTING
-              date_external            = <field>
-            IMPORTING
-              date_internal            = <field>
-            EXCEPTIONS
-              date_external_is_invalid = 1
-              OTHERS                   = 2.
+            CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL' ##FM_SUBRC_OK
+              EXPORTING
+                date_external            = <field>
+              IMPORTING
+                date_internal            = <field>
+              EXCEPTIONS
+                date_external_is_invalid = 1
+                OTHERS                   = 2.
           ELSE.
-        REPLACE ALL OCCURRENCES OF ':' IN <field> WITH ''.
-        ENDIF.
+            REPLACE ALL OCCURRENCES OF ':' IN <field> WITH ''.
+          ENDIF.
         ENDDO.
       ENDIF.
     ENDIF.
@@ -2746,11 +2754,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     super->constructor( ).
     m_hide = '01'.
-    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.2' i_width = 1000 i_hight = 300 ).
+    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.2' i_width = 1200 i_hight = 400 ).
     CREATE OBJECT mo_splitter ##FM_SUBRC_OK
       EXPORTING
         parent  = mo_box
-        rows    = 2
+        rows    = 3
         columns = 1
       EXCEPTIONS
         OTHERS  = 1.
@@ -2760,14 +2768,27 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
        row       = 2
        column    = 1
      RECEIVING
-       container = mo_parent ).
+       container = mo_code_container ).
 
     mo_splitter->get_container(
-     EXPORTING
-       row       = 1
-       column    = 1
-     RECEIVING
-       container = mo_code_container ).
+      EXPORTING
+        row       = 1
+        column    = 1
+      RECEIVING
+        container = mo_toolbar_container ).
+
+    mo_splitter->set_row_height( id = 1  height = '3' ).
+
+    mo_splitter->set_row_sash( id             = 1
+                            type           = 0
+                            value          = 0 ).
+
+    mo_splitter->get_container(
+      EXPORTING
+        row       = 3
+        column    = 1
+      RECEIVING
+        container = mo_variables_container ).
 
     CREATE OBJECT mo_splitter_code ##FM_SUBRC_OK
       EXPORTING
@@ -2791,12 +2812,41 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
          RECEIVING
            container = mo_stack_container ).
 
-    mo_splitter_code->set_column_width( EXPORTING id = 1 width = 65 ).
+    mo_splitter_code->set_column_width( EXPORTING id = 1 width = '67' ).
+
+    CREATE OBJECT mo_splitter_var ##FM_SUBRC_OK
+      EXPORTING
+        parent  = mo_variables_container
+        rows    = 1
+        columns = 3
+      EXCEPTIONS
+        OTHERS  = 1.
+
+    mo_splitter_var->get_container(
+             EXPORTING
+               row       = 1
+               column    = 1
+             RECEIVING
+               container = mo_importing_container ).
+
+    mo_splitter_var->get_container(
+         EXPORTING
+           row       = 1
+           column    = 2
+         RECEIVING
+           container = mo_locals_container ).
+
+    mo_splitter_var->get_container(
+             EXPORTING
+               row       = 1
+               column    = 3
+             RECEIVING
+               container = mo_exporting_container ).
 
     SET HANDLER on_box_close FOR mo_box.
 
     cl_salv_tree=>factory(
-         EXPORTING r_container = mo_parent
+         EXPORTING r_container = mo_locals_container
          IMPORTING r_salv_tree = tree
          CHANGING t_table = tree_table ).
 
@@ -2822,82 +2872,182 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     create_code_viewer( ).
 
+    CREATE OBJECT mo_toolbar EXPORTING parent = mo_toolbar_container.
+    add_toolbar_buttons( ).
+
+    mo_toolbar->set_visible( 'X' ).
+
+
   ENDMETHOD.
+
+  METHOD hnd_toolbar.
+    CONSTANTS: c_mask TYPE x VALUE '01'.
+    CASE fcode.
+      WHEN 'REFRESH'."
+        mo_debugger->run_script( ).
+      WHEN 'INITIALS'."Show/hide empty variables
+        m_hide = m_hide BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'GLOBALS'."Show/hide global variables
+        m_globals = m_globals BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
+        m_class_data = m_class_data BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'CHANGED'."Show only changed values/all values
+        m_changed = m_changed BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'LDB'."Show/hide LDB variables (globals)
+        m_ldb = m_ldb BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'F5'.
+        mo_debugger->f5( ).
+      WHEN 'F6'.
+        mo_debugger->f6( ).
+      WHEN 'F7'.
+        mo_debugger->f7( ).
+      WHEN 'F8'.
+        mo_debugger->f8( ).
+    ENDCASE.
+  ENDMETHOD.
+
+  METHOD add_toolbar_buttons.
+    DATA: lt_button TYPE ttb_button,
+          ls_button LIKE LINE OF lt_button,
+          lt_events TYPE cntl_simple_events,
+          ls_events LIKE LINE OF lt_events.
+
+* Add buttons to toolbar
+    CLEAR ls_button.
+    ls_button-function = 'REFRESH'.
+    ls_button-icon = CONV #( icon_refresh ).
+    ls_button-quickinfo = 'Refresh'.
+    ls_button-text = ''.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-butn_type = 3.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F5'.
+    ls_button-icon = CONV #( icon_debugger_step_into ).
+    ls_button-quickinfo = 'Step into'.
+    ls_button-text = ''.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F6'.
+    ls_button-icon = CONV #( icon_debugger_step_over ).
+    ls_button-quickinfo = 'Step over'.
+    ls_button-text = ''.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F7'.
+    ls_button-icon = CONV #( icon_debugger_step_out ).
+    ls_button-quickinfo = 'Step out'.
+    ls_button-text = ''.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F8'.
+    ls_button-icon = CONV #( icon_debugger_continue ).
+    ls_button-quickinfo = 'Continue'.
+    ls_button-text = ''.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-butn_type = 3.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'INITIALS'.
+    ls_button-icon = CONV #( icon_start_viewer ).
+    ls_button-quickinfo = 'Show/hide initial values'.
+    ls_button-text = 'Initials'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'GLOBALS'.
+    ls_button-icon = CONV #( icon_foreign_trade ).
+    ls_button-quickinfo = 'Show/hide global variables'.
+    ls_button-text = 'Globals'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'CLASS_DATA'.
+    ls_button-icon = CONV #( icon_oo_class_attribute ).
+    ls_button-quickinfo = 'Show/hide Class-Data variables (global)'.
+    ls_button-text = 'CLASS_DATA'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'LDB'.
+    ls_button-icon = CONV #( icon_biw_report_view ).
+    ls_button-quickinfo = 'Show/hide Local Data Base variables (global)'.
+    ls_button-text = 'LDB'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-butn_type = 3.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'CHANGED'.
+    ls_button-icon = CONV #( icon_interchange ).
+    ls_button-quickinfo = 'Show only changed values/all values'.
+    ls_button-text = ''.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+*    lo_functions->add_function(
+*       name     = 'CHANGED'
+*       icon     = CONV #( icon_interchange )
+*       text     = ''
+*       tooltip  = ''
+*       position = if_salv_c_function_position=>right_of_salv_functions ).
+
+
+
+    CALL METHOD mo_toolbar->add_button_group
+      EXPORTING
+        data_table = lt_button.
+
+* Register events
+    ls_events-eventid = cl_gui_toolbar=>m_id_function_selected.
+    ls_events-appl_event = space.
+    APPEND ls_events TO lt_events.
+    CALL METHOD mo_toolbar->set_registered_events
+      EXPORTING
+        events = lt_events.
+
+    SET HANDLER me->hnd_toolbar FOR mo_toolbar.
+
+
+  ENDMETHOD.
+
 
   METHOD add_buttons.
     DATA(lo_functions) = tree->get_functions( ).
     lo_functions->set_all( ).
 
-    lo_functions->add_function(
-       name     = 'INITIALS'
-       icon     = CONV #( icon_start_viewer )
-       text     = 'Initials'
-       tooltip  = 'Show/hide initial values'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
+*   lo_functions->add_function(
+*       name     = 'INITIALS'
+*       icon     = CONV #( icon_start_viewer )
+*       text     = 'Initials'
+*       tooltip  = 'Show/hide initial values'
+*       position = if_salv_c_function_position=>right_of_salv_functions ).
 
-    lo_functions->add_function(
-       name     = 'GLOBALS'
-       icon     = CONV #( icon_foreign_trade )
-       text     = 'Globals'
-       tooltip  = 'Show/hide global variables'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'CLASS_DATA'
-       icon     = CONV #( icon_oo_class_attribute )
-       text     = 'CLASS-DATA'
-       tooltip  = 'Show/hide Class-Data variables (global)'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-           name     = 'LDB'
-           icon     = CONV #( icon_biw_report_view )
-           text     = 'LDB'
-           tooltip  = 'Show/hide Local Data Base variables (global)'
-           position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'CHANGED'
-       icon     = CONV #( icon_interchange )
-       text     = ''
-       tooltip  = 'Show only changed values/all values'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
-
-
-    lo_functions->add_function(
-       name     = 'REFRESH'
-       icon     = CONV #( icon_refresh )
-       text     = ''
-       tooltip  = 'Refresh'
-       position = if_salv_c_function_position=>left_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'F5'
-       icon     = CONV #( icon_debugger_step_into )
-       text     = ''
-       tooltip  = 'Step into'
-       position = if_salv_c_function_position=>left_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'F6'
-       icon     = CONV #( icon_debugger_step_over )
-       text     = ''
-       tooltip  = 'Step over'
-       position = if_salv_c_function_position=>left_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'F7'
-       icon     = CONV #( icon_debugger_step_out )
-       text     = ''
-       tooltip  = 'Step out'
-       position = if_salv_c_function_position=>left_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'F8'
-       icon     = CONV #( icon_debugger_continue )
-       text     = ''
-       tooltip  = 'Continue'
-       position = if_salv_c_function_position=>left_of_salv_functions ).
 
   ENDMETHOD.
 
@@ -3110,34 +3260,34 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD hndl_user_command.
-    CONSTANTS: c_mask TYPE x VALUE '01'.
-    CASE e_salv_function.
-      WHEN 'REFRESH'."
-        mo_debugger->run_script( ).
-      WHEN 'INITIALS'."Show/hide empty variables
-        m_hide = m_hide BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'GLOBALS'."Show/hide global variables
-        m_globals = m_globals BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
-        m_class_data = m_class_data BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'CHANGED'."Show only changed values/all values
-        m_changed = m_changed BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'LDB'."Show/hide LDB variables (globals)
-        m_ldb = m_ldb BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'F5'.
-        mo_debugger->f5( ).
-      WHEN 'F6'.
-        mo_debugger->f6( ).
-      WHEN 'F7'.
-        mo_debugger->f7( ).
-      WHEN 'F8'.
-        mo_debugger->f8( ).
-    ENDCASE.
+*    CONSTANTS: c_mask TYPE x VALUE '01'.
+*    CASE e_salv_function.
+*      WHEN 'REFRESH'."
+*        mo_debugger->run_script( ).
+*      WHEN 'INITIALS'."Show/hide empty variables
+*        m_hide = m_hide BIT-XOR c_mask.
+*        mo_debugger->run_script( ).
+*      WHEN 'GLOBALS'."Show/hide global variables
+*        m_globals = m_globals BIT-XOR c_mask.
+*        mo_debugger->run_script( ).
+*      WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
+*        m_class_data = m_class_data BIT-XOR c_mask.
+*        mo_debugger->run_script( ).
+*      WHEN 'CHANGED'."Show only changed values/all values
+*        m_changed = m_changed BIT-XOR c_mask.
+*        mo_debugger->run_script( ).
+*      WHEN 'LDB'."Show/hide LDB variables (globals)
+*        m_ldb = m_ldb BIT-XOR c_mask.
+*        mo_debugger->run_script( ).
+*      WHEN 'F5'.
+*        mo_debugger->f5( ).
+*      WHEN 'F6'.
+*        mo_debugger->f6( ).
+*      WHEN 'F7'.
+*        mo_debugger->f7( ).
+*      WHEN 'F8'.
+*        mo_debugger->f8( ).
+*    ENDCASE.
   ENDMETHOD.
 
   METHOD hndl_double_click.
@@ -3301,7 +3451,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                       ENDIF.
                       "RETURN."!!!!!!!!!!!!!!
                     ELSE.
-                      <state>-ref = m_variable.
+                      "<state>-ref = m_variable.
                     ENDIF.
                   ENDIF.
                 ENDIF.
@@ -3328,7 +3478,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
               ENDIF.
               RETURN.
             ELSE.
-              <state>-ref = m_variable.
+              "<state>-ref = m_variable.
             ENDIF.
           ENDIF.
         ENDIF.
@@ -3361,18 +3511,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ir_up = m_variable
       iv_parent_name = l_name ).
 
+    READ table mt_vars with key name = l_full_name TRANSPORTING NO FIELDS.
+    IF sy-subrc ne 0.
     APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
     <vars>-leaf = m_leaf.
     <vars>-name = l_full_name.
     <vars>-key = l_root_key.
     <vars>-ref = m_variable.
-
-    IF m_changed IS NOT INITIAL."check changed
-      READ TABLE mt_state WITH KEY name = iv_full_name ASSIGNING <state>.
-      IF sy-subrc <> 0.
-        APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
-        <state> = <vars>.
-      ENDIF.
     ENDIF.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling.
@@ -3589,7 +3734,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 ASSIGN <state>-ref->* TO <old_value>.
                 IF <old_value> = <new_value>.
 
-                  IF <kind> NE 'v' AND <kind> NE 'u'.
+                  IF <kind> NE 'v' AND <kind> NE 'u'." AND m_changed is not INITIAL.
                     DELETE mt_vars WHERE name = iv_fullname.
                     l_node->delete( ).
                   ENDIF.
