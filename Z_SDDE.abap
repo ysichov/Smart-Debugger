@@ -3432,29 +3432,39 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                   DELETE mt_vars WHERE name = l_name.
                 ENDIF.
               ELSE.
+
                 IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
                   IF <kind> NE 'v' AND <kind> NE 'u'.
                     DELETE mt_vars WHERE name = l_name.
                     l_node->delete( ).
                   ENDIF.
                 ENDIF.
-                IF m_changed IS NOT INITIAL AND m_leaf+0(5) NE 'Debug'."check changed
 
-                  READ TABLE mt_state WITH KEY name = l_name ASSIGNING FIELD-SYMBOL(<state>).
-                  IF sy-subrc = 0.
-                    ASSIGN <state>-ref->* TO <old_value>.
-                    IF <old_value> = <new_value>.
-                      IF <kind> NE 'v' AND <kind> NE 'u'.
+                "IF m_changed IS NOT INITIAL. "check changed
+
+                READ TABLE mt_state WITH KEY name = l_name ASSIGNING FIELD-SYMBOL(<state>).
+                IF sy-subrc = 0.
+                  ASSIGN <state>-ref->* TO <old_value>.
+                  IF <old_value> = <new_value>.
+                    IF <kind> NE 'v' AND <kind> NE 'u'.
+                      IF m_changed IS NOT INITIAL.
                         DELETE mt_vars WHERE name = l_name.
                         l_node->delete( ).
                         RETURN.
+                      ELSE.
+                        RETURN.
                       ENDIF.
-                      "RETURN."!!!!!!!!!!!!!!
-                    ELSE.
-                      "<state>-ref = m_variable.
                     ENDIF.
-                  ENDIF.
+
+                  ELSE.
+                    IF <kind> NE 'v' AND <kind> NE 'u'.
+                      DELETE mt_vars WHERE name = l_name.
+                      l_node->delete( ).
+                    ENDIF.
+                    ENDIF.
                 ENDIF.
+                "ENDIF.
+
               ENDIF.
 
               IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
@@ -3511,13 +3521,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ir_up = m_variable
       iv_parent_name = l_name ).
 
-    READ table mt_vars with key name = l_full_name TRANSPORTING NO FIELDS.
-    IF sy-subrc ne 0.
-    APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
-    <vars>-leaf = m_leaf.
-    <vars>-name = l_full_name.
-    <vars>-key = l_root_key.
-    <vars>-ref = m_variable.
+    READ TABLE mt_vars WITH KEY name = l_full_name TRANSPORTING NO FIELDS.
+    IF sy-subrc NE 0.
+      APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+      <vars>-leaf = m_leaf.
+      <vars>-name = l_full_name.
+      <vars>-key = l_root_key.
+      <vars>-ref = m_variable.
     ENDIF.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling.
