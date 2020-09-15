@@ -317,8 +317,8 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
              ref      TYPE REF TO data,
              kind(1),
              value    TYPE string,
-             fullname TYPE string,
              typename TYPE abap_abstypename,
+             fullname TYPE string,
            END OF ts_table.
 
     TYPES tt_table TYPE STANDARD TABLE OF ts_table
@@ -1060,20 +1060,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF go_tree->m_no_refresh IS INITIAL.
       go_tree->clear( ).
     ENDIF.
-
-*    go_tree->m_leaf = 'Debug point'.
-*    IF go_tree->m_debug_key IS INITIAL.
-*      go_tree->add_node( iv_name = go_tree->m_leaf iv_icon = CONV #( icon_folder ) ).
-*    ELSE.
-*      go_tree->main_node_key = go_tree->m_debug_key.
-*    ENDIF.
-*
-*    go_tree->add_variable( EXPORTING iv_root_name = 'current program' CHANGING io_var =  l_program ).
-*    go_tree->add_variable( EXPORTING iv_root_name = 'include' CHANGING io_var =  l_prg-include ).
-*    go_tree->add_variable( EXPORTING iv_root_name = 'class' CHANGING io_var =  l_prg-locclassname ).
-*    go_tree->add_variable( EXPORTING iv_root_name = 'event_type' CHANGING io_var =  l_prg-eventtype ).
-*    go_tree->add_variable( EXPORTING iv_root_name = 'event_name' CHANGING io_var =  l_prg-eventname ).
-*    go_tree->add_variable( EXPORTING iv_root_name = 'code line' CHANGING io_var =  l_prg-line ).
 
     CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = DATA(locals).
     SORT locals.
@@ -2779,9 +2765,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     mo_splitter->set_row_height( id = 1  height = '3' ).
 
-    mo_splitter->set_row_sash( id             = 1
-                            type           = 0
-                            value          = 0 ).
+    mo_splitter->set_row_sash( id    = 1
+                               type  = 0
+                               value = 0 ).
 
     mo_splitter->get_container(
       EXPORTING
@@ -2821,6 +2807,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         columns = 3
       EXCEPTIONS
         OTHERS  = 1.
+
+    mo_splitter_var->set_column_width( EXPORTING id = 1 width = '25' ).
+    mo_splitter_var->set_column_width( EXPORTING id = 2 width = '50' ).
+    mo_splitter_var->set_column_width( EXPORTING id = 3 width = '25' ).
+
 
     mo_splitter_var->get_container(
              EXPORTING
@@ -3440,8 +3431,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                   ENDIF.
                 ENDIF.
 
-                "IF m_changed IS NOT INITIAL. "check changed
-
                 READ TABLE mt_state WITH KEY name = l_name ASSIGNING FIELD-SYMBOL(<state>).
                 IF sy-subrc = 0.
                   ASSIGN <state>-ref->* TO <old_value>.
@@ -3455,16 +3444,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                         RETURN.
                       ENDIF.
                     ENDIF.
-
                   ELSE.
                     IF <kind> NE 'v' AND <kind> NE 'u'.
                       DELETE mt_vars WHERE name = l_name.
                       l_node->delete( ).
                     ENDIF.
-                    ENDIF.
+                  ENDIF.
                 ENDIF.
-                "ENDIF.
-
               ENDIF.
 
               IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
@@ -3477,7 +3463,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         ENDIF.
       ELSE.
 
-        IF m_changed IS NOT INITIAL AND m_leaf+0(5) NE 'Debug'."check changed
+        IF m_changed IS NOT INITIAL."check changed
           READ TABLE mt_state WITH KEY name = iv_full_name ASSIGNING <state>.
           IF sy-subrc = 0.
             ASSIGN <state>-ref->* TO <old_value>.
@@ -3487,8 +3473,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 l_node->delete( ).
               ENDIF.
               RETURN.
-            ELSE.
-              "<state>-ref = m_variable.
             ENDIF.
           ENDIF.
         ENDIF.
