@@ -648,7 +648,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDLOOP.
   ENDMETHOD.
 
-  METHOD get_table.
+  METHOD get_table. "construct deep tables
     DATA: r_data         TYPE REF TO data,
           lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
           table_clone    TYPE REF TO data,
@@ -744,6 +744,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lo_table_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
           table_clone = lo_table_descr->elem_clone( ).
           ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
+
+*          get_table( EXPORTING i_name = i_name  CHANGING c_obj = table_clone ).
+*          ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
 
           "check header area
           DATA td       TYPE sydes_desc.
@@ -851,6 +854,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD create_reference.
+
     DATA: ls_obj           LIKE LINE OF mt_obj,
           lr_struc         TYPE REF TO data,
           lv_public_key    TYPE salv_de_node_key,
@@ -925,6 +929,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                     go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
                                            iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
                                            CHANGING io_var =  <new_elem> ).
+
                   WHEN cl_tpda_script_data_descr=>mt_struct.
                     lr_struc = create_struc(  EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
                     IF lr_struc IS NOT INITIAL.
@@ -933,25 +938,29 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                              iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
                                              CHANGING io_var =  <new_struc> ).
                     ENDIF.
+
                   WHEN cl_tpda_script_data_descr=>mt_string.
                     DATA(new_string) = create_simple_string( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
                     go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
                                            iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
                                            CHANGING io_var =  new_string ).
+
                   WHEN cl_tpda_script_data_descr=>mt_tab.
                     lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
                     table_clone = lo_table_descr->elem_clone( ).
+                    "get_table( EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| CHANGING c_obj = table_clone ).
                     ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
                     go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
                                            iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
                                            CHANGING io_var =  <f> ).
+
                   WHEN OTHERS.
                     READ TABLE mt_obj WITH KEY name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| TRANSPORTING NO FIELDS.
                     IF sy-subrc NE 0.
                       transfer_variable( EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }|
                                                    i_shortname = <ls_attribute>-name i_new_node = lv_node_key  ).
-
                     ENDIF.
+
                 ENDCASE.
               CATCH cx_root.
             ENDTRY.
@@ -966,6 +975,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         RETURN.
       ENDIF.
     ENDIF.
+
   ENDMETHOD.
 
   METHOD create_struc2.
@@ -1968,6 +1978,8 @@ CLASS lcl_table_viewer IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD handle_doubleclick.
+    DATA: lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
+          table_clone    TYPE REF TO data.
     FIELD-SYMBOLS: <f_tab>  TYPE STANDARD TABLE.
 
     CHECK es_row_no-row_id IS NOT INITIAL.
@@ -1979,6 +1991,15 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       APPEND INITIAL LINE TO lcl_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
       <obj>-alv_viewer = NEW #(  i_additional_name = CONV #( e_column-fieldname ) ir_tab = <ref>  ).
       <obj>-alv_viewer->mo_sel->raise_selection_done( ).
+    ELSE.
+      TRY.
+          lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ 1 ]-{ e_column-fieldname }| ).
+          table_clone = lo_table_descr->elem_clone( ).
+          APPEND INITIAL LINE TO lcl_appl=>mt_obj ASSIGNING <obj>.
+          <obj>-alv_viewer = NEW #(  i_additional_name = CONV #( |{ m_additional_name }[ 1 ]-{ e_column-fieldname }| ) ir_tab = table_clone ).
+          <obj>-alv_viewer->mo_sel->raise_selection_done( ).
+        CATCH cx_sy_move_cast_error.
+      ENDTRY.
     ENDIF.
   ENDMETHOD.
 
@@ -3749,7 +3770,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDTRY.
     ELSE.
 
-      IF m_changed IS NOT INITIAL AND m_leaf+0(5) NE 'Debug'."check changed
+      IF m_changed IS NOT INITIAL."check changed
 
         READ TABLE mt_state WITH KEY name = iv_fullname ASSIGNING <state>.
         IF sy-subrc = 0.
@@ -3761,7 +3782,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             ENDIF.
             RETURN.
           ELSE.
-            <state>-ref = ir_up. "m_variable.
+            <state>-ref = ir_up.
           ENDIF.
         ENDIF.
       ENDIF.
@@ -3786,14 +3807,14 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     <vars>-key = e_root_key.
     <vars>-ref = ir_up.
 
-    IF m_changed IS NOT INITIAL."check changed
+    "IF m_changed IS NOT INITIAL."check changed
 
-      READ TABLE mt_state WITH KEY name = iv_fullname ASSIGNING <state>.
-      IF sy-subrc <> 0.
-        APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
-        <state> = <vars>.
-      ENDIF.
+    READ TABLE mt_state WITH KEY name = iv_fullname ASSIGNING <state>.
+    IF sy-subrc <> 0.
+      APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
+      <state> = <vars>.
     ENDIF.
+    "ENDIF.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
       l_node->delete( ).
