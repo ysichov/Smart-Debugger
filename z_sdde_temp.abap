@@ -2,7 +2,7 @@
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
-*& version: beta 0.1.117.118
+*& version: beta 0.3.150.150
 *& Git https://github.com/ysichov/SDDE
 *& RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *& EN description - https://github.com/ysichov/SDDE/wiki
@@ -22,6 +22,7 @@
 CLASS lcl_data_receiver DEFINITION DEFERRED.
 CLASS lcl_data_transmitter DEFINITION DEFERRED.
 CLASS lcl_rtti_tree DEFINITION DEFERRED.
+CLASS lcl_window DEFINITION DEFERRED.
 CLASS lcl_table_viewer DEFINITION DEFERRED.
 
 CLASS lcl_box_handler DEFINITION."for memory clearing
@@ -46,7 +47,16 @@ CLASS lcl_appl DEFINITION.
            BEGIN OF t_lang,
              spras(4),
              sptxt    TYPE sptxt,
-           END OF t_lang  .
+           END OF t_lang  ,
+           BEGIN OF t_stack,
+             stackpointer TYPE tpda_stack_pointer,
+             stacklevel   TYPE tpda_stack_level,
+             program      TYPE tpda_program,
+             include      TYPE tpda_include,
+             line         TYPE tpda_sc_line,
+             eventtype    TYPE tpda_event_type,
+             eventname    TYPE tpda_event,
+           END OF t_stack.
 
     CLASS-DATA: m_option_icons     TYPE TABLE OF sign_option_icon_s,
                 mt_lang            TYPE TABLE OF t_lang,
@@ -59,28 +69,35 @@ CLASS lcl_appl DEFINITION.
       init_lang.
 ENDCLASS.
 
+
+
 CLASS lcl_popup DEFINITION.
   PUBLIC SECTION.
-    CLASS-DATA m_counter TYPE i.
-    DATA: mo_box            TYPE REF TO cl_gui_dialogbox_container,
-          mo_splitter       TYPE REF TO cl_gui_splitter_container,
-          mo_parent         TYPE REF TO cl_gui_container,
-          m_additional_name TYPE string.
 
-    METHODS: constructor IMPORTING i_tname           TYPE any OPTIONAL
-                                   ir_tab            TYPE REF TO data OPTIONAL
-                                   i_additional_name TYPE string OPTIONAL,
+    DATA: m_additional_name      TYPE string,
+          m_counter              TYPE i,
+          mo_box                 TYPE REF TO cl_gui_dialogbox_container,
+          mo_splitter            TYPE REF TO cl_gui_splitter_container,
+          mo_variables_container TYPE REF TO cl_gui_container.
+
+    METHODS: "constructor,
       create IMPORTING i_width       TYPE i
                        i_hight       TYPE i
                        i_name        TYPE text100 OPTIONAL
              RETURNING VALUE(ro_box) TYPE REF TO cl_gui_dialogbox_container,
-      on_box_close FOR EVENT close OF cl_gui_dialogbox_container IMPORTING sender.
+
+      on_box_close FOR EVENT close OF cl_gui_dialogbox_container IMPORTING sender,
+      constructor IMPORTING i_additional_name TYPE string OPTIONAL.
+
 ENDCLASS.
 
 CLASS lcl_popup IMPLEMENTATION.
 
   METHOD constructor.
     m_additional_name = i_additional_name.
+
+    "   SET HANDLER on_box_close FOR mo_box.
+
   ENDMETHOD.
 
   METHOD create.
@@ -116,6 +133,7 @@ CLASS lcl_popup IMPLEMENTATION.
   ENDMETHOD.
 
 ENDCLASS.
+
 
 CLASS lcl_ddic DEFINITION.
   PUBLIC SECTION.
@@ -229,6 +247,7 @@ CLASS lcl_rtti DEFINITION.
                                     e_handle TYPE REF TO cl_abap_structdescr.
 ENDCLASS.
 
+
 CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super.
 
   PUBLIC SECTION.
@@ -236,8 +255,13 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
              name TYPE string,
            END OF t_obj.
 
-    DATA: mt_obj  TYPE TABLE OF t_obj,
-          go_tree TYPE REF TO lcl_rtti_tree.
+    DATA: mt_obj        TYPE TABLE OF t_obj,
+          mt_locals     TYPE tpda_scr_locals_it,
+          mt_ret_exp    TYPE tpda_scr_locals_it,
+          mo_window     TYPE REF TO lcl_window,
+          go_tree_imp   TYPE REF TO lcl_rtti_tree,
+          go_tree_local TYPE REF TO lcl_rtti_tree,
+          go_tree_exp   TYPE REF TO lcl_rtti_tree.
 
     METHODS: prologue  REDEFINITION,
       init    REDEFINITION,
@@ -252,6 +276,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
 
   PRIVATE SECTION.
     METHODS: transfer_variable IMPORTING i_name      TYPE string
+                                         i_tree      TYPE REF TO lcl_rtti_tree
                                          i_shortname TYPE string OPTIONAL
                                          i_new_node  TYPE salv_de_node_key OPTIONAL,
 
@@ -275,16 +300,17 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                                          iv_rel            TYPE salv_de_node_relation
                                          i_quick           TYPE tpda_scr_quick_info
                                RETURNING VALUE(e_root_key) TYPE salv_de_node_key,
+      get_class_name   IMPORTING i_name        TYPE string
+                       RETURNING VALUE(e_name) TYPE string,
 
       get_deep_struc       IMPORTING i_name TYPE string
                                      r_obj  TYPE REF TO data,
 
       get_table  IMPORTING i_name TYPE string
                  CHANGING  c_obj  TYPE REF TO data.
-
 ENDCLASS.
 
-CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
+CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
   PUBLIC SECTION.
 
     TYPES: BEGIN OF var_table,
@@ -298,8 +324,8 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
              ref      TYPE REF TO data,
              kind(1),
              value    TYPE string,
-             fullname TYPE string,
              typename TYPE abap_abstypename,
+             fullname TYPE string,
            END OF ts_table.
 
     TYPES tt_table TYPE STANDARD TABLE OF ts_table
@@ -321,7 +347,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
           m_ldb_key     TYPE salv_de_node_key,
           m_debug_key   TYPE salv_de_node_key,
           m_icon        TYPE salv_de_tree_image,
-          mo_debugger   TYPE REF TO lcl_debugger_script,
           mt_vars       TYPE STANDARD TABLE OF var_table,
           mt_state      TYPE STANDARD TABLE OF var_table,
           m_new_node    TYPE salv_de_node_key,
@@ -330,9 +355,10 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
           m_prg_info    TYPE tpda_scr_prg_info,
           tree          TYPE REF TO cl_salv_tree.
 
-    METHODS constructor
-      IMPORTING
-        i_header TYPE clike DEFAULT 'View'.
+    METHODS constructor IMPORTING i_header TYPE clike DEFAULT 'View'
+                                  i_type   TYPE string
+                                  i_cont   TYPE REF TO cl_gui_container.
+
 
     METHODS add_variable
       IMPORTING
@@ -438,6 +464,58 @@ CLASS lcl_rtti_tree DEFINITION FINAL INHERITING FROM lcl_popup.
       hndl_user_command FOR EVENT added_function OF cl_salv_events IMPORTING e_salv_function .
 ENDCLASS.
 
+
+CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
+  PUBLIC SECTION.
+
+    TYPES: BEGIN OF ts_table,
+             ref      TYPE REF TO data,
+             kind(1),
+             value    TYPE string,
+             typename TYPE abap_abstypename,
+             fullname TYPE string,
+           END OF ts_table.
+
+    TYPES tt_table TYPE STANDARD TABLE OF ts_table
+          WITH NON-UNIQUE DEFAULT KEY.
+
+    DATA: mo_debugger            TYPE REF TO lcl_debugger_script,
+          mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
+          mo_splitter_var        TYPE REF TO cl_gui_splitter_container,
+          mo_toolbar_container   TYPE REF TO cl_gui_container,
+
+          mo_importing_container TYPE REF TO cl_gui_container,
+          mo_locals_container    TYPE REF TO cl_gui_container,
+          mo_exporting_container TYPE REF TO cl_gui_container,
+          mo_code_container      TYPE REF TO cl_gui_container,
+          mo_editor_container    TYPE REF TO cl_gui_container,
+          mo_stack_container     TYPE REF TO cl_gui_container,
+          mo_code_viewer         TYPE REF TO cl_gui_abapedit,
+          mt_stack               TYPE TABLE OF lcl_appl=>t_stack,
+          mo_toolbar             TYPE REF TO cl_gui_toolbar,
+          mo_salv_stack          TYPE REF TO cl_salv_table,
+          mt_tree_imp            TYPE tt_table,
+          mt_tree_loc            TYPE tt_table,
+          mt_tree_exp            TYPE tt_table,
+          mo_tree_imp            TYPE REF TO cl_salv_tree,
+          mo_tree_loc            TYPE REF TO cl_salv_tree,
+          mo_tree_exp            TYPE REF TO cl_salv_tree.
+
+    METHODS: constructor IMPORTING i_debugger TYPE REF TO lcl_debugger_script i_additional_name TYPE string OPTIONAL,
+      add_toolbar_buttons,
+      hnd_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode,
+      set_program IMPORTING iv_program TYPE program.
+
+    METHODS set_program_line IMPORTING iv_line LIKE sy-index.
+
+    METHODS create_code_viewer.
+
+    METHODS show_stack.
+
+
+ENDCLASS.
+
+
 CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD prologue.
     super->prologue( ).
@@ -446,11 +524,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD init.
     lcl_appl=>init_lang( ).
     lcl_appl=>init_icons_table( ).
-    go_tree = NEW lcl_rtti_tree( 'view' ).
+
+    mo_window = NEW lcl_window( me ).
+    go_tree_imp = NEW lcl_rtti_tree( i_header = 'Importing parameters' i_type = 'I' i_cont = mo_window->mo_importing_container ).
+    go_tree_local = NEW lcl_rtti_tree( i_header =  'Variables' i_type = 'L' i_cont = mo_window->mo_locals_container ).
+    go_tree_exp = NEW lcl_rtti_tree( i_header = 'Exporting parameters' i_type = 'E' i_cont = mo_window->mo_exporting_container ).
   ENDMETHOD.                    "init
 
   METHOD create_simple_var.
-
     DATA: lr_symbsimple TYPE REF TO tpda_sys_symbsimple,
           lo_elem       TYPE REF TO cl_abap_elemdescr.
 
@@ -614,7 +695,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                            r_obj = lr_struc ).
 
         WHEN cl_tpda_script_data_descr=>mt_tab.
-          FIELD-SYMBOLS: <new_table> TYPE STANDARD TABLE.
+          FIELD-SYMBOLS: <new_table> TYPE ANY TABLE.
           ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO <new_table>.
           GET REFERENCE OF <new_table> INTO r_data.
           get_table( EXPORTING i_name = |{ i_name }-{ comp-compname }|
@@ -623,7 +704,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDLOOP.
   ENDMETHOD.
 
-  METHOD get_table.
+  METHOD get_table. "construct deep tables
     DATA: r_data         TYPE REF TO data,
           lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
           table_clone    TYPE REF TO data,
@@ -743,19 +824,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                   ASSIGN COMPONENT l_names-name OF STRUCTURE <header> TO FIELD-SYMBOL(<to>).
                   <to> = <elem>.
                 ENDLOOP.
-                go_tree->add_variable( EXPORTING iv_root_name = l_name
+                i_tree->add_variable( EXPORTING iv_root_name = l_name
                                                  iv_key = i_new_node
                                                  iv_full_name = l_name
                                                  i_icon = CONV #( icon_header )
                                        CHANGING io_var =  <header>  ).
 
                 l_name = l_name && '[]'.
-
               CATCH cx_tpda_varname .
             ENDTRY.
           ENDIF.
 
-          go_tree->add_variable( EXPORTING iv_root_name = l_name
+          i_tree->add_variable( EXPORTING iv_root_name = l_name
                                            iv_key = i_new_node
                                            iv_full_name = l_name
                                   CHANGING io_var =  <f>  ).
@@ -763,17 +843,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ELSEIF quick-typid = 'r'. "reference
           DATA: l_rel   TYPE salv_de_node_relation,
                 lv_node TYPE salv_de_node_key.
+
           l_rel = if_salv_c_node_relation=>last_child.
           lv_node = i_new_node.
 
-          READ TABLE go_tree->mt_vars WITH KEY name = l_name INTO DATA(l_var).
+          READ TABLE go_tree_local->mt_vars WITH KEY name = l_name INTO DATA(l_var).
           IF sy-subrc = 0.
             l_rel = if_salv_c_node_relation=>next_sibling.
             lv_node = l_var-key.
-            DELETE go_tree->mt_vars WHERE name = l_name.
+            DELETE i_tree->mt_vars WHERE name = l_name.
           ENDIF.
 
-          go_tree->m_ref = 'X'.
+          i_tree->m_ref = 'X'.
 
           create_reference( EXPORTING i_name = i_name
                                      i_shortname = l_name
@@ -782,9 +863,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                      i_quick = quick ).
 
           IF l_rel = if_salv_c_node_relation=>next_sibling.
-            go_tree->delete_node( l_var-key ).
+            i_tree->delete_node( l_var-key ).
           ENDIF.
-          CLEAR go_tree->m_ref.
+          CLEAR i_tree->m_ref.
 
         ELSEIF quick-typid = 'v' OR quick-typid = 'u'."deep structure or structure
 
@@ -801,7 +882,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             CREATE DATA lr_struc TYPE HANDLE lo_deep_handle.
             get_deep_struc( EXPORTING i_name = i_name r_obj = lr_struc ).
             ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_deep>).
-            go_tree->add_variable( EXPORTING iv_root_name = l_name
+            i_tree->add_variable( EXPORTING iv_root_name = l_name
                                              iv_key = i_new_node
                                              iv_full_name = l_name
                                    CHANGING io_var =  <new_deep>  ).
@@ -811,13 +892,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
         ELSEIF quick-typid = 'g'."string
           DATA(new_string) = create_simple_string( i_name ).
-          go_tree->add_variable( EXPORTING iv_root_name = i_name
+          i_tree->add_variable( EXPORTING iv_root_name = i_name
                                            iv_full_name = i_name
                                            CHANGING io_var =  new_string ).
         ELSE.
           lr_struc = create_simple_var( i_name ).
           ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_elem>).
-          go_tree->add_variable( EXPORTING iv_root_name = l_name
+          i_tree->add_variable( EXPORTING iv_root_name = l_name
                                            iv_key = i_new_node
                                            iv_full_name = l_name
                                            CHANGING io_var =  <new_elem>  ).
@@ -826,7 +907,33 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDTRY.
   ENDMETHOD.
 
+  METHOD get_class_name.
+    DATA: lo_object TYPE REF TO cl_tpda_script_objectdescr,
+          lo_descr  TYPE REF TO cl_tpda_script_data_descr.
+
+    FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
+
+    TRY.
+        CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+          EXPORTING
+            p_var_name   = i_name
+          RECEIVING
+            p_symb_quick = DATA(l_quick).
+
+        ASSIGN l_quick-quickdata->* TO <ls_symobjref>.
+        IF <ls_symobjref>-instancename <> '{O:initial}'.
+
+          lo_descr = cl_tpda_script_data_descr=>factory( <ls_symobjref>-instancename ).
+          lo_object ?= lo_descr.
+
+          e_name = lo_object->classname( ).
+        ENDIF.
+      CATCH cx_tpda_varname .
+    ENDTRY.
+  ENDMETHOD.
+
   METHOD create_reference.
+
     DATA: ls_obj           LIKE LINE OF mt_obj,
           lr_struc         TYPE REF TO data,
           lv_public_key    TYPE salv_de_node_key,
@@ -845,7 +952,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF <ls_symobjref>-instancename <> '{O:initial}'.
       READ TABLE mt_obj WITH KEY name = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
       IF sy-subrc = 0.
-        go_tree->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
+        go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
                                         iv_full = <ls_symobjref>-instancename
                                           iv_key = i_new_node ).
         RETURN.
@@ -854,11 +961,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       COLLECT ls_obj INTO mt_obj.
 
       TRY.
-          CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-            EXPORTING
-              p_var_name   = <ls_symobjref>-instancename
-            RECEIVING
-              p_symb_quick = DATA(quick).
+*          CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+*            EXPORTING
+*              p_var_name   = <ls_symobjref>-instancename
+*            RECEIVING
+*              p_symb_quick = DATA(quick).
 
           lo_descr = cl_tpda_script_data_descr=>factory( <ls_symobjref>-instancename ).
           ls_obj-name = <ls_symobjref>-instancename.
@@ -866,8 +973,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lo_object ?= lo_descr.
 
           lt_attributes = lo_object->attributes( ).
+          DATA(lv_name) = lo_object->classname( ).
 
-          e_root_key = go_tree->add_obj_nodes( EXPORTING iv_name = CONV #( i_shortname )
+          e_root_key = go_tree_local->add_obj_nodes( EXPORTING iv_name = CONV #( i_shortname )
                                      iv_full = <ls_symobjref>-instancename
                                      i_new_node = i_new_node
                                      iv_rel = iv_rel
@@ -876,8 +984,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                      ev_protected_key = lv_protected_key
                                      ev_private_key = lv_private_key ).
 
-          APPEND INITIAL LINE TO go_tree->mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
-          <vars>-leaf = go_tree->m_leaf.
+          APPEND INITIAL LINE TO go_tree_local->mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+          <vars>-leaf = go_tree_local->m_leaf.
           <vars>-name = i_name.
           <vars>-key = e_root_key.
 
@@ -898,36 +1006,42 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                   WHEN cl_tpda_script_data_descr=>mt_simple.
                     lr_struc = create_simple_var( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
                     ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_elem>).
-                    go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
+                    go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
                                            iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
                                            CHANGING io_var =  <new_elem> ).
+
                   WHEN cl_tpda_script_data_descr=>mt_struct.
                     lr_struc = create_struc(  EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
                     IF lr_struc IS NOT INITIAL.
                       ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_struc>).
-                      go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
+                      go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
                                              iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
                                              CHANGING io_var =  <new_struc> ).
                     ENDIF.
+
                   WHEN cl_tpda_script_data_descr=>mt_string.
                     DATA(new_string) = create_simple_string( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
-                    go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
+                    go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
                                            iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
                                            CHANGING io_var =  new_string ).
+
                   WHEN cl_tpda_script_data_descr=>mt_tab.
                     lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
                     table_clone = lo_table_descr->elem_clone( ).
+                    "get_table( EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| CHANGING c_obj = table_clone ).
                     ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
-                    go_tree->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
+                    go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
                                            iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
                                            CHANGING io_var =  <f> ).
+
                   WHEN OTHERS.
                     READ TABLE mt_obj WITH KEY name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| TRANSPORTING NO FIELDS.
                     IF sy-subrc NE 0.
                       transfer_variable( EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }|
-                                                   i_shortname = <ls_attribute>-name i_new_node = lv_node_key  ).
-
+                                                   i_shortname = <ls_attribute>-name i_new_node = lv_node_key
+                                                   i_tree = go_tree_local ).
                     ENDIF.
+
                 ENDCASE.
               CATCH cx_root.
             ENDTRY.
@@ -936,12 +1050,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDTRY.
     ELSE.
       IF i_new_node IS NOT INITIAL.
-        go_tree->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
+        go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
                                         iv_value = <ls_symobjref>-instancename
                                           iv_key = i_new_node ).
         RETURN.
       ENDIF.
     ENDIF.
+
   ENDMETHOD.
 
   METHOD create_struc2.
@@ -984,7 +1099,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     get_deep_struc( EXPORTING i_name = i_name r_obj = r_data ).
     ASSIGN r_data->* TO FIELD-SYMBOL(<new_deep>).
 
-    go_tree->add_variable( EXPORTING iv_root_name = i_shortname iv_key = i_new_node CHANGING io_var =  <new_deep>  ).
+    go_tree_local->add_variable( EXPORTING iv_root_name = i_shortname iv_key = i_new_node CHANGING io_var =  <new_deep>  ).
   ENDMETHOD.
 
   METHOD script.
@@ -999,6 +1114,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           l_class      TYPE seu_name.
 
     CLEAR mt_obj.
+
+
+    DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
+    MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
+    mo_window->show_stack( ).
 
     CALL METHOD abap_source->program
       RECEIVING
@@ -1017,54 +1137,102 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = DATA(l_prg) ).
-        IF l_prg-event-eventname NE go_tree->m_prg_info-event-eventname.
-          CLEAR go_tree->m_no_refresh.
-          CLEAR go_tree->mt_vars.
-          CLEAR go_tree->mt_state.
+        IF l_prg-event-eventname NE go_tree_local->m_prg_info-event-eventname.
+          go_tree_local->m_prg_info-event-eventname = l_prg-event-eventname.
+
+          CLEAR go_tree_local->m_no_refresh.
+          CLEAR go_tree_local->mt_vars.
+          CLEAR go_tree_local->mt_state.
+
+          CLEAR go_tree_exp->m_no_refresh.
+          CLEAR go_tree_exp->mt_vars.
+          CLEAR go_tree_exp->mt_state.
+
+          CLEAR go_tree_imp->m_no_refresh.
+          CLEAR go_tree_imp->mt_vars.
+          CLEAR go_tree_imp->mt_state.
+
+          IF go_tree_local->m_no_refresh IS INITIAL.
+            go_tree_local->clear( ).
+            go_tree_exp->clear( ).
+            go_tree_imp->clear( ).
+          ENDIF.
+
+          CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
+          CLEAR mt_ret_exp.
+          SORT mt_locals.
+
+          "get methods locals
+          DATA: l_clref  TYPE REF TO cl_abap_classdescr.
+
+          READ TABLE mt_locals WITH KEY name = 'ME' TRANSPORTING NO FIELDS.
+          IF sy-subrc = 0.
+            CALL METHOD cl_abap_classdescr=>describe_by_name
+              EXPORTING
+                p_name      = get_class_name( 'ME' )
+              RECEIVING
+                p_descr_ref = DATA(l_dref).
+            IF sy-subrc <> 0.
+              EXIT.
+            ENDIF.
+
+            l_clref ?= l_dref.
+            .
+            READ TABLE l_clref->methods INTO DATA(x_methods) WITH KEY name = l_prg-event-eventname.
+
+            IF sy-subrc = 0.
+              LOOP AT x_methods-parameters INTO DATA(x_parameters).
+
+                IF x_parameters-parm_kind = 'I'. "importing
+                  transfer_variable( EXPORTING i_name = CONV #( x_parameters-name ) i_tree = go_tree_imp ).
+                  DELETE mt_locals WHERE name = x_parameters-name.
+                ENDIF.
+                IF x_parameters-parm_kind = 'E' OR x_parameters-parm_kind = 'R'. "exporting or returning
+                  APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
+                  <ret_exp>-name = x_parameters-name.
+                  DELETE mt_locals WHERE name = x_parameters-name.
+                ENDIF.
+              ENDLOOP.
+              go_tree_imp->display(  ).
+            ENDIF.
+          ENDIF.
+
+          CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = DATA(globals).
+          SORT globals.
+
         ENDIF.
-        go_tree->m_prg_info = l_prg.
       CATCH cx_tpda_src_info.
     ENDTRY.
 
-    IF go_tree->m_no_refresh IS INITIAL.
-      go_tree->clear( ).
-    ENDIF.
+    go_tree_imp->m_prg_info = l_prg.
+    mo_window->set_program( CONV #( l_prg-include ) ).
+    mo_window->set_program_line( l_prg-line ).
 
-    go_tree->m_leaf = 'Debug point'.
-    IF go_tree->m_debug_key IS INITIAL.
-      go_tree->add_node( iv_name = go_tree->m_leaf iv_icon = CONV #( icon_folder ) ).
+
+
+    go_tree_local->m_leaf = 'Locals'.
+    IF go_tree_local->m_no_refresh IS INITIAL.
+      go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_life_events ) ).
     ELSE.
-      go_tree->main_node_key = go_tree->m_debug_key.
+      go_tree_local->main_node_key = go_tree_local->m_locals_key.
     ENDIF.
 
-    go_tree->add_variable( EXPORTING iv_root_name = 'current program' CHANGING io_var =  l_program ).
-    go_tree->add_variable( EXPORTING iv_root_name = 'include' CHANGING io_var =  l_prg-include ).
-    go_tree->add_variable( EXPORTING iv_root_name = 'class' CHANGING io_var =  l_prg-locclassname ).
-    go_tree->add_variable( EXPORTING iv_root_name = 'event_type' CHANGING io_var =  l_prg-eventtype ).
-    go_tree->add_variable( EXPORTING iv_root_name = 'event_name' CHANGING io_var =  l_prg-eventname ).
-    go_tree->add_variable( EXPORTING iv_root_name = 'code line' CHANGING io_var =  l_prg-line ).
-
-    CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = DATA(locals).
-    SORT locals.
-
-    go_tree->m_leaf = 'Locals'.
-    IF go_tree->m_no_refresh IS INITIAL.
-      go_tree->add_node( iv_name = go_tree->m_leaf iv_icon = CONV #( icon_life_events ) ).
-    ELSE.
-      go_tree->main_node_key = go_tree->m_locals_key.
-    ENDIF.
-
-    LOOP AT locals INTO DATA(ls_local).
+    LOOP AT mt_locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
-      transfer_variable( ls_local-name ).
+      transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_local ).
     ENDLOOP.
 
-    go_tree->m_leaf = 'Class-data global variables'.
-    IF go_tree->m_class_data IS NOT INITIAL.
-      IF go_tree->m_class_key IS INITIAL.
-        go_tree->add_node( iv_name = go_tree->m_leaf iv_icon = CONV #( icon_oo_class_attribute ) ).
+    LOOP AT mt_ret_exp INTO ls_local.
+      transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_exp ).
+    ENDLOOP.
+
+
+    go_tree_local->m_leaf = 'Class-data global variables'.
+    IF go_tree_local->m_class_data IS NOT INITIAL.
+      IF go_tree_local->m_class_key IS INITIAL.
+        go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_oo_class_attribute ) ).
       ELSE.
-        go_tree->main_node_key = go_tree->m_class_key.
+        go_tree_local->main_node_key = go_tree_local->m_class_key.
       ENDIF.
 
       lt_compo_tmp = lt_compo.
@@ -1086,76 +1254,79 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       LOOP AT lt_compo_tmp ASSIGNING <compo> WHERE type = '+'.
         IF l_class NE <compo>-class.
           l_class = <compo>-class.
-          go_tree->add_obj_var( EXPORTING iv_name = CONV #( <compo>-class ) RECEIVING er_key = DATA(l_key) ).
+          go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( <compo>-class ) RECEIVING er_key = DATA(l_key) ).
         ENDIF.
         transfer_variable( EXPORTING i_name = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
                                      i_shortname = CONV #( <compo>-name )
-                                      i_new_node = l_key ).
+                                      i_new_node = l_key
+                                      i_tree = go_tree_local ).
       ENDLOOP.
     ELSE.
-      IF go_tree->m_class_key IS NOT INITIAL.
-        go_tree->delete_node( go_tree->m_class_key ).
-        DELETE go_tree->mt_vars WHERE leaf = go_tree->m_leaf.
-        CLEAR go_tree->m_class_key.
+      IF go_tree_local->m_class_key IS NOT INITIAL.
+        go_tree_local->delete_node( go_tree_local->m_class_key ).
+        DELETE go_tree_local->mt_vars WHERE leaf = go_tree_local->m_leaf.
+        CLEAR go_tree_local->m_class_key.
       ENDIF.
     ENDIF.
 
     lt_compo_tmp = lt_compo.
     DELETE lt_compo_tmp WHERE  type NE 'D'.
-    CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = DATA(globals).
-    SORT globals.
 
-    go_tree->m_leaf = 'LDB'.
-    IF go_tree->m_ldb IS NOT INITIAL.
-      IF go_tree->m_ldb_key IS INITIAL.
-        go_tree->add_node( iv_name = go_tree->m_leaf iv_icon = CONV #( icon_biw_report_view ) ).
+    go_tree_local->m_leaf = 'LDB'.
+    IF go_tree_local->m_ldb IS NOT INITIAL.
+      IF go_tree_local->m_ldb_key IS INITIAL.
+        go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_biw_report_view ) ).
       ELSE.
-        go_tree->main_node_key = go_tree->m_ldb_key.
+        go_tree_local->main_node_key = go_tree_local->m_ldb_key.
       ENDIF.
       LOOP AT globals INTO DATA(ls_global).
         READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
         IF sy-subrc NE 0.
-          transfer_variable( ls_global-name ).
+          transfer_variable( EXPORTING i_name = ls_global-name i_tree = go_tree_local ).
         ENDIF.
       ENDLOOP.
     ELSE.
-      IF go_tree->m_ldb_key IS NOT INITIAL.
-        go_tree->delete_node( go_tree->m_ldb_key ).
-        DELETE go_tree->mt_vars WHERE leaf = go_tree->m_leaf.
-        CLEAR go_tree->m_ldb_key.
+      IF go_tree_local->m_ldb_key IS NOT INITIAL.
+        go_tree_local->delete_node( go_tree_local->m_ldb_key ).
+        DELETE go_tree_local->mt_vars WHERE leaf = go_tree_local->m_leaf.
+        CLEAR go_tree_local->m_ldb_key.
       ENDIF.
     ENDIF.
 
-    go_tree->m_leaf = 'Globals'.
-    IF go_tree->m_globals IS NOT INITIAL.
+    go_tree_local->m_leaf = 'Globals'.
+    IF go_tree_local->m_globals IS NOT INITIAL.
 
-      IF go_tree->m_globals_key IS INITIAL.
-        go_tree->add_node( iv_name = go_tree->m_leaf iv_icon = CONV #( icon_foreign_trade ) ).
+      IF go_tree_local->m_globals_key IS INITIAL.
+        go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_foreign_trade ) ).
       ELSE.
-        go_tree->main_node_key = go_tree->m_globals_key.
+        go_tree_local->main_node_key = go_tree_local->m_globals_key.
       ENDIF.
 
-      transfer_variable( 'SYST' ).
+      transfer_variable( EXPORTING i_name = 'SYST' i_tree = go_tree_local ).
       LOOP AT globals INTO ls_global.
         READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
-          transfer_variable( ls_global-name ).
+          transfer_variable( EXPORTING i_name = ls_global-name i_tree = go_tree_local ).
         ENDIF.
       ENDLOOP.
     ELSE.
-      IF go_tree->m_globals_key IS NOT INITIAL.
-        go_tree->delete_node( go_tree->m_globals_key ).
-        DELETE go_tree->mt_vars WHERE leaf = go_tree->m_leaf.
+      IF go_tree_local->m_globals_key IS NOT INITIAL.
+        go_tree_local->delete_node( go_tree_local->m_globals_key ).
+        DELETE go_tree_local->mt_vars WHERE leaf = go_tree_local->m_leaf.
 
-        CLEAR go_tree->m_globals_key.
+        CLEAR go_tree_local->m_globals_key.
       ENDIF.
     ENDIF.
 
-    IF go_tree->m_no_refresh IS INITIAL.
-      go_tree->mt_state = go_tree->mt_vars.
+    IF go_tree_local->m_no_refresh IS INITIAL.
+      go_tree_local->mt_state = go_tree_local->mt_vars.
     ENDIF.
-    go_tree->m_no_refresh = 'X'.
-    go_tree->display( me ).
+    go_tree_local->m_no_refresh = 'X'.
+    go_tree_exp->m_no_refresh = 'X'.
+    go_tree_imp->m_no_refresh = 'X'.
+
+    go_tree_local->display(  ).
+    go_tree_exp->display(  ).
     me->break( ).
   ENDMETHOD.                    "script
 
@@ -1250,6 +1421,339 @@ CLASS lcl_types DEFINITION ABSTRACT.
 
     CLASS-DATA: mt_sel TYPE TABLE OF lcl_types=>selection_display_s.
 ENDCLASS.
+
+
+CLASS lcl_window IMPLEMENTATION.
+
+  METHOD constructor.
+    "m_additional_name = i_additional_name.
+    super->constructor( ).
+    mo_debugger = i_debugger.
+
+    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.2' i_width = 1200 i_hight = 400 ).
+    CREATE OBJECT mo_splitter ##FM_SUBRC_OK
+      EXPORTING
+        parent  = mo_box
+        rows    = 3
+        columns = 1
+      EXCEPTIONS
+        OTHERS  = 1.
+
+    mo_splitter->get_container(
+     EXPORTING
+       row       = 2
+       column    = 1
+     RECEIVING
+       container = mo_code_container ).
+
+    mo_splitter->get_container(
+      EXPORTING
+        row       = 1
+        column    = 1
+      RECEIVING
+        container = mo_toolbar_container ).
+
+    mo_splitter->set_row_height( id = 1  height = '3' ).
+
+    mo_splitter->set_row_sash( id    = 1
+                               type  = 0
+                               value = 0 ).
+
+    mo_splitter->get_container(
+      EXPORTING
+        row       = 3
+        column    = 1
+      RECEIVING
+        container = mo_variables_container ).
+
+    CREATE OBJECT mo_splitter_code ##FM_SUBRC_OK
+      EXPORTING
+        parent  = mo_code_container
+        rows    = 1
+        columns = 2
+      EXCEPTIONS
+        OTHERS  = 1.
+
+    mo_splitter_code->get_container(
+         EXPORTING
+           row       = 1
+           column    = 1
+         RECEIVING
+           container = mo_editor_container ).
+
+    mo_splitter_code->get_container(
+         EXPORTING
+           row       = 1
+           column    = 2
+         RECEIVING
+           container = mo_stack_container ).
+
+    mo_splitter_code->set_column_width( EXPORTING id = 1 width = '67' ).
+
+    CREATE OBJECT mo_splitter_var ##FM_SUBRC_OK
+      EXPORTING
+        parent  = mo_variables_container
+        rows    = 1
+        columns = 3
+      EXCEPTIONS
+        OTHERS  = 1.
+
+    mo_splitter_var->set_column_width( EXPORTING id = 1 width = '25' ).
+    mo_splitter_var->set_column_width( EXPORTING id = 2 width = '50' ).
+    mo_splitter_var->set_column_width( EXPORTING id = 3 width = '25' ).
+
+
+    mo_splitter_var->get_container(
+             EXPORTING
+               row       = 1
+               column    = 1
+             RECEIVING
+               container = mo_importing_container ).
+
+    mo_splitter_var->get_container(
+         EXPORTING
+           row       = 1
+           column    = 2
+         RECEIVING
+           container = mo_locals_container ).
+
+    mo_splitter_var->get_container(
+             EXPORTING
+               row       = 1
+               column    = 3
+             RECEIVING
+               container = mo_exporting_container ).
+
+    SET HANDLER on_box_close FOR mo_box.
+
+    CREATE OBJECT mo_toolbar EXPORTING parent = mo_toolbar_container.
+    add_toolbar_buttons( ).
+
+    mo_toolbar->set_visible( 'X' ).
+
+    create_code_viewer( ).
+
+  ENDMETHOD.
+
+  METHOD add_toolbar_buttons.
+    DATA: lt_button TYPE ttb_button,
+          ls_button LIKE LINE OF lt_button,
+          lt_events TYPE cntl_simple_events,
+          ls_events LIKE LINE OF lt_events.
+
+* Add buttons to toolbar
+    CLEAR ls_button.
+    ls_button-function = 'REFRESH'.
+    ls_button-icon = CONV #( icon_refresh ).
+    ls_button-quickinfo = 'Refresh'.
+    ls_button-text = ''.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-butn_type = 3.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F5'.
+    ls_button-icon = CONV #( icon_debugger_step_into ).
+    ls_button-quickinfo = 'Step into'.
+    ls_button-text = ''.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F6'.
+    ls_button-icon = CONV #( icon_debugger_step_over ).
+    ls_button-quickinfo = 'Step over'.
+    ls_button-text = ''.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F7'.
+    ls_button-icon = CONV #( icon_debugger_step_out ).
+    ls_button-quickinfo = 'Step out'.
+    ls_button-text = ''.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F8'.
+    ls_button-icon = CONV #( icon_debugger_continue ).
+    ls_button-quickinfo = 'Continue'.
+    ls_button-text = ''.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-butn_type = 3.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'INITIALS'.
+    ls_button-icon = CONV #( icon_start_viewer ).
+    ls_button-quickinfo = 'Show/hide initial values'.
+    ls_button-text = 'Initials'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'GLOBALS'.
+    ls_button-icon = CONV #( icon_foreign_trade ).
+    ls_button-quickinfo = 'Show/hide global variables'.
+    ls_button-text = 'Globals'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'CLASS_DATA'.
+    ls_button-icon = CONV #( icon_oo_class_attribute ).
+    ls_button-quickinfo = 'Show/hide Class-Data variables (global)'.
+    ls_button-text = 'CLASS_DATA'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'LDB'.
+    ls_button-icon = CONV #( icon_biw_report_view ).
+    ls_button-quickinfo = 'Show/hide Local Data Base variables (global)'.
+    ls_button-text = 'LDB'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-butn_type = 3.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'CHANGED'.
+    ls_button-icon = CONV #( icon_interchange ).
+    ls_button-quickinfo = 'Show only changed values/all values'.
+    ls_button-text = ''.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CALL METHOD mo_toolbar->add_button_group
+      EXPORTING
+        data_table = lt_button.
+
+* Register events
+    ls_events-eventid = cl_gui_toolbar=>m_id_function_selected.
+    ls_events-appl_event = space.
+    APPEND ls_events TO lt_events.
+    CALL METHOD mo_toolbar->set_registered_events
+      EXPORTING
+        events = lt_events.
+
+    SET HANDLER me->hnd_toolbar FOR mo_toolbar.
+
+  ENDMETHOD.
+
+  METHOD set_program.
+    DATA gr_scan TYPE REF TO cl_ci_scan.
+    DATA(gr_source) = cl_ci_source_include=>create( p_name = iv_program ).
+
+    CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
+
+    mo_code_viewer->set_text( table = gr_source->lines  ).
+  ENDMETHOD.
+
+
+  METHOD set_program_line.
+    TYPES: lntab TYPE STANDARD TABLE OF i.
+    DATA lt_lines TYPE lntab.
+
+    APPEND INITIAL LINE TO lt_lines ASSIGNING FIELD-SYMBOL(<line>).
+    <line> = iv_line.
+    mo_code_viewer->set_marker( EXPORTING marker_number = 7  marker_lines = lt_lines ).
+    mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
+  ENDMETHOD.
+
+  METHOD create_code_viewer.
+    CHECK mo_code_viewer IS INITIAL.
+
+    CREATE OBJECT mo_code_viewer
+      EXPORTING
+        parent = mo_editor_container.
+*       max_number_chars = 72
+
+    mo_code_viewer->init_completer( ).
+*
+    mo_code_viewer->upload_properties(
+           EXCEPTIONS
+             dp_error_create  = 1
+             dp_error_general = 2
+             dp_error_send    = 3
+             OTHERS           = 4 ).
+
+    mo_code_viewer->set_statusbar_mode( statusbar_mode = cl_gui_abapedit=>true ).
+    mo_code_viewer->create_document( ).
+    mo_code_viewer->set_readonly_mode( 1 ).
+  ENDMETHOD.
+
+
+  METHOD show_stack.
+    IF mo_salv_stack IS INITIAL.
+      cl_salv_table=>factory(
+  EXPORTING
+    r_container = mo_stack_container
+  IMPORTING
+  r_salv_table = mo_salv_stack
+  CHANGING
+  t_table = mt_stack ).
+
+      DATA:  lo_column  TYPE REF TO cl_salv_column.
+
+      DATA(lo_columns) = mo_salv_stack->get_columns( ).
+      lo_columns->set_optimize( 'X' ).
+
+      lo_column ?= lo_columns->get_column( 'STACKPOINTER' ).
+      lo_column->set_output_length( '5' ).
+
+      lo_column ?= lo_columns->get_column( 'STACKLEVEL' ).
+      lo_column->set_output_length( '5' ).
+      mo_salv_stack->display( ).
+    ELSE.
+      mo_salv_stack->refresh( ).
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD hnd_toolbar.
+    CONSTANTS: c_mask TYPE x VALUE '01'.
+    CASE fcode.
+      WHEN 'REFRESH'."
+        mo_debugger->run_script( ).
+      WHEN 'INITIALS'."Show/hide empty variables
+        mo_debugger->go_tree_local->m_hide = mo_debugger->go_tree_local->m_hide BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'GLOBALS'."Show/hide global variables
+        mo_debugger->go_tree_local->m_globals =  mo_debugger->go_tree_local->m_globals BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
+        mo_debugger->go_tree_local->m_class_data =  mo_debugger->go_tree_local->m_class_data BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'CHANGED'."Show only changed values/all values
+        mo_debugger->go_tree_local->m_changed =  mo_debugger->go_tree_local->m_changed BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'LDB'."Show/hide LDB variables (globals)
+        mo_debugger->go_tree_local->m_ldb =  mo_debugger->go_tree_local->m_ldb BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'F5'.
+        mo_debugger->f5( ).
+      WHEN 'F6'.
+        mo_debugger->f6( ).
+      WHEN 'F7'.
+        mo_debugger->f7( ).
+      WHEN 'F8'.
+        mo_debugger->f8( ).
+    ENDCASE.
+  ENDMETHOD.
+
+
+ENDCLASS.
+
+
 
 CLASS lcl_sel_opt DEFINITION DEFERRED.
 
@@ -1421,13 +1925,13 @@ CLASS lcl_text_viewer IMPLEMENTATION.
        row       = 1
        column    = 1
      RECEIVING
-       container = mo_parent ).
+       container = mo_variables_container ).
 
     SET HANDLER on_box_close FOR mo_box.
 
     CREATE OBJECT mo_text
       EXPORTING
-        parent                 = mo_parent
+        parent                 = mo_variables_container
       EXCEPTIONS
         error_cntl_create      = 1
         error_cntl_init        = 2
@@ -1951,6 +2455,8 @@ CLASS lcl_table_viewer IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD handle_doubleclick.
+    DATA: lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
+          table_clone    TYPE REF TO data.
     FIELD-SYMBOLS: <f_tab>  TYPE STANDARD TABLE.
 
     CHECK es_row_no-row_id IS NOT INITIAL.
@@ -1962,6 +2468,15 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       APPEND INITIAL LINE TO lcl_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
       <obj>-alv_viewer = NEW #(  i_additional_name = CONV #( e_column-fieldname ) ir_tab = <ref>  ).
       <obj>-alv_viewer->mo_sel->raise_selection_done( ).
+    ELSE.
+      TRY.
+          lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ 1 ]-{ e_column-fieldname }| ).
+          table_clone = lo_table_descr->elem_clone( ).
+          APPEND INITIAL LINE TO lcl_appl=>mt_obj ASSIGNING <obj>.
+          <obj>-alv_viewer = NEW #(  i_additional_name = CONV #( |{ m_additional_name }[ 1 ]-{ e_column-fieldname }| ) ir_tab = table_clone ).
+          <obj>-alv_viewer->mo_sel->raise_selection_done( ).
+        CATCH cx_sy_move_cast_error.
+      ENDTRY.
     ENDIF.
   ENDMETHOD.
 
@@ -2324,21 +2839,25 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       IF c_sel_row-opti NE 'BT' AND c_sel_row-opti NE 'NB' .
         CLEAR c_sel_row-high.
       ENDIF.
-      IF c_sel_row-int_type = 'D'.
+      IF c_sel_row-int_type = 'D' OR c_sel_row-int_type = 'T' .
         DO 2 TIMES.
           ASSIGN COMPONENT  COND string( WHEN sy-index = 1 THEN 'LOW' ELSE 'HIGH'  ) OF STRUCTURE <range> TO FIELD-SYMBOL(<field>).
           IF <field> IS INITIAL.
             CONTINUE.
           ENDIF.
 
-          CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL' ##FM_SUBRC_OK
-            EXPORTING
-              date_external            = <field>
-            IMPORTING
-              date_internal            = <field>
-            EXCEPTIONS
-              date_external_is_invalid = 1
-              OTHERS                   = 2.
+          IF c_sel_row-int_type = 'D'.
+            CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL' ##FM_SUBRC_OK
+              EXPORTING
+                date_external            = <field>
+              IMPORTING
+                date_internal            = <field>
+              EXCEPTIONS
+                date_external_is_invalid = 1
+                OTHERS                   = 2.
+          ELSE.
+            REPLACE ALL OCCURRENCES OF ':' IN <field> WITH ''.
+          ENDIF.
         ENDDO.
       ENDIF.
     ENDIF.
@@ -2718,29 +3237,24 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   METHOD constructor.
 
     super->constructor( ).
-    m_hide = '01'.
-    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.1' i_width = 800 i_hight = 300 ).
-    CREATE OBJECT mo_splitter ##FM_SUBRC_OK
-      EXPORTING
-        parent  = mo_box
-        rows    = 1
-        columns = 1
-      EXCEPTIONS
-        OTHERS  = 1.
 
-    mo_splitter->get_container(
-     EXPORTING
-       row       = 1
-       column    = 1
-     RECEIVING
-       container = mo_parent ).
-
-    SET HANDLER on_box_close FOR mo_box.
-
-    cl_salv_tree=>factory(
-         EXPORTING r_container = mo_parent
-         IMPORTING r_salv_tree = tree
-         CHANGING t_table = tree_table ).
+    IF i_type = 'L'.
+      m_hide = '01'.
+      cl_salv_tree=>factory(
+           EXPORTING r_container = i_cont
+           IMPORTING r_salv_tree = tree
+           CHANGING t_table = tree_table ).
+    ELSEIF i_type = 'I'.
+      cl_salv_tree=>factory(
+       EXPORTING r_container = i_cont
+       IMPORTING r_salv_tree = tree
+       CHANGING t_table = tree_table ).
+    ELSEIF i_type = 'E'.
+      cl_salv_tree=>factory(
+           EXPORTING r_container = i_cont
+           IMPORTING r_salv_tree = tree
+           CHANGING t_table = tree_table ).
+    ENDIF.
 
     DATA(lo_setting) =  tree->get_tree_settings( ).
     lo_setting->set_hierarchy_header( i_header ).
@@ -2749,12 +3263,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     DATA(lo_columns) = tree->get_columns( ).
     lo_columns->set_optimize( abap_true ).
-    lo_columns->set_optimize( abap_false ).
     lo_columns->get_column( 'VALUE' )->set_short_text( 'Value' ).
     lo_columns->get_column( 'VALUE' )->set_output_length( 40 ).
-    lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
-    "lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full Name' ).
-    "lo_columns->get_column( 'FULLNAME' )->set_output_length( 40 ).
+
+    lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full name' ).
+    IF i_type NE 'L'.
+      lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
+    ENDIF.
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
 
     add_buttons( ).
@@ -2763,86 +3278,19 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     DATA(lo_event) = tree->get_event( ) .
     SET HANDLER hndl_double_click
                 hndl_user_command FOR lo_event.
+
+    tree->display( ).
   ENDMETHOD.
+
 
   METHOD add_buttons.
     DATA(lo_functions) = tree->get_functions( ).
     lo_functions->set_all( ).
-
-    lo_functions->add_function(
-       name     = 'INITIALS'
-       icon     = CONV #( icon_start_viewer )
-       text     = 'Initials'
-       tooltip  = 'Show/hide initial values'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'CHANGED'
-       icon     = CONV #( icon_interchange )
-       text     = ''
-       tooltip  = 'Show only changed values/all values'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'GLOBALS'
-       icon     = CONV #( icon_foreign_trade )
-       text     = 'Globals'
-       tooltip  = 'Show/hide global variables'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'CLASS_DATA'
-       icon     = CONV #( icon_oo_class_attribute )
-       text     = 'CLASS-DATA'
-       tooltip  = 'Show/hide Class-Data variables (global)'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-           name     = 'LDB'
-           icon     = CONV #( icon_biw_report_view )
-           text     = 'LDB'
-           tooltip  = 'Show/hide Local Data Base variables (global)'
-           position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'REFRESH'
-       icon     = CONV #( icon_refresh )
-       text     = ''
-       tooltip  = 'Refresh'
-       position = if_salv_c_function_position=>left_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'F5'
-       icon     = CONV #( icon_debugger_step_into )
-       text     = ''
-       tooltip  = 'Step into'
-       position = if_salv_c_function_position=>left_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'F6'
-       icon     = CONV #( icon_debugger_step_over )
-       text     = ''
-       tooltip  = 'Step over'
-       position = if_salv_c_function_position=>left_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'F7'
-       icon     = CONV #( icon_debugger_step_out )
-       text     = ''
-       tooltip  = 'Step out'
-       position = if_salv_c_function_position=>left_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'F8'
-       icon     = CONV #( icon_debugger_continue )
-       text     = ''
-       tooltip  = 'Continue'
-       position = if_salv_c_function_position=>left_of_salv_functions ).
-
   ENDMETHOD.
 
   METHOD clear.
     m_correction = m_correction + lines( tree_table ).
+
     tree->get_nodes( )->delete_all( ).
     CLEAR: m_globals_key,
            m_locals_key,
@@ -2859,7 +3307,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             collapsed_icon = iv_icon
             expanded_icon = iv_icon
             relationship   = if_salv_c_node_relation=>last_child
-            row_style = if_salv_c_tree_style=>emphasized_b
+            row_style = if_salv_c_tree_style=>emphasized_c
             text           = CONV #( iv_name )
             folder         = abap_true
           )->get_key( ).
@@ -3004,8 +3452,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDIF.
   ENDMETHOD.
 
+
   METHOD display.
-    mo_debugger = io_debugger.
+
     DATA(lo_columns) = tree->get_columns( ).
     lo_columns->get_column( 'KIND' )->set_visible( abap_false ).
     DATA(lo_nodes) = tree->get_nodes( ).
@@ -3022,44 +3471,44 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           CATCH cx_root.
         ENDTRY.
       ENDIF.
-      "EXIT.
     ENDLOOP.
 
     tree->display( ).
-    IF mo_debugger IS NOT INITIAL.
-      mo_debugger->break2( ).
+
+    IF io_debugger IS NOT INITIAL.
+      io_debugger->break2( ).
     ENDIF.
   ENDMETHOD.
 
   METHOD hndl_user_command.
-    CONSTANTS: c_mask TYPE x VALUE '01'.
-    CASE e_salv_function.
-      WHEN 'REFRESH'."
-        mo_debugger->run_script( ).
-      WHEN 'INITIALS'."Show/hide empty variables
-        m_hide = m_hide BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'GLOBALS'."Show/hide global variables
-        m_globals = m_globals BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
-        m_class_data = m_class_data BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'CHANGED'."Show only changed values/all values
-        m_changed = m_changed BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'LDB'."Show/hide LDB variables (globals)
-        m_ldb = m_ldb BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'F5'.
-        mo_debugger->f5( ).
-      WHEN 'F6'.
-        mo_debugger->f6( ).
-      WHEN 'F7'.
-        mo_debugger->f7( ).
-      WHEN 'F8'.
-        mo_debugger->f8( ).
-    ENDCASE.
+*    CONSTANTS: c_mask TYPE x VALUE '01'.
+*    CASE e_salv_function.
+*      WHEN 'REFRESH'."
+*        mo_debugger->run_script( ).
+*      WHEN 'INITIALS'."Show/hide empty variables
+*        m_hide = m_hide BIT-XOR c_mask.
+*        mo_debugger->run_script( ).
+*      WHEN 'GLOBALS'."Show/hide global variables
+*        m_globals = m_globals BIT-XOR c_mask.
+*        mo_debugger->run_script( ).
+*      WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
+*        m_class_data = m_class_data BIT-XOR c_mask.
+*        mo_debugger->run_script( ).
+*      WHEN 'CHANGED'."Show only changed values/all values
+*        m_changed = m_changed BIT-XOR c_mask.
+*        mo_debugger->run_script( ).
+*      WHEN 'LDB'."Show/hide LDB variables (globals)
+*        m_ldb = m_ldb BIT-XOR c_mask.
+*        mo_debugger->run_script( ).
+*      WHEN 'F5'.
+*        mo_debugger->f5( ).
+*      WHEN 'F6'.
+*        mo_debugger->f6( ).
+*      WHEN 'F7'.
+*        mo_debugger->f7( ).
+*      WHEN 'F8'.
+*        mo_debugger->f8( ).
+*    ENDCASE.
   ENDMETHOD.
 
   METHOD hndl_double_click.
@@ -3083,6 +3532,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         NEW lcl_text_viewer( <ref> ).
     ENDCASE.
   ENDMETHOD.
+
 
   METHOD add_variable.
     DATA: lr_new   TYPE REF TO data,
@@ -3136,7 +3586,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ASSIGN m_variable->* TO FIELD-SYMBOL(<new_value>).
 
       READ TABLE mt_vars WITH KEY name = l_name INTO DATA(l_var).
-      .
       IF sy-subrc = 0.
 
         DATA(lo_nodes) = tree->get_nodes( ).
@@ -3159,30 +3608,34 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                   DELETE mt_vars WHERE name = l_name.
                 ENDIF.
               ELSE.
+
                 IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
                   IF <kind> NE 'v' AND <kind> NE 'u'.
                     DELETE mt_vars WHERE name = l_name.
                     l_node->delete( ).
                   ENDIF.
                 ENDIF.
-                IF m_changed IS NOT INITIAL and m_leaf+0(5) ne 'Debug'."check changed
 
-                  READ TABLE mt_state WITH KEY name = l_name ASSIGNING FIELD-SYMBOL(<state>).
-                  IF sy-subrc = 0.
-                    ASSIGN <state>-ref->* TO <old_value>.
-                    IF <old_value> = <new_value>.
-                      IF <kind> NE 'v' AND <kind> NE 'u'.
+                READ TABLE mt_state WITH KEY name = l_name ASSIGNING FIELD-SYMBOL(<state>).
+                IF sy-subrc = 0.
+                  ASSIGN <state>-ref->* TO <old_value>.
+                  IF <old_value> = <new_value>.
+                    IF <kind> NE 'v' AND <kind> NE 'u'.
+                      IF m_changed IS NOT INITIAL.
                         DELETE mt_vars WHERE name = l_name.
                         l_node->delete( ).
                         RETURN.
+                      ELSE.
+                        RETURN.
                       ENDIF.
-                    ELSE.
-                      <state>-ref = m_variable.
+                    ENDIF.
+                  ELSE.
+                    IF <kind> NE 'v' AND <kind> NE 'u'.
+                      DELETE mt_vars WHERE name = l_name.
+                      l_node->delete( ).
                     ENDIF.
                   ENDIF.
                 ENDIF.
-
-                "RETURN.
               ENDIF.
 
               IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
@@ -3195,17 +3648,16 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         ENDIF.
       ELSE.
 
-        IF m_changed IS NOT INITIAL and m_leaf+0(5) ne 'Debug'."check changed
+        IF m_changed IS NOT INITIAL."check changed
           READ TABLE mt_state WITH KEY name = iv_full_name ASSIGNING <state>.
           IF sy-subrc = 0.
             ASSIGN <state>-ref->* TO <old_value>.
             IF <old_value> = <new_value>.
               DELETE mt_vars WHERE name = l_name.
-              IF l_node is not INITIAL.
-              l_node->delete( ).
+              IF l_node IS NOT INITIAL.
+                l_node->delete( ).
               ENDIF.
-            ELSE.
-              <state>-ref = m_variable.
+              RETURN.
             ENDIF.
           ENDIF.
         ENDIF.
@@ -3238,32 +3690,25 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ir_up = m_variable
       iv_parent_name = l_name ).
 
-    APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
-    <vars>-leaf = m_leaf.
-    <vars>-name = l_full_name.
-    <vars>-key = l_root_key.
-    <vars>-ref = m_variable.
-
-    IF m_changed IS NOT INITIAL."check changed
-      READ TABLE mt_state WITH KEY name = iv_full_name ASSIGNING <state>.
-      IF sy-subrc <> 0.
-        APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
-        <state> = <vars>.
-      ENDIF.
+    READ TABLE mt_vars WITH KEY name = l_full_name TRANSPORTING NO FIELDS.
+    IF sy-subrc NE 0.
+      APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+      <vars>-leaf = m_leaf.
+      <vars>-name = l_full_name.
+      <vars>-key = l_root_key.
+      <vars>-ref = m_variable.
     ENDIF.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling.
       IF <kind> NE 'v' AND <kind> NE 'u'.
-        IF l_node is not INITIAL.
-        l_node->delete( ).
+        IF l_node IS NOT INITIAL.
+          l_node->delete( ).
         ENDIF.
       ENDIF.
       "expanding  node.
-*      IF m_new_node IS NOT INITIAL.
-*        lo_nodes = tree->get_nodes( ).
-*        l_node =  lo_nodes->get_node( m_new_node ).
+*      IF m_new_node IS NOT INITIAL and m_changed is not INITIAL.
+*        l_node = tree->get_nodes( )->get_node( m_new_node ).
 *        l_node->expand( ).
-*        CLEAR m_new_node.
 *      ENDIF.
     ENDIF.
   ENDMETHOD.
@@ -3432,20 +3877,14 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDIF.
 
     l_rel = iv_rel.
-
-
     ASSIGN ir_up->* TO FIELD-SYMBOL(<new_value>).
-
     READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
-
     IF sy-subrc = 0.
 
       DATA(lo_nodes) = tree->get_nodes( ).
       DATA(l_node) =  lo_nodes->get_node( l_var-key ).
       DATA r_row TYPE REF TO data.
       DATA r_ref TYPE REF TO data.
-
-      "IF sy-subrc = 0.
 
       TRY.
           r_row = l_node->get_data_row( ).
@@ -3467,25 +3906,23 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 l_node->delete( ).
               ENDIF.
             ENDIF.
-            IF m_changed IS NOT INITIAL and m_leaf+0(5) ne 'Debug'."check changed
+            IF m_changed IS NOT INITIAL AND m_leaf+0(5) NE 'Debug'."check changed
 
               READ TABLE mt_state WITH KEY name = iv_fullname ASSIGNING FIELD-SYMBOL(<state>).
               IF sy-subrc = 0.
                 ASSIGN <state>-ref->* TO <old_value>.
                 IF <old_value> = <new_value>.
 
-                  IF <kind> NE 'v' AND <kind> NE 'u'.
+                  IF <kind> NE 'v' AND <kind> NE 'u'." AND m_changed is not INITIAL.
                     DELETE mt_vars WHERE name = iv_fullname.
                     l_node->delete( ).
                   ENDIF.
                   RETURN.
                 ELSE.
-                  <state>-ref = m_variable.
+                  <state>-ref = ir_up. "m_variable.
                 ENDIF.
               ENDIF.
             ENDIF.
-
-            RETURN.
           ENDIF.
 
           IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
@@ -3495,10 +3932,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ENDIF.
         CATCH cx_root.
       ENDTRY.
-      "ENDIF.
     ELSE.
 
-      IF m_changed IS NOT INITIAL and m_leaf+0(5) ne 'Debug'."check changed
+      IF m_changed IS NOT INITIAL."check changed
 
         READ TABLE mt_state WITH KEY name = iv_fullname ASSIGNING <state>.
         IF sy-subrc = 0.
@@ -3510,22 +3946,15 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             ENDIF.
             RETURN.
           ELSE.
-            <state>-ref = m_variable.
+            <state>-ref = ir_up.
           ENDIF.
         ENDIF.
       ENDIF.
 
-      "IF lv_type NE cl_abap_typedescr=>typekind_table.
       IF <var> IS INITIAL AND m_hide IS NOT INITIAL.
         RETURN.
       ENDIF.
-*        ELSE.
-*          IF <tab_to> IS INITIAL AND m_hide IS NOT INITIAL.
-*            RETURN.
-*          ENDIF.
-*        ENDIF.
     ENDIF.
-
 
     e_root_key = tree->get_nodes( )->add_node(
        related_node   = l_key
@@ -3542,19 +3971,18 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     <vars>-key = e_root_key.
     <vars>-ref = ir_up.
 
-    IF m_changed IS NOT INITIAL."check changed
+    "IF m_changed IS NOT INITIAL."check changed
 
-      READ TABLE mt_state WITH KEY name = iv_fullname ASSIGNING <state>.
-      IF sy-subrc <> 0.
-        APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
-        <state> = <vars>.
-      ENDIF.
+    READ TABLE mt_state WITH KEY name = iv_fullname ASSIGNING <state>.
+    IF sy-subrc <> 0.
+      APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
+      <state> = <vars>.
     ENDIF.
+    "ENDIF.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
       l_node->delete( ).
     ENDIF.
-
   ENDMETHOD.
 
   METHOD traverse_table.
