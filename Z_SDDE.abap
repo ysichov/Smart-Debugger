@@ -1,5 +1,3 @@
-REPORT zys_ariadna.
-PARAMETERS: a TYPE  i.
 *&---------------------------------------------------------------------*
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
@@ -259,7 +257,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
 
     DATA: mt_obj        TYPE TABLE OF t_obj,
           mt_locals     TYPE tpda_scr_locals_it,
-          mt_globals    TYPE TPDA_SCR_GLOBALS_IT,
+          mt_globals    TYPE tpda_scr_globals_it,
           mt_ret_exp    TYPE tpda_scr_locals_it,
           mo_window     TYPE REF TO lcl_window,
           go_tree_imp   TYPE REF TO lcl_rtti_tree,
@@ -1148,6 +1146,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         IF l_prg-event-eventname NE go_tree_local->m_prg_info-event-eventname.
           go_tree_local->m_prg_info-event-eventname = l_prg-event-eventname.
 
+          CLEAR mt_ret_exp.
           CLEAR go_tree_local->m_no_refresh.
           CLEAR go_tree_local->mt_vars.
           CLEAR go_tree_local->mt_state.
@@ -1213,6 +1212,86 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                 lt_doc    TYPE TABLE OF rsfdo,
                 lt_source TYPE TABLE OF rssource.
 
+          IF l_prg-event-eventtype = 'FORM'.
+
+            TYPES: BEGIN OF t_param,
+                     form TYPE string,
+                     name TYPE string,
+                     type TYPE char1,
+                   END OF t_param.
+
+            DATA: gr_scan  TYPE REF TO cl_ci_scan,
+                  lt_param TYPE TABLE OF t_param,
+                  ls_param TYPE t_param,
+                  lv_par   TYPE char1,
+                  lv_type  TYPE char1.
+            DATA(gr_source) = cl_ci_source_include=>create( p_name = conv #( l_prg-include ) ).
+            CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
+
+            LOOP AT gr_scan->tokens INTO DATA(l_token) WHERE str = 'FORM' .
+              READ TABLE gr_scan->statements INTO DATA(l_statement) WITH KEY from =  sy-tabix.
+
+              LOOP AT gr_scan->tokens FROM l_statement-from TO l_statement-to INTO l_token.
+                IF sy-tabix = l_statement-from.
+                  CONTINUE.
+                ENDIF.
+                IF sy-tabix = l_statement-from + 1.
+                  ls_param-form = l_token-str.
+                  CONTINUE.
+                ENDIF.
+                IF l_token-str = 'USING'.
+                  ls_param-type = 'I'.
+                  CLEAR: lv_type, lv_par.
+                  CONTINUE.
+                ELSEIF l_token-str = 'CHANGING'.
+                  IF ls_param-name IS NOT INITIAL.
+                    APPEND ls_param TO lt_param.
+                    CLEAR: lv_type, lv_par, ls_param-name.
+                  ENDIF.
+                  ls_param-type = 'E'.
+                  CLEAR: lv_type, lv_par.
+                  CONTINUE.
+                ENDIF.
+                IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str NE 'TYPE'.
+                  APPEND ls_param TO lt_param.
+                  CLEAR: lv_par, ls_param-name.
+                ENDIF.
+
+                IF lv_par IS INITIAL.
+                  ls_param-name = l_token-str.
+                  lv_par = abap_true.
+                  CONTINUE.
+                ENDIF.
+                IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str = 'TYPE'.
+                  lv_type = abap_true.
+                  CONTINUE.
+                ENDIF.
+                IF lv_par = abap_true AND lv_type = abap_true.
+                  APPEND ls_param TO lt_param.
+                  CLEAR: lv_type, lv_par, ls_param-name.
+                ENDIF.
+              ENDLOOP.
+              "read table gr_scan->tokens into data(l_token2) index lv_ind.
+            ENDLOOP.
+            IF ls_param-name IS NOT INITIAL.
+              APPEND ls_param TO lt_param.
+            ENDIF.
+
+          LOOP AT lt_param into ls_param where form = l_prg-event-eventname.
+            IF ls_param-type = 'I'.
+              transfer_variable( EXPORTING i_name = CONV #( ls_param-name ) i_tree = go_tree_imp ).
+              DELETE mt_locals WHERE name = ls_param-name.
+            ENDIF.
+
+            IF ls_param-type = 'E'.
+              APPEND INITIAL LINE TO mt_ret_exp ASSIGNING <ret_exp>.
+              <ret_exp>-name = ls_param-name.
+              DELETE mt_locals WHERE name = ls_param-name.
+            ENDIF.
+          ENDLOOP.
+          go_tree_imp->display( ).
+          ENDIF.
+
           IF l_prg-event-eventtype = 'FUNCTION'.
 
             CALL FUNCTION 'RPY_FUNCTIONMODULE_READ'
@@ -1266,7 +1345,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
           ENDIF.
 
-         CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
+          CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
           SORT mt_globals.
 
         ENDIF.
@@ -4335,4 +4414,3 @@ CLASS lcl_dragdrop IMPLEMENTATION.
     lo_to->raise_selection_done( ).
   ENDMETHOD.
 ENDCLASS.
-INCLUDE zys_ariadna_frm.
