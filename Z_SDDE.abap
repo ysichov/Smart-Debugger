@@ -1,3 +1,5 @@
+REPORT zys_ariadna.
+PARAMETERS: a TYPE  i.
 *&---------------------------------------------------------------------*
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Multi-windows program for viewing all objects and data structures in debug
@@ -257,6 +259,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
 
     DATA: mt_obj        TYPE TABLE OF t_obj,
           mt_locals     TYPE tpda_scr_locals_it,
+          mt_globals    TYPE TPDA_SCR_GLOBALS_IT,
           mt_ret_exp    TYPE tpda_scr_locals_it,
           mo_window     TYPE REF TO lcl_window,
           go_tree_imp   TYPE REF TO lcl_rtti_tree,
@@ -1263,8 +1266,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
           ENDIF.
 
-          CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = DATA(globals).
-          SORT globals.
+         CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
+          SORT mt_globals.
 
         ENDIF.
       CATCH cx_tpda_src_info.
@@ -1345,7 +1348,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ELSE.
         go_tree_local->main_node_key = go_tree_local->m_ldb_key.
       ENDIF.
-      LOOP AT globals INTO DATA(ls_global).
+      LOOP AT mt_globals INTO DATA(ls_global).
         READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
         IF sy-subrc NE 0.
           transfer_variable( EXPORTING i_name = ls_global-name i_tree = go_tree_local ).
@@ -1369,7 +1372,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
       transfer_variable( EXPORTING i_name = 'SYST' i_tree = go_tree_local ).
-      LOOP AT globals INTO ls_global.
+      LOOP AT mt_globals INTO ls_global.
         READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
           transfer_variable( EXPORTING i_name = ls_global-name i_tree = go_tree_local ).
@@ -4332,3 +4335,4 @@ CLASS lcl_dragdrop IMPLEMENTATION.
     lo_to->raise_selection_done( ).
   ENDMETHOD.
 ENDCLASS.
+INCLUDE zys_ariadna_frm.
