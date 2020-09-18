@@ -1,3 +1,5 @@
+REPORT zys_ariadna.
+PARAMETERS: a TYPE  i.
 *&---------------------------------------------------------------------*
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Advanced Reverse Ingeneering Abap Debugger with Network Analytycs
@@ -1172,6 +1174,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                      ev_private_key = lv_private_key ).
 
           LOOP AT lt_attributes ASSIGNING FIELD-SYMBOL(<ls_attribute>).
+
             CASE <ls_attribute>-acckind.
               WHEN '1'.
                 lv_node_key = lv_public_key.
@@ -1218,6 +1221,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                   WHEN OTHERS.
                     READ TABLE mt_obj WITH KEY name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| TRANSPORTING NO FIELDS.
                     IF sy-subrc NE 0.
+
                       transfer_variable( EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }|
                                                    i_shortname = <ls_attribute>-name i_new_node = lv_node_key
                                                    i_tree = go_tree_local ).
@@ -3816,7 +3820,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 ENDIF.
               ENDIF.
 
-              READ TABLE mt_state WITH KEY name = l_name ASSIGNING FIELD-SYMBOL(<state>).
+              READ TABLE mt_state WITH KEY name = l_full_name ASSIGNING FIELD-SYMBOL(<state>).
               IF sy-subrc = 0.
                 ASSIGN <state>-ref->* TO <old_value>.
                 IF <old_value> = <new_value>.
@@ -4459,3 +4463,4 @@ CLASS lcl_dragdrop IMPLEMENTATION.
     lo_to->raise_selection_done( ).
   ENDMETHOD.
 ENDCLASS.
+INCLUDE zys_ariadna_frm.
