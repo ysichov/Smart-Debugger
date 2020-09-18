@@ -1,5 +1,6 @@
 *&---------------------------------------------------------------------*
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
+*& Advanced Reverse Ingeneering Abap Debugger with Network Analytycs
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
 *& version: beta 0.3.150.150
@@ -255,6 +256,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
              name TYPE string,
            END OF t_obj.
 
+
     DATA: mt_obj        TYPE TABLE OF t_obj,
           mt_locals     TYPE tpda_scr_locals_it,
           mt_globals    TYPE tpda_scr_globals_it,
@@ -319,7 +321,13 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
              name TYPE string,
              key  TYPE salv_de_node_key,
              ref  TYPE REF TO data,
-           END OF var_table.
+           END OF var_table,
+           BEGIN OF t_classes_leaf,
+             "leaf TYPE string,
+             name TYPE string,
+             type TYPE char1,
+             key  TYPE salv_de_node_key,
+           END OF t_classes_leaf.
 
     TYPES: BEGIN OF ts_table,
              ref      TYPE REF TO data,
@@ -332,29 +340,30 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
     TYPES tt_table TYPE STANDARD TABLE OF ts_table
           WITH NON-UNIQUE DEFAULT KEY.
 
-    DATA: main_node_key TYPE salv_de_node_key,
-          m_leaf        TYPE string,
-          m_variable    TYPE REF TO data,
-          m_object      TYPE REF TO object,
-          m_correction  TYPE i,
-          m_hide        TYPE x,
-          m_globals     TYPE x,
-          m_class_data  TYPE x,
-          m_ldb         TYPE x,
-          m_changed     TYPE x,
-          m_locals_key  TYPE salv_de_node_key,
-          m_globals_key TYPE salv_de_node_key,
-          m_class_key   TYPE salv_de_node_key,
-          m_ldb_key     TYPE salv_de_node_key,
-          m_debug_key   TYPE salv_de_node_key,
-          m_icon        TYPE salv_de_tree_image,
-          mt_vars       TYPE STANDARD TABLE OF var_table,
-          mt_state      TYPE STANDARD TABLE OF var_table,
-          m_new_node    TYPE salv_de_node_key,
-          m_no_refresh  TYPE xfeld,
-          m_ref         TYPE xfeld,
-          m_prg_info    TYPE tpda_scr_prg_info,
-          tree          TYPE REF TO cl_salv_tree.
+    DATA: main_node_key   TYPE salv_de_node_key,
+          m_leaf          TYPE string,
+          m_variable      TYPE REF TO data,
+          m_object        TYPE REF TO object,
+          m_correction    TYPE i,
+          m_hide          TYPE x,
+          m_globals       TYPE x,
+          m_class_data    TYPE x,
+          m_ldb           TYPE x,
+          m_changed       TYPE x,
+          m_locals_key    TYPE salv_de_node_key,
+          m_globals_key   TYPE salv_de_node_key,
+          m_class_key     TYPE salv_de_node_key,
+          m_ldb_key       TYPE salv_de_node_key,
+          m_debug_key     TYPE salv_de_node_key,
+          m_icon          TYPE salv_de_tree_image,
+          mt_vars         TYPE STANDARD TABLE OF var_table,
+          mt_state        TYPE STANDARD TABLE OF var_table,
+          mt_classes_leaf TYPE TABLE OF t_classes_leaf,
+          m_new_node      TYPE salv_de_node_key,
+          m_no_refresh    TYPE xfeld,
+          m_ref           TYPE xfeld,
+          m_prg_info      TYPE tpda_scr_prg_info,
+          tree            TYPE REF TO cl_salv_tree.
 
     METHODS constructor IMPORTING i_header TYPE clike DEFAULT 'View'
                                   i_type   TYPE string
@@ -850,7 +859,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ELSEIF quick-typid = 'r'. "reference
           DATA: l_rel   TYPE salv_de_node_relation,
                 lv_node TYPE salv_de_node_key.
-
+          "
           l_rel = if_salv_c_node_relation=>last_child.
           lv_node = i_new_node.
 
@@ -858,7 +867,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           IF sy-subrc = 0.
             l_rel = if_salv_c_node_relation=>next_sibling.
             lv_node = l_var-key.
-            DELETE i_tree->mt_vars WHERE name = l_name.
+            "DELETE i_tree->mt_vars WHERE name = l_name.
           ENDIF.
 
           i_tree->m_ref = 'X'.
@@ -869,9 +878,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                      iv_rel = l_rel
                                      i_quick = quick ).
 
-          IF l_rel = if_salv_c_node_relation=>next_sibling.
-            i_tree->delete_node( l_var-key ).
-          ENDIF.
+*          IF l_rel = if_salv_c_node_relation=>next_sibling.
+*            i_tree->delete_node( l_var-key ).
+*          ENDIF.
           CLEAR i_tree->m_ref.
 
         ELSEIF quick-typid = 'v' OR quick-typid = 'u'."deep structure or structure
@@ -959,13 +968,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF <ls_symobjref>-instancename <> '{O:initial}'.
       READ TABLE mt_obj WITH KEY name = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
       IF sy-subrc = 0.
-        go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
-                                        iv_full = <ls_symobjref>-instancename
-                                          iv_key = i_new_node ).
+*        go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
+*                                        iv_full = <ls_symobjref>-instancename
+*                                          iv_key = i_new_node ).
         RETURN.
       ENDIF.
-      ls_obj-name = <ls_symobjref>-instancename.
-      COLLECT ls_obj INTO mt_obj.
+      "ls_obj-name = <ls_symobjref>-instancename.
+      "COLLECT ls_obj INTO mt_obj.
 
       TRY.
 *          CALL METHOD cl_tpda_script_data_descr=>get_quick_info
@@ -975,8 +984,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 *              p_symb_quick = DATA(quick).
 
           lo_descr = cl_tpda_script_data_descr=>factory( <ls_symobjref>-instancename ).
-          ls_obj-name = <ls_symobjref>-instancename.
-          COLLECT ls_obj INTO mt_obj.
+          "ls_obj-name = <ls_symobjref>-instancename.
+          "COLLECT ls_obj INTO mt_obj.
           lo_object ?= lo_descr.
 
           lt_attributes = lo_object->attributes( ).
@@ -991,10 +1000,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                      ev_protected_key = lv_protected_key
                                      ev_private_key = lv_private_key ).
 
-          APPEND INITIAL LINE TO go_tree_local->mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
-          <vars>-leaf = go_tree_local->m_leaf.
-          <vars>-name = i_name.
-          <vars>-key = e_root_key.
 
           LOOP AT lt_attributes ASSIGNING FIELD-SYMBOL(<ls_attribute>).
             CASE <ls_attribute>-acckind.
@@ -1225,7 +1230,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                   ls_param TYPE t_param,
                   lv_par   TYPE char1,
                   lv_type  TYPE char1.
-            DATA(gr_source) = cl_ci_source_include=>create( p_name = conv #( l_prg-include ) ).
+            DATA(gr_source) = cl_ci_source_include=>create( p_name = CONV #( l_prg-include ) ).
             CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
 
             LOOP AT gr_scan->tokens INTO DATA(l_token) WHERE str = 'FORM' .
@@ -1277,19 +1282,19 @@ CLASS lcl_debugger_script IMPLEMENTATION.
               APPEND ls_param TO lt_param.
             ENDIF.
 
-          LOOP AT lt_param into ls_param where form = l_prg-event-eventname.
-            IF ls_param-type = 'I'.
-              transfer_variable( EXPORTING i_name = CONV #( ls_param-name ) i_tree = go_tree_imp ).
-              DELETE mt_locals WHERE name = ls_param-name.
-            ENDIF.
+            LOOP AT lt_param INTO ls_param WHERE form = l_prg-event-eventname.
+              IF ls_param-type = 'I'.
+                transfer_variable( EXPORTING i_name = CONV #( ls_param-name ) i_tree = go_tree_imp ).
+                DELETE mt_locals WHERE name = ls_param-name.
+              ENDIF.
 
-            IF ls_param-type = 'E'.
-              APPEND INITIAL LINE TO mt_ret_exp ASSIGNING <ret_exp>.
-              <ret_exp>-name = ls_param-name.
-              DELETE mt_locals WHERE name = ls_param-name.
-            ENDIF.
-          ENDLOOP.
-          go_tree_imp->display( ).
+              IF ls_param-type = 'E'.
+                APPEND INITIAL LINE TO mt_ret_exp ASSIGNING <ret_exp>.
+                <ret_exp>-name = ls_param-name.
+                DELETE mt_locals WHERE name = ls_param-name.
+              ENDIF.
+            ENDLOOP.
+            go_tree_imp->display( ).
           ENDIF.
 
           IF l_prg-event-eventtype = 'FUNCTION'.
@@ -3387,7 +3392,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     super->constructor( ).
 
     IF i_type = 'L'.
-      m_hide = '01'.
+      "m_hide = '01'.
       cl_salv_tree=>factory(
            EXPORTING r_container = i_cont
            IMPORTING r_salv_tree = tree
@@ -3415,10 +3420,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lo_columns->get_column( 'VALUE' )->set_output_length( 40 ).
 
     lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full name' ).
+    lo_columns->get_column( 'FULLNAME' )->set_output_length( 40 ).
+
     IF i_type NE 'L'.
       lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
     ENDIF.
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
+    lo_columns->get_column( 'TYPENAME' )->set_output_length( 20 ).
 
     add_buttons( ).
 
@@ -3498,56 +3506,107 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ls_tree-fullname = iv_full.
     ENDIF.
 
-    e_root_key = lv_node_key = tree->get_nodes( )->add_node(
-      related_node   = l_new_node
-      relationship   = iv_rel
-      collapsed_icon = lv_icon
-      expanded_icon  = lv_icon
-      data_row       = ls_tree
-      text           = lv_text
-      folder         = abap_false )->get_key( ).
+    READ TABLE mt_classes_leaf WITH KEY name = iv_name type = '' ASSIGNING FIELD-SYMBOL(<class>).
+    IF sy-subrc = 0.
+      e_root_key = <class>-key.
+    ELSE.
+
+      e_root_key = lv_node_key = tree->get_nodes( )->add_node(
+        related_node   = l_new_node
+        relationship   = iv_rel
+        collapsed_icon = lv_icon
+        expanded_icon  = lv_icon
+        data_row       = ls_tree
+        text           = lv_text
+        folder         = abap_false )->get_key( ).
+
+      APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
+        <class>-name = iv_name.
+        <class>-key = ev_public_key.
+        <class>-type = ''.
+
+      APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+      <vars>-leaf = m_leaf.
+      <vars>-name = iv_name.
+      <vars>-key = e_root_key.
+
+
+    ENDIF.
 
     lv_icon = icon_led_green.
 
     READ TABLE it_attr WITH KEY acckind = '1' TRANSPORTING NO FIELDS.
     IF sy-subrc = 0.
-      ev_public_key =
-        tree->get_nodes( )->add_node(
-          related_node   = lv_node_key
-          relationship   = if_salv_c_node_relation=>last_child
-          collapsed_icon = lv_icon
-          expanded_icon  = lv_icon
-          text           = 'Public'
-          folder         = abap_true
-        )->get_key( ).
+      READ TABLE mt_classes_leaf WITH KEY name = iv_name type = 1 ASSIGNING <class>.
+      IF sy-subrc = 0.
+        ev_public_key = <class>-key.
+      ELSE.
+        ev_public_key =
+          tree->get_nodes( )->add_node(
+            related_node   = lv_node_key
+            relationship   = if_salv_c_node_relation=>last_child
+            collapsed_icon = lv_icon
+            expanded_icon  = lv_icon
+            text           = 'Public'
+            folder         = abap_true
+          )->get_key( ).
+
+        APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
+        <class>-name = iv_name.
+        <class>-key = ev_public_key.
+        <class>-type = 1.
+      ENDIF.
     ENDIF.
 
     READ TABLE it_attr WITH KEY acckind = '3' TRANSPORTING NO FIELDS.
     IF sy-subrc = 0.
       lv_icon = icon_led_yellow.
-      ev_protected_key =
-        tree->get_nodes( )->add_node(
-          related_node   = lv_node_key
-          relationship   = if_salv_c_node_relation=>last_child
-          collapsed_icon = lv_icon
-          expanded_icon  = lv_icon
-          text           = 'Protected'
-          folder         = abap_true
-        )->get_key( ).
+
+      READ TABLE mt_classes_leaf WITH KEY name = iv_name type = 3 ASSIGNING <class>.
+      IF sy-subrc = 0.
+        ev_protected_key = <class>-key.
+      ELSE.
+
+        ev_protected_key =
+          tree->get_nodes( )->add_node(
+            related_node   = lv_node_key
+            relationship   = if_salv_c_node_relation=>last_child
+            collapsed_icon = lv_icon
+            expanded_icon  = lv_icon
+            text           = 'Protected'
+            folder         = abap_true
+          )->get_key( ).
+
+        APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
+        <class>-name = iv_name.
+        <class>-key = ev_protected_key.
+        <class>-type = 3.
+      ENDIF.
     ENDIF.
 
     READ TABLE it_attr WITH KEY acckind = '2' TRANSPORTING NO FIELDS.
     IF sy-subrc = 0.
       lv_icon = icon_led_red.
-      ev_private_key =
-        tree->get_nodes( )->add_node(
-          related_node   = lv_node_key
-          relationship   = if_salv_c_node_relation=>last_child
-          collapsed_icon = lv_icon
-          expanded_icon  = lv_icon
-          text           = 'Private'
-          folder         = abap_true
-        )->get_key( ).
+      READ TABLE mt_classes_leaf WITH KEY name = iv_name type = 2 ASSIGNING <class>.
+      IF sy-subrc = 0.
+        ev_private_key = <class>-key.
+      ELSE.
+
+        ev_private_key =
+          tree->get_nodes( )->add_node(
+            related_node   = lv_node_key
+            relationship   = if_salv_c_node_relation=>last_child
+            collapsed_icon = lv_icon
+            expanded_icon  = lv_icon
+            text           = 'Private'
+            folder         = abap_true
+          )->get_key( ).
+
+        APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
+        <class>-name = iv_name.
+        <class>-key = ev_private_key.
+        <class>-type = 2.
+      ENDIF.
     ENDIF.
   ENDMETHOD.
 
@@ -3728,8 +3787,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     l_rel = if_salv_c_node_relation=>last_child.
 
-    IF m_ref IS INITIAL.
-
       ASSIGN m_variable->* TO FIELD-SYMBOL(<new_value>).
 
       READ TABLE mt_vars WITH KEY name = l_name INTO DATA(l_var).
@@ -3819,7 +3876,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ENDIF.
         ENDIF.
       ENDIF.
-    ENDIF.
 
     DATA l_full_name TYPE string.
     IF iv_full_name IS SUPPLIED.
@@ -3923,7 +3979,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ls_tree-fullname = iv_fullname.
     IF lv_text IS NOT INITIAL.
 
-      READ TABLE mt_vars WITH KEY name = iv_parent_name INTO DATA(l_var).
+      READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
       IF sy-subrc NE 0.
 
         e_root_key = m_new_node = lv_node_key =
