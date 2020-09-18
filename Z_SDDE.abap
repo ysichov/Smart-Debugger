@@ -361,7 +361,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
           mt_classes_leaf TYPE TABLE OF t_classes_leaf,
           m_new_node      TYPE salv_de_node_key,
           m_no_refresh    TYPE xfeld,
-          m_ref           TYPE xfeld,
+          "m_ref           TYPE xfeld,
           m_prg_info      TYPE tpda_scr_prg_info,
           tree            TYPE REF TO cl_salv_tree.
 
@@ -870,7 +870,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             "DELETE i_tree->mt_vars WHERE name = l_name.
           ENDIF.
 
-          i_tree->m_ref = 'X'.
+          "i_tree->m_ref = 'X'.
 
           create_reference( EXPORTING i_name = i_name
                                      i_shortname = l_name
@@ -881,7 +881,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 *          IF l_rel = if_salv_c_node_relation=>next_sibling.
 *            i_tree->delete_node( l_var-key ).
 *          ENDIF.
-          CLEAR i_tree->m_ref.
+          "CLEAR i_tree->m_ref.
 
         ELSEIF quick-typid = 'v' OR quick-typid = 'u'."deep structure or structure
 
@@ -968,24 +968,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF <ls_symobjref>-instancename <> '{O:initial}'.
       READ TABLE mt_obj WITH KEY name = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
       IF sy-subrc = 0.
-*        go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
-*                                        iv_full = <ls_symobjref>-instancename
-*                                          iv_key = i_new_node ).
+        go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
+                                        iv_full = <ls_symobjref>-instancename
+                                          iv_key = i_new_node ).
         RETURN.
       ENDIF.
-      "ls_obj-name = <ls_symobjref>-instancename.
-      "COLLECT ls_obj INTO mt_obj.
+      ls_obj-name = <ls_symobjref>-instancename.
+      COLLECT ls_obj INTO mt_obj.
 
       TRY.
-*          CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-*            EXPORTING
-*              p_var_name   = <ls_symobjref>-instancename
-*            RECEIVING
-*              p_symb_quick = DATA(quick).
-
           lo_descr = cl_tpda_script_data_descr=>factory( <ls_symobjref>-instancename ).
-          "ls_obj-name = <ls_symobjref>-instancename.
-          "COLLECT ls_obj INTO mt_obj.
+          ls_obj-name = <ls_symobjref>-instancename.
+          COLLECT ls_obj INTO mt_obj.
           lo_object ?= lo_descr.
 
           lt_attributes = lo_object->attributes( ).
@@ -999,7 +993,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                            IMPORTING ev_public_key = lv_public_key
                                      ev_protected_key = lv_protected_key
                                      ev_private_key = lv_private_key ).
-
 
           LOOP AT lt_attributes ASSIGNING FIELD-SYMBOL(<ls_attribute>).
             CASE <ls_attribute>-acckind.
@@ -1040,7 +1033,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                   WHEN cl_tpda_script_data_descr=>mt_tab.
                     lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
                     table_clone = lo_table_descr->elem_clone( ).
-                    "get_table( EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| CHANGING c_obj = table_clone ).
                     ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
                     go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
                                            iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
@@ -3521,15 +3513,14 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         folder         = abap_false )->get_key( ).
 
       APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
-        <class>-name = iv_name.
+        <class>-name = iv_full.
         <class>-key = ev_public_key.
         <class>-type = ''.
 
       APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
       <vars>-leaf = m_leaf.
-      <vars>-name = iv_name.
+      <vars>-name = iv_full.
       <vars>-key = e_root_key.
-
 
     ENDIF.
 
@@ -3552,7 +3543,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           )->get_key( ).
 
         APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
-        <class>-name = iv_name.
+        <class>-name = iv_full.
         <class>-key = ev_public_key.
         <class>-type = 1.
       ENDIF.
@@ -3578,7 +3569,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           )->get_key( ).
 
         APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
-        <class>-name = iv_name.
+        <class>-name = iv_full.
         <class>-key = ev_protected_key.
         <class>-type = 3.
       ENDIF.
@@ -3603,7 +3594,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           )->get_key( ).
 
         APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
-        <class>-name = iv_name.
+        <class>-name = iv_full.
         <class>-key = ev_private_key.
         <class>-type = 2.
       ENDIF.
@@ -3757,6 +3748,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       CLEAR m_icon.
     ENDIF.
 
+DATA l_full_name TYPE string.
+    IF iv_full_name IS SUPPLIED.
+      l_full_name = iv_full_name.
+    ELSE.
+      l_full_name = iv_root_name.
+    ENDIF.
+
     l_name = iv_root_name.
     DESCRIBE FIELD io_var TYPE DATA(lv_type).
     IF lv_type NE cl_abap_typedescr=>typekind_table.
@@ -3789,7 +3787,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
       ASSIGN m_variable->* TO FIELD-SYMBOL(<new_value>).
 
-      READ TABLE mt_vars WITH KEY name = l_name INTO DATA(l_var).
+      READ TABLE mt_vars WITH KEY name = l_full_name INTO DATA(l_var).
       IF sy-subrc = 0.
 
         DATA(lo_nodes) = tree->get_nodes( ).
@@ -3809,13 +3807,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 l_key = l_var-key.
                 l_rel = if_salv_c_node_relation=>next_sibling.
                 IF <kind> NE 'v' AND <kind> NE 'u'.
-                  DELETE mt_vars WHERE name = l_name.
+                  DELETE mt_vars WHERE name = l_full_name.
                 ENDIF.
               ELSE.
 
                 IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
                   IF <kind> NE 'v' AND <kind> NE 'u'.
-                    DELETE mt_vars WHERE name = l_name.
+                    DELETE mt_vars WHERE name = l_full_name.
                     l_node->delete( ).
                   ENDIF.
                 ENDIF.
@@ -3826,7 +3824,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                   IF <old_value> = <new_value>.
                     IF <kind> NE 'v' AND <kind> NE 'u'.
                       IF m_changed IS NOT INITIAL.
-                        DELETE mt_vars WHERE name = l_name.
+                        DELETE mt_vars WHERE name = l_full_name.
                         l_node->delete( ).
                         RETURN.
                       ELSE.
@@ -3835,7 +3833,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                     ENDIF.
                   ELSE.
                     IF <kind> NE 'v' AND <kind> NE 'u'.
-                      DELETE mt_vars WHERE name = l_name.
+                      DELETE mt_vars WHERE name = l_full_name.
                       l_node->delete( ).
                     ENDIF.
                   ENDIF.
@@ -3843,7 +3841,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
               ENDIF.
 
               IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
-                DELETE mt_vars WHERE name = l_name.
+                DELETE mt_vars WHERE name = l_full_name.
                 l_node->delete( ).
                 RETURN.
               ENDIF.
@@ -3853,11 +3851,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ELSE.
 
         IF m_changed IS NOT INITIAL."check changed
-          READ TABLE mt_state WITH KEY name = iv_full_name ASSIGNING <state>.
+          READ TABLE mt_state WITH KEY name = l_full_name ASSIGNING <state>.
           IF sy-subrc = 0.
             ASSIGN <state>-ref->* TO <old_value>.
             IF <old_value> = <new_value>.
-              DELETE mt_vars WHERE name = l_name.
+              DELETE mt_vars WHERE name = l_full_name.
               IF l_node IS NOT INITIAL.
                 l_node->delete( ).
               ENDIF.
@@ -3877,14 +3875,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         ENDIF.
       ENDIF.
 
-    DATA l_full_name TYPE string.
-    IF iv_full_name IS SUPPLIED.
-      l_full_name = iv_full_name.
-    ELSE.
-      l_full_name = iv_root_name.
-    ENDIF.
-
-    DATA(l_root_key) = traverse(
+     DATA(l_root_key) = traverse(
       io_type_descr = cl_abap_typedescr=>describe_by_data_ref( m_variable )
       iv_parent_key = l_key
       iv_rel  = l_rel
