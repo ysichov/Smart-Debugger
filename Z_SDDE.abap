@@ -1,5 +1,3 @@
-REPORT zys_ariadna.
-PARAMETERS: a TYPE  i.
 *&---------------------------------------------------------------------*
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
 *& Advanced Reverse Ingeneering Abap Debugger with Network Analytycs
@@ -96,9 +94,6 @@ CLASS lcl_popup IMPLEMENTATION.
 
   METHOD constructor.
     m_additional_name = i_additional_name.
-
-    "   SET HANDLER on_box_close FOR mo_box.
-
   ENDMETHOD.
 
   METHOD create.
@@ -314,9 +309,9 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
       get_table  IMPORTING i_name TYPE string
                  CHANGING  c_obj  TYPE REF TO data,
 
-      get_form_parameters IMPORTING i_prg TYPE TPDA_SCR_PRG_INFO ,
-      get_method_parameters importing i_name type TPDA_EVENT,
-      get_func_parameters importing i_name type TPDA_EVENT.
+      get_form_parameters IMPORTING i_prg TYPE tpda_scr_prg_info ,
+      get_method_parameters IMPORTING i_name TYPE tpda_event,
+      get_func_parameters IMPORTING i_name TYPE tpda_event.
 ENDCLASS.
 
 CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
@@ -376,7 +371,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                                   i_type     TYPE string
                                   i_cont     TYPE REF TO cl_gui_container
                                   i_debugger TYPE REF TO lcl_debugger_script OPTIONAL.
-
 
     METHODS add_variable
       IMPORTING
@@ -483,7 +477,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
       check_change.
 ENDCLASS.
 
-
 CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
   PUBLIC SECTION.
 
@@ -526,14 +519,9 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
       set_program IMPORTING iv_program TYPE program.
 
     METHODS set_program_line IMPORTING iv_line LIKE sy-index.
-
     METHODS create_code_viewer.
-
     METHODS show_stack.
-
-
 ENDCLASS.
-
 
 CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD prologue.
@@ -729,167 +717,167 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD get_form_parameters.
 
-            TYPES: BEGIN OF t_param,
-                     form TYPE string,
-                     name TYPE string,
-                     type TYPE char1,
-                   END OF t_param.
+    TYPES: BEGIN OF t_param,
+             form TYPE string,
+             name TYPE string,
+             type TYPE char1,
+           END OF t_param.
 
-            DATA: gr_scan  TYPE REF TO cl_ci_scan,
-                  lt_param TYPE TABLE OF t_param,
-                  ls_param TYPE t_param,
-                  lv_par   TYPE char1,
-                  lv_type  TYPE char1.
-            DATA(gr_source) = cl_ci_source_include=>create( p_name = CONV #( i_prg-include ) ).
-            CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
+    DATA: gr_scan  TYPE REF TO cl_ci_scan,
+          lt_param TYPE TABLE OF t_param,
+          ls_param TYPE t_param,
+          lv_par   TYPE char1,
+          lv_type  TYPE char1.
+    DATA(gr_source) = cl_ci_source_include=>create( p_name = CONV #( i_prg-include ) ).
+    CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
 
-            LOOP AT gr_scan->tokens INTO DATA(l_token) WHERE str = 'FORM' .
-              READ TABLE gr_scan->statements INTO DATA(l_statement) WITH KEY from =  sy-tabix.
+    LOOP AT gr_scan->tokens INTO DATA(l_token) WHERE str = 'FORM' .
+      READ TABLE gr_scan->statements INTO DATA(l_statement) WITH KEY from =  sy-tabix.
 
-              LOOP AT gr_scan->tokens FROM l_statement-from TO l_statement-to INTO l_token.
-                IF sy-tabix = l_statement-from.
-                  CONTINUE.
-                ENDIF.
-                IF sy-tabix = l_statement-from + 1.
-                  ls_param-form = l_token-str.
-                  CONTINUE.
-                ENDIF.
-                IF l_token-str = 'USING'.
-                  ls_param-type = 'I'.
-                  CLEAR: lv_type, lv_par.
-                  CONTINUE.
-                ELSEIF l_token-str = 'CHANGING'.
-                  IF ls_param-name IS NOT INITIAL.
-                    APPEND ls_param TO lt_param.
-                    CLEAR: lv_type, lv_par, ls_param-name.
-                  ENDIF.
-                  ls_param-type = 'E'.
-                  CLEAR: lv_type, lv_par.
-                  CONTINUE.
-                ENDIF.
-                IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str NE 'TYPE'.
-                  APPEND ls_param TO lt_param.
-                  CLEAR: lv_par, ls_param-name.
-                ENDIF.
+      LOOP AT gr_scan->tokens FROM l_statement-from TO l_statement-to INTO l_token.
+        IF sy-tabix = l_statement-from.
+          CONTINUE.
+        ENDIF.
+        IF sy-tabix = l_statement-from + 1.
+          ls_param-form = l_token-str.
+          CONTINUE.
+        ENDIF.
+        IF l_token-str = 'USING'.
+          ls_param-type = 'I'.
+          CLEAR: lv_type, lv_par.
+          CONTINUE.
+        ELSEIF l_token-str = 'CHANGING'.
+          IF ls_param-name IS NOT INITIAL.
+            APPEND ls_param TO lt_param.
+            CLEAR: lv_type, lv_par, ls_param-name.
+          ENDIF.
+          ls_param-type = 'E'.
+          CLEAR: lv_type, lv_par.
+          CONTINUE.
+        ENDIF.
+        IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str NE 'TYPE'.
+          APPEND ls_param TO lt_param.
+          CLEAR: lv_par, ls_param-name.
+        ENDIF.
 
-                IF lv_par IS INITIAL.
-                  ls_param-name = l_token-str.
-                  lv_par = abap_true.
-                  CONTINUE.
-                ENDIF.
-                IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str = 'TYPE'.
-                  lv_type = abap_true.
-                  CONTINUE.
-                ENDIF.
-                IF lv_par = abap_true AND lv_type = abap_true.
-                  APPEND ls_param TO lt_param.
-                  CLEAR: lv_type, lv_par, ls_param-name.
-                ENDIF.
-              ENDLOOP.
-              "read table gr_scan->tokens into data(l_token2) index lv_ind.
-            ENDLOOP.
-            IF ls_param-name IS NOT INITIAL.
-              APPEND ls_param TO lt_param.
-            ENDIF.
+        IF lv_par IS INITIAL.
+          ls_param-name = l_token-str.
+          lv_par = abap_true.
+          CONTINUE.
+        ENDIF.
+        IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str = 'TYPE'.
+          lv_type = abap_true.
+          CONTINUE.
+        ENDIF.
+        IF lv_par = abap_true AND lv_type = abap_true.
+          APPEND ls_param TO lt_param.
+          CLEAR: lv_type, lv_par, ls_param-name.
+        ENDIF.
+      ENDLOOP.
+      "read table gr_scan->tokens into data(l_token2) index lv_ind.
+    ENDLOOP.
+    IF ls_param-name IS NOT INITIAL.
+      APPEND ls_param TO lt_param.
+    ENDIF.
 
-            LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
-              IF ls_param-type = 'I'.
-                transfer_variable( EXPORTING i_name = CONV #( ls_param-name ) i_tree = go_tree_imp ).
-                DELETE mt_locals WHERE name = ls_param-name.
-              ENDIF.
+    LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
+      IF ls_param-type = 'I'.
+        transfer_variable( EXPORTING i_name = CONV #( ls_param-name ) i_tree = go_tree_imp ).
+        DELETE mt_locals WHERE name = ls_param-name.
+      ENDIF.
 
-              IF ls_param-type = 'E'.
-                APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
-                <ret_exp>-name = ls_param-name.
-                DELETE mt_locals WHERE name = ls_param-name.
-              ENDIF.
-            ENDLOOP.
-            go_tree_imp->display( ).
+      IF ls_param-type = 'E'.
+        APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
+        <ret_exp>-name = ls_param-name.
+        DELETE mt_locals WHERE name = ls_param-name.
+      ENDIF.
+    ENDLOOP.
+    go_tree_imp->display( ).
   ENDMETHOD.
 
   METHOD get_method_parameters.
-                DATA: l_clref  TYPE REF TO cl_abap_classdescr.
-            CALL METHOD cl_abap_classdescr=>describe_by_name
-              EXPORTING
-                p_name      = get_class_name( 'ME' )
-              RECEIVING
-                p_descr_ref = DATA(l_dref).
-            IF sy-subrc <> 0.
-              EXIT.
-            ENDIF.
+    DATA: l_clref  TYPE REF TO cl_abap_classdescr.
+    CALL METHOD cl_abap_classdescr=>describe_by_name
+      EXPORTING
+        p_name      = get_class_name( 'ME' )
+      RECEIVING
+        p_descr_ref = DATA(l_dref).
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
 
-            l_clref ?= l_dref.
-            .
-            READ TABLE l_clref->methods INTO DATA(x_methods) WITH KEY name = i_name.
+    l_clref ?= l_dref.
+    .
+    READ TABLE l_clref->methods INTO DATA(x_methods) WITH KEY name = i_name.
 
-            IF sy-subrc = 0.
-              LOOP AT x_methods-parameters INTO DATA(x_parameters).
+    IF sy-subrc = 0.
+      LOOP AT x_methods-parameters INTO DATA(x_parameters).
 
-                IF x_parameters-parm_kind = 'I'. "importing
-                  transfer_variable( EXPORTING i_name = CONV #( x_parameters-name ) i_tree = go_tree_imp ).
-                  DELETE mt_locals WHERE name = x_parameters-name.
-                ENDIF.
-                IF x_parameters-parm_kind = 'E' OR x_parameters-parm_kind = 'R'. "exporting or returning
-                  APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
-                  <ret_exp>-name = x_parameters-name.
-                  DELETE mt_locals WHERE name = x_parameters-name.
-                ENDIF.
-              ENDLOOP.
-              go_tree_imp->display(  ).
-            ENDIF.
+        IF x_parameters-parm_kind = 'I'. "importing
+          transfer_variable( EXPORTING i_name = CONV #( x_parameters-name ) i_tree = go_tree_imp ).
+          DELETE mt_locals WHERE name = x_parameters-name.
+        ENDIF.
+        IF x_parameters-parm_kind = 'E' OR x_parameters-parm_kind = 'R'. "exporting or returning
+          APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
+          <ret_exp>-name = x_parameters-name.
+          DELETE mt_locals WHERE name = x_parameters-name.
+        ENDIF.
+      ENDLOOP.
+      go_tree_imp->display(  ).
+    ENDIF.
   ENDMETHOD.
 
   METHOD get_func_parameters.
 
-            DATA: lt_imp    TYPE TABLE OF rsimp,
-                lt_chng   TYPE TABLE OF   rscha,
-                lt_exp    TYPE TABLE OF rsexp,
-                lt_tables TYPE TABLE OF rstbl,
-                lt_exc    TYPE TABLE OF rsexc,
-                lt_doc    TYPE TABLE OF rsfdo,
-                lt_source TYPE TABLE OF rssource.
+    DATA: lt_imp    TYPE TABLE OF rsimp,
+          lt_chng   TYPE TABLE OF   rscha,
+          lt_exp    TYPE TABLE OF rsexp,
+          lt_tables TYPE TABLE OF rstbl,
+          lt_exc    TYPE TABLE OF rsexc,
+          lt_doc    TYPE TABLE OF rsfdo,
+          lt_source TYPE TABLE OF rssource.
 
-            CALL FUNCTION 'RPY_FUNCTIONMODULE_READ'
-              EXPORTING
-                functionname       = CONV rs38l_fnam( i_name )
-              TABLES
-                import_parameter   = lt_imp
-                changing_parameter = lt_chng
-                export_parameter   = lt_exp
-                tables_parameter   = lt_tables
-                exception_list     = lt_exc
-                documentation      = lt_doc
-                source             = lt_source
-              EXCEPTIONS
-                error_message      = 1
-                function_not_found = 2
-                invalid_name       = 3
-                OTHERS             = 4.
+    CALL FUNCTION 'RPY_FUNCTIONMODULE_READ'
+      EXPORTING
+        functionname       = CONV rs38l_fnam( i_name )
+      TABLES
+        import_parameter   = lt_imp
+        changing_parameter = lt_chng
+        export_parameter   = lt_exp
+        tables_parameter   = lt_tables
+        exception_list     = lt_exc
+        documentation      = lt_doc
+        source             = lt_source
+      EXCEPTIONS
+        error_message      = 1
+        function_not_found = 2
+        invalid_name       = 3
+        OTHERS             = 4.
 
-            LOOP AT lt_imp INTO DATA(ls_imp).
-              transfer_variable( EXPORTING i_name = CONV #( ls_imp-parameter ) i_tree = go_tree_imp ).
-              DELETE mt_locals WHERE name = ls_imp-parameter.
-            ENDLOOP.
+    LOOP AT lt_imp INTO DATA(ls_imp).
+      transfer_variable( EXPORTING i_name = CONV #( ls_imp-parameter ) i_tree = go_tree_imp ).
+      DELETE mt_locals WHERE name = ls_imp-parameter.
+    ENDLOOP.
 
-            LOOP AT lt_exp INTO DATA(ls_exp). "exporting
-              APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
-              <ret_exp>-name = ls_exp-parameter.
-              DELETE mt_locals WHERE name = ls_exp-parameter.
-            ENDLOOP.
+    LOOP AT lt_exp INTO DATA(ls_exp). "exporting
+      APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
+      <ret_exp>-name = ls_exp-parameter.
+      DELETE mt_locals WHERE name = ls_exp-parameter.
+    ENDLOOP.
 
-            LOOP AT lt_chng INTO DATA(ls_chng). "exporting
-              APPEND INITIAL LINE TO mt_ret_exp ASSIGNING <ret_exp>.
-              <ret_exp>-name = ls_chng-parameter.
-              DELETE mt_locals WHERE name = ls_chng-parameter.
-            ENDLOOP.
+    LOOP AT lt_chng INTO DATA(ls_chng). "exporting
+      APPEND INITIAL LINE TO mt_ret_exp ASSIGNING <ret_exp>.
+      <ret_exp>-name = ls_chng-parameter.
+      DELETE mt_locals WHERE name = ls_chng-parameter.
+    ENDLOOP.
 
-            LOOP AT lt_tables INTO DATA(ls_tables). "exporting
-              APPEND INITIAL LINE TO mt_ret_exp ASSIGNING <ret_exp>.
-              <ret_exp>-name = ls_tables-parameter.
-              DELETE mt_locals WHERE name = ls_tables-parameter.
-            ENDLOOP.
+    LOOP AT lt_tables INTO DATA(ls_tables). "exporting
+      APPEND INITIAL LINE TO mt_ret_exp ASSIGNING <ret_exp>.
+      <ret_exp>-name = ls_tables-parameter.
+      DELETE mt_locals WHERE name = ls_tables-parameter.
+    ENDLOOP.
 
-            go_tree_imp->display(  ).
+    go_tree_imp->display(  ).
 
   ENDMETHOD.
 
@@ -1043,10 +1031,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           IF sy-subrc = 0.
             l_rel = if_salv_c_node_relation=>next_sibling.
             lv_node = l_var-key.
-            "DELETE i_tree->mt_vars WHERE name = l_name.
           ENDIF.
-
-          "i_tree->m_ref = 'X'.
 
           create_reference( EXPORTING i_name = i_name
                                      i_shortname = l_name
@@ -1054,11 +1039,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                      iv_rel = l_rel
                                      i_quick = quick
                                      i_no_cl_twin = i_no_cl_twin ).
-
-*          IF l_rel = if_salv_c_node_relation=>next_sibling.
-*            i_tree->delete_node( l_var-key ).
-*          ENDIF.
-          "CLEAR i_tree->m_ref.
 
         ELSEIF quick-typid = 'v' OR quick-typid = 'u'."deep structure or structure
 
@@ -1150,7 +1130,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                           iv_full = <ls_symobjref>-instancename
                                             iv_key = i_new_node ).
         ENDIF.
-        "RETURN.
       ENDIF.
       ls_obj-name = <ls_symobjref>-instancename.
       COLLECT ls_obj INTO mt_obj.
@@ -1191,6 +1170,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                   WHEN cl_tpda_script_data_descr=>mt_simple.
                     lr_struc = create_simple_var( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
                     ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_elem>).
+
                     go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
                                            iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
                                            CHANGING io_var =  <new_elem> ).
@@ -1319,6 +1299,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = DATA(l_prg) ).
+
         IF l_prg-event-eventname NE go_tree_local->m_prg_info-event-eventname.
           go_tree_local->m_prg_info-event-eventname = l_prg-event-eventname.
 
@@ -1327,14 +1308,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           CLEAR go_tree_local->m_no_refresh.
           CLEAR go_tree_local->mt_vars.
           CLEAR go_tree_local->mt_state.
+          CLEAR go_tree_local->mt_classes_leaf.
 
           CLEAR go_tree_exp->m_no_refresh.
           CLEAR go_tree_exp->mt_vars.
           CLEAR go_tree_exp->mt_state.
+          CLEAR go_tree_exp->mt_classes_leaf.
 
           CLEAR go_tree_imp->m_no_refresh.
           CLEAR go_tree_imp->mt_vars.
           CLEAR go_tree_imp->mt_state.
+          CLEAR go_tree_imp->mt_classes_leaf.
 
           IF go_tree_local->m_no_refresh IS INITIAL.
             go_tree_local->clear( ).
@@ -1352,7 +1336,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
 
           IF l_prg-event-eventtype = 'FORM'.
-           get_form_parameters( l_prg ).
+            get_form_parameters( l_prg ).
           ENDIF.
 
           IF l_prg-event-eventtype = 'FUNCTION'.
@@ -1582,7 +1566,6 @@ ENDCLASS.
 CLASS lcl_window IMPLEMENTATION.
 
   METHOD constructor.
-    "m_additional_name = i_additional_name.
     super->constructor( ).
     mo_debugger = i_debugger.
 
@@ -1779,7 +1762,6 @@ CLASS lcl_window IMPLEMENTATION.
 *       max_number_chars = 72
 
     mo_code_viewer->init_completer( ).
-*
     mo_code_viewer->upload_properties(
            EXCEPTIONS
              dp_error_create  = 1
@@ -1850,10 +1832,7 @@ CLASS lcl_window IMPLEMENTATION.
     ENDCASE.
   ENDMETHOD.
 
-
 ENDCLASS.
-
-
 
 CLASS lcl_sel_opt DEFINITION DEFERRED.
 
@@ -3387,7 +3366,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     tree->display( ).
   ENDMETHOD.
 
-
   METHOD add_buttons.
     DATA(lo_functions) = tree->get_functions( ).
     lo_functions->set_all( ).
@@ -3523,11 +3501,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       <vars>-leaf = m_leaf.
       <vars>-name = iv_full.
       <vars>-key = e_root_key.
-
     ENDIF.
 
     lv_icon = icon_led_green.
-
     READ TABLE it_attr WITH KEY acckind = '1' TRANSPORTING NO FIELDS.
     IF sy-subrc = 0.
       READ TABLE mt_classes_leaf WITH KEY name = iv_full type = 1 ASSIGNING <class>.
@@ -3700,14 +3676,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       WHEN 'LDB'."Show/hide LDB variables (globals)
         m_ldb = m_ldb BIT-XOR c_mask.
         mo_debugger->run_script( ).
-*      WHEN 'F5'.
-*        mo_debugger->f5( ).
-*      WHEN 'F6'.
-*        mo_debugger->f6( ).
-*      WHEN 'F7'.
-*        mo_debugger->f7( ).
-*      WHEN 'F8'.
-*        mo_debugger->f8( ).
     ENDCASE.
   ENDMETHOD.
 
@@ -3901,11 +3869,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           l_node->delete( ).
         ENDIF.
       ENDIF.
-      "expanding  node.
-*      IF m_new_node IS NOT INITIAL and m_changed is not INITIAL.
-*        l_node = tree->get_nodes( )->get_node( m_new_node ).
-*        l_node->expand( ).
-*      ENDIF.
     ENDIF.
   ENDMETHOD.
 
@@ -4314,12 +4277,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           l_node->delete( ).
         ENDIF.
 
-
       ENDIF.
     ENDIF.
-
-
-
   ENDMETHOD.
 ENDCLASS.
 
@@ -4463,4 +4422,3 @@ CLASS lcl_dragdrop IMPLEMENTATION.
     lo_to->raise_selection_done( ).
   ENDMETHOD.
 ENDCLASS.
-INCLUDE zys_ariadna_frm.
