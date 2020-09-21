@@ -1020,6 +1020,20 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                            iv_full_name = l_name
                                   CHANGING io_var =  <f>  ).
 
+        ELSEIF quick-typid = 'l'. "data ref
+          DATA: ls_info TYPE tpda_scr_quick_info.
+
+          FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbdatref.
+
+          ls_info = cl_tpda_script_data_descr=>get_quick_info( i_name ).
+          ASSIGN ls_info-quickdata->* TO <ls_symobjref>.
+
+          "IF <ls_symobjref>-instancename <> '{A:initial}'.
+          transfer_variable( EXPORTING i_name = CONV #( <ls_symobjref>-instancename )
+                                           i_shortname = i_name
+                                           i_tree = i_tree ).
+
+
         ELSEIF quick-typid = 'r'. "reference
           DATA: l_rel   TYPE salv_de_node_relation,
                 lv_node TYPE salv_de_node_key.
@@ -1360,7 +1374,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSE.
       go_tree_local->main_node_key = go_tree_local->m_locals_key.
     ENDIF.
-
+    .
     LOOP AT mt_locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
 
