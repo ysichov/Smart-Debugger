@@ -494,6 +494,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           WITH NON-UNIQUE DEFAULT KEY.
 
     DATA: m_history              TYPE x,
+          m_visualization        TYPE x,
           m_prg                  TYPE tpda_scr_prg_info,
           m_debug_button         LIKE sy-ucomm,
           mo_debugger            TYPE REF TO lcl_debugger_script,
@@ -539,11 +540,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     lcl_appl=>init_icons_table( ).
 
     mo_window = NEW lcl_window( me ).
-    go_tree_imp = NEW lcl_rtti_tree( i_header = 'Importing parameters' i_type = 'I' i_cont = mo_window->mo_importing_container ).
+    go_tree_imp = NEW lcl_rtti_tree( i_header = 'Importing parameters' i_type = 'I' i_cont = mo_window->mo_importing_container
+                                     i_debugger = me  ).
     go_tree_local = NEW lcl_rtti_tree( i_header =  'Variables' i_type = 'L'
                      i_cont = mo_window->mo_locals_container
                      i_debugger = me ).
-    go_tree_exp = NEW lcl_rtti_tree( i_header = 'Exporting parameters' i_type = 'E' i_cont = mo_window->mo_exporting_container ).
+    go_tree_exp = NEW lcl_rtti_tree( i_header = 'Exporting parameters' i_type = 'E' i_cont = mo_window->mo_exporting_container
+                                     i_debugger = me ).
   ENDMETHOD.                    "init
 
   METHOD create_simple_var.
@@ -798,7 +801,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         DELETE mt_locals WHERE name = ls_param-name.
       ENDIF.
     ENDLOOP.
-    go_tree_imp->display( ).
+    IF mo_window->m_visualization IS NOT INITIAL.
+      go_tree_imp->display( ).
+    ENDIF.
   ENDMETHOD.
 
   METHOD get_method_parameters.
@@ -829,7 +834,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           DELETE mt_locals WHERE name = x_parameters-name.
         ENDIF.
       ENDLOOP.
-      go_tree_imp->display(  ).
+      IF mo_window->m_visualization IS NOT INITIAL.
+        go_tree_imp->display(  ).
+      ENDIF.
     ENDIF.
   ENDMETHOD.
 
@@ -883,8 +890,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       DELETE mt_locals WHERE name = ls_tables-parameter.
     ENDLOOP.
 
-    go_tree_imp->display(  ).
-
+    IF mo_window->m_visualization IS NOT INITIAL.
+      go_tree_imp->display( ).
+    ENDIF.
   ENDMETHOD.
 
   METHOD get_table. "construct deep tables
@@ -1303,7 +1311,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
     MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
-    mo_window->show_stack( ).
 
     CALL METHOD abap_source->program RECEIVING p_prg = DATA(l_program).
 
@@ -1375,8 +1382,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDTRY.
 
     go_tree_imp->m_prg_info = mo_window->m_prg.
-    mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
-    mo_window->set_program_line( mo_window->m_prg-line ).
+    IF mo_window->m_visualization IS NOT INITIAL.
+      mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+      mo_window->set_program_line( mo_window->m_prg-line ).
+      mo_window->show_stack( ).
+    ENDIF.
 
     go_tree_local->m_leaf = 'Locals'.
     IF go_tree_local->m_no_refresh IS INITIAL.
@@ -1493,12 +1503,16 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     go_tree_exp->m_no_refresh = 'X'.
     go_tree_imp->m_no_refresh = 'X'.
 
-
     IF mo_window->m_debug_button = 'F5'.
       go_tree_local->display( ).
       go_tree_exp->display(  ).
+      IF mo_window->m_visualization IS INITIAL.
+        mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+        mo_window->set_program_line( mo_window->m_prg-line ).
+        mo_window->show_stack( ).
+        go_tree_imp->display(  ).
+      ENDIF.
       me->break( ).
-
 
     ELSEIF mo_window->m_debug_button = 'F6'.
       READ TABLE mo_window->mt_stack INDEX 1 INTO DATA(ls_stack).
@@ -1506,6 +1520,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         go_tree_local->display( ).
         go_tree_exp->display(  ).
         CLEAR m_f6_level.
+        IF mo_window->m_visualization IS INITIAL.
+          mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+          mo_window->show_stack( ).
+          mo_window->set_program_line( mo_window->m_prg-line ).
+          go_tree_imp->display(  ).
+        ENDIF.
+
         me->break( ).
       ELSE.
         IF mo_window->m_history IS NOT INITIAL.
@@ -1517,6 +1538,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       IF mo_window->m_prg-flag_eoev IS NOT INITIAL.
         go_tree_local->display( ).
         go_tree_exp->display(  ).
+        IF mo_window->m_visualization IS INITIAL.
+          mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+          mo_window->show_stack( ).
+          mo_window->set_program_line( mo_window->m_prg-line ).
+          go_tree_imp->display(  ).
+        ENDIF.
         me->break( ).
       ELSE.
         f5( ).
@@ -1526,6 +1553,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       IF mv_f7_stop = abap_true.
         go_tree_local->display( ).
         go_tree_exp->display(  ).
+        IF mo_window->m_visualization IS INITIAL.
+          mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+          mo_window->set_program_line( mo_window->m_prg-line ).
+          mo_window->show_stack( ).
+          go_tree_imp->display(  ).
+        ENDIF.
         me->break( ).
         CLEAR mv_f7_stop.
       ELSE.
@@ -1540,11 +1573,25 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       IF sy-subrc = 0.
         go_tree_local->display( ).
         go_tree_exp->display(  ).
+        IF mo_window->m_visualization IS INITIAL.
+          mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+          mo_window->set_program_line( mo_window->m_prg-line ).
+          mo_window->show_stack( ).
+          go_tree_imp->display(  ).
+        ENDIF.
+
         me->break( ).
       ELSE.
         IF mo_window->m_debug_button = 'F6BEG' AND lv_stack_changed IS NOT INITIAL.
           go_tree_local->display( ).
           go_tree_exp->display(  ).
+          IF mo_window->m_visualization IS INITIAL.
+            mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+            mo_window->set_program_line( mo_window->m_prg-line ).
+            mo_window->show_stack( ).
+            go_tree_imp->display(  ).
+          ENDIF.
+
           me->break( ).
         ELSE.
           IF mo_window->m_history IS NOT INITIAL.
@@ -1555,12 +1602,25 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSE.
       go_tree_local->display( ).
       go_tree_exp->display(  ).
+      IF mo_window->m_visualization IS INITIAL.
+        mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+        mo_window->set_program_line( mo_window->m_prg-line ).
+        mo_window->show_stack( ).
+        go_tree_imp->display(  ).
+      ENDIF.
       me->break( ).
     ENDIF.
 
     IF mo_window->m_debug_button = 'F7END' AND mo_window->m_prg-flag_eoev IS NOT INITIAL.
       go_tree_local->display( ).
       go_tree_exp->display(  ).
+      IF mo_window->m_visualization IS INITIAL.
+        mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+        mo_window->set_program_line( mo_window->m_prg-line ).
+        mo_window->show_stack( ).
+        go_tree_imp->display(  ).
+      ENDIF.
+
       me->break( ).
     ENDIF.
 
@@ -1568,18 +1628,31 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       go_tree_local->display( ).
       go_tree_exp->display(  ).
+      IF mo_window->m_visualization IS INITIAL.
+        mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+        mo_window->set_program_line( mo_window->m_prg-line ).
+        mo_window->show_stack( ).
+        go_tree_imp->display(  ).
+      ENDIF.
       me->break( ).
     ENDIF.
 
     IF mo_window->m_history IS INITIAL AND mo_window->m_debug_button NE 'F7END' AND mo_window->m_debug_button NE 'F6BEG'.
       go_tree_local->display( ).
       go_tree_exp->display(  ).
+      IF mo_window->m_visualization IS INITIAL.
+        mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+        mo_window->show_stack( ).
+        mo_window->set_program_line( mo_window->m_prg-line ).
+        go_tree_imp->display(  ).
+      ENDIF.
       me->break( ).
     ENDIF.
 
-    IF mo_window->m_prg-flag_eoev_nolref  = 'X'.
-      me->break( ).
-    ENDIF.
+*    IF mo_window->m_prg-flag_eoev_nolref  = 'X'.
+*      me->break( ).
+*    ENDIF.
+
 
   ENDMETHOD.                    "script
 
@@ -1803,6 +1876,15 @@ CLASS lcl_window IMPLEMENTATION.
     APPEND ls_button TO lt_button.
 
     CLEAR ls_button.
+    ls_button-function = 'VIS'.
+    ls_button-icon = CONV #( icon_flight ).
+    ls_button-quickinfo = 'Visualization Off'.
+    ls_button-text = 'Visualization Off'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+
+    CLEAR ls_button.
     ls_button-butn_type = 3.
     APPEND ls_button TO lt_button.
 
@@ -1876,10 +1958,8 @@ CLASS lcl_window IMPLEMENTATION.
     DATA(gr_source) = cl_ci_source_include=>create( p_name = iv_program ).
 
     CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
-
     mo_code_viewer->set_text( table = gr_source->lines  ).
   ENDMETHOD.
-
 
   METHOD set_program_line.
     TYPES: lntab TYPE STANDARD TABLE OF i.
@@ -1950,6 +2030,14 @@ CLASS lcl_window IMPLEMENTATION.
     CONSTANTS: c_mask TYPE x VALUE '01'.
     m_debug_button = fcode.
     CASE fcode.
+      WHEN 'VIS'.
+        m_visualization = m_visualization BIT-XOR c_mask.
+        IF m_visualization IS INITIAL.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'VIS' icon = CONV #( icon_flight ) text = 'Visualization OFF' ).
+        ELSE.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'VIS' icon = CONV #( icon_car ) text = 'Visualization ON' ).
+        ENDIF.
+
       WHEN 'HIST'.
         m_history = m_history BIT-XOR c_mask.
         IF m_history IS INITIAL.
@@ -3470,11 +3558,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   METHOD constructor.
 
     super->constructor( ).
-
+   mo_debugger = i_debugger.
 
     IF i_type = 'L'.
       "m_hide = '01'.
-      mo_debugger = i_debugger.
+
       cl_salv_tree=>factory(
            EXPORTING r_container = i_cont
            IMPORTING r_salv_tree = tree
@@ -3865,6 +3953,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     FIELD-SYMBOLS: <new>      TYPE any,
                    <tab_from> TYPE ANY TABLE,
                    <tab_to>   TYPE STANDARD TABLE.
+
+
+    IF mo_debugger->mo_window->m_visualization is not INITIAL.
+    Return. "!!!!!!
+    ENDIF.
 
     IF i_icon IS SUPPLIED.
       m_icon = i_icon.
