@@ -1,6 +1,6 @@
 *&---------------------------------------------------------------------*
 *& Simple  Debugger Data Explorer (Project ARIADNA Part 1)
-*& Advanced Reverse Ingeneering Abap Debugger with Network Analytycs
+*& Advanced Reverse Ingeneering Abap Debugger with New Analytycs
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
 *& version: beta 0.3.150.150
@@ -257,9 +257,11 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mt_globals    TYPE tpda_scr_globals_it,
           mt_ret_exp    TYPE tpda_scr_locals_it,
           mo_window     TYPE REF TO lcl_window,
+          mv_f7_stop    TYPE xfeld,
           go_tree_imp   TYPE REF TO lcl_rtti_tree,
           go_tree_local TYPE REF TO lcl_rtti_tree,
-          go_tree_exp   TYPE REF TO lcl_rtti_tree.
+          go_tree_exp   TYPE REF TO lcl_rtti_tree,
+          m_f6_level    TYPE i.
 
     METHODS: prologue  REDEFINITION,
       init    REDEFINITION,
@@ -491,7 +493,10 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
     TYPES tt_table TYPE STANDARD TABLE OF ts_table
           WITH NON-UNIQUE DEFAULT KEY.
 
-    DATA: mo_debugger            TYPE REF TO lcl_debugger_script,
+    DATA: m_history              TYPE x,
+          m_prg                  TYPE tpda_scr_prg_info,
+          m_debug_button         LIKE sy-ucomm,
+          mo_debugger            TYPE REF TO lcl_debugger_script,
           mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
           mo_splitter_var        TYPE REF TO cl_gui_splitter_container,
           mo_toolbar_container   TYPE REF TO cl_gui_container,
@@ -511,7 +516,8 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           mt_tree_exp            TYPE tt_table,
           mo_tree_imp            TYPE REF TO cl_salv_tree,
           mo_tree_loc            TYPE REF TO cl_salv_tree,
-          mo_tree_exp            TYPE REF TO cl_salv_tree.
+          mo_tree_exp            TYPE REF TO cl_salv_tree,
+          mt_breaks              TYPE tpda_bp_persistent_it.
 
     METHODS: constructor IMPORTING i_debugger TYPE REF TO lcl_debugger_script i_additional_name TYPE string OPTIONAL,
       add_toolbar_buttons,
@@ -1287,18 +1293,19 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD run_script.
     DATA: l_name(40),
-          lt_compo     TYPE TABLE OF scompo,
-          lt_compo_tmp TYPE TABLE OF scompo,
-          lt_inc       TYPE TABLE OF  d010inc,
-          l_class      TYPE seu_name.
+          lt_compo         TYPE TABLE OF scompo,
+          lt_compo_tmp     TYPE TABLE OF scompo,
+          lt_inc           TYPE TABLE OF  d010inc,
+          l_class          TYPE seu_name,
+          lv_stack_changed TYPE xfeld.
+
+    CALL METHOD cl_tpda_script_bp_services=>get_all_bps RECEIVING p_bps_it = mo_window->mt_breaks.
 
     DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
     MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
     mo_window->show_stack( ).
 
-    CALL METHOD abap_source->program
-      RECEIVING
-        p_prg = DATA(l_program).
+    CALL METHOD abap_source->program RECEIVING p_prg = DATA(l_program).
 
     l_name = l_program.
     CALL FUNCTION 'RS_PROGRAM_INDEX'
@@ -1312,10 +1319,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         OTHERS       = 2.
 
     TRY.
-        cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = DATA(l_prg) ).
+        cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = mo_window->m_prg ).
 
-        IF l_prg-event-eventname NE go_tree_local->m_prg_info-event-eventname.
-          go_tree_local->m_prg_info-event-eventname = l_prg-event-eventname.
+        IF mo_window->m_prg-event-eventname NE go_tree_local->m_prg_info-event-eventname.
+
+          lv_stack_changed = abap_true.
+          go_tree_local->m_prg_info-event-eventname = mo_window->m_prg-event-eventname.
 
           CLEAR mt_ret_exp.
           CLEAR mt_obj.
@@ -1346,27 +1355,28 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
           READ TABLE mt_locals WITH KEY name = 'ME' TRANSPORTING NO FIELDS.
           IF sy-subrc = 0.
-            get_method_parameters( l_prg-event-eventname ).
+            get_method_parameters( mo_window->m_prg-event-eventname ).
           ENDIF.
 
-          IF l_prg-event-eventtype = 'FORM'.
-            get_form_parameters( l_prg ).
+          IF mo_window->m_prg-event-eventtype = 'FORM'.
+            get_form_parameters( mo_window->m_prg ).
           ENDIF.
 
-          IF l_prg-event-eventtype = 'FUNCTION'.
-            get_func_parameters( l_prg-event-eventname ).
+          IF mo_window->m_prg-event-eventtype = 'FUNCTION'.
+            get_func_parameters( mo_window->m_prg-event-eventname ).
           ENDIF.
 
           CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
           SORT mt_globals.
-
+        ELSE.
+          CLEAR lv_stack_changed.
         ENDIF.
       CATCH cx_tpda_src_info.
     ENDTRY.
 
-    go_tree_imp->m_prg_info = l_prg.
-    mo_window->set_program( CONV #( l_prg-include ) ).
-    mo_window->set_program_line( l_prg-line ).
+    go_tree_imp->m_prg_info = mo_window->m_prg.
+    mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+    mo_window->set_program_line( mo_window->m_prg-line ).
 
     go_tree_local->m_leaf = 'Locals'.
     IF go_tree_local->m_no_refresh IS INITIAL.
@@ -1374,7 +1384,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSE.
       go_tree_local->main_node_key = go_tree_local->m_locals_key.
     ENDIF.
-    .
+
     LOOP AT mt_locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
 
@@ -1483,10 +1493,99 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     go_tree_exp->m_no_refresh = 'X'.
     go_tree_imp->m_no_refresh = 'X'.
 
-    go_tree_local->display(  ).
-    go_tree_exp->display(  ).
-    me->break( ).
+
+    IF mo_window->m_debug_button = 'F5'.
+      go_tree_local->display( ).
+      go_tree_exp->display(  ).
+      me->break( ).
+
+
+    ELSEIF mo_window->m_debug_button = 'F6'.
+      READ TABLE mo_window->mt_stack INDEX 1 INTO DATA(ls_stack).
+      IF m_f6_level IS NOT INITIAL AND m_f6_level = ls_stack-stacklevel.
+        go_tree_local->display( ).
+        go_tree_exp->display(  ).
+        CLEAR m_f6_level.
+        me->break( ).
+      ELSE.
+        IF mo_window->m_history IS NOT INITIAL.
+          f5( ).
+        ENDIF.
+      ENDIF.
+
+    ELSEIF mo_window->m_debug_button = 'F7END'.
+      IF mo_window->m_prg-flag_eoev IS NOT INITIAL.
+        go_tree_local->display( ).
+        go_tree_exp->display(  ).
+        me->break( ).
+      ELSE.
+        f5( ).
+      ENDIF.
+    ELSEIF mo_window->m_debug_button = 'F7'.
+
+      IF mv_f7_stop = abap_true.
+        go_tree_local->display( ).
+        go_tree_exp->display(  ).
+        me->break( ).
+        CLEAR mv_f7_stop.
+      ELSE.
+        IF mo_window->m_prg-flag_eoev IS NOT INITIAL.
+          mv_f7_stop = abap_true.
+        ENDIF.
+        f5( ).
+      ENDIF.
+
+    ELSEIF mo_window->m_debug_button IS NOT INITIAL.
+      READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = mo_window->m_prg-include linesrc = mo_window->m_prg-line INTO DATA(gs_break).
+      IF sy-subrc = 0.
+        go_tree_local->display( ).
+        go_tree_exp->display(  ).
+        me->break( ).
+      ELSE.
+        IF mo_window->m_debug_button = 'F6BEG' AND lv_stack_changed IS NOT INITIAL.
+          go_tree_local->display( ).
+          go_tree_exp->display(  ).
+          me->break( ).
+        ELSE.
+          IF mo_window->m_history IS NOT INITIAL.
+            f5( ).
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ELSE.
+      go_tree_local->display( ).
+      go_tree_exp->display(  ).
+      me->break( ).
+    ENDIF.
+
+    IF mo_window->m_debug_button = 'F7END' AND mo_window->m_prg-flag_eoev IS NOT INITIAL.
+      go_tree_local->display( ).
+      go_tree_exp->display(  ).
+      me->break( ).
+    ENDIF.
+
+    IF mo_window->m_debug_button = 'F6BEG' AND lv_stack_changed IS NOT INITIAL.
+
+      go_tree_local->display( ).
+      go_tree_exp->display(  ).
+      me->break( ).
+    ENDIF.
+
+    IF mo_window->m_history IS INITIAL AND mo_window->m_debug_button NE 'F7END' AND mo_window->m_debug_button NE 'F6BEG'.
+      go_tree_local->display( ).
+      go_tree_exp->display(  ).
+      me->break( ).
+    ENDIF.
+
+    IF mo_window->m_prg-flag_eoev_nolref  = 'X'.
+      me->break( ).
+    ENDIF.
+
   ENDMETHOD.                    "script
+
+  METHOD end.
+
+  ENDMETHOD.
 
   METHOD f5.
     TRY.
@@ -1582,6 +1681,7 @@ CLASS lcl_window IMPLEMENTATION.
   METHOD constructor.
     super->constructor( ).
     mo_debugger = i_debugger.
+    m_history = '01'.
 
     mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.2' i_width = 1200 i_hight = 400 ).
     CREATE OBJECT mo_splitter ##FM_SUBRC_OK
@@ -1695,10 +1795,39 @@ CLASS lcl_window IMPLEMENTATION.
           ls_events LIKE LINE OF lt_events.
 
     CLEAR ls_button.
+    ls_button-function = 'HIST'.
+    ls_button-icon = CONV #( icon_graduate ).
+    ls_button-quickinfo = 'History On'.
+    ls_button-text = 'History On'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-butn_type = 3.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
     ls_button-function = 'F5'.
     ls_button-icon = CONV #( icon_debugger_step_into ).
     ls_button-quickinfo = 'Step into'.
     ls_button-text = 'Step into'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F6BEG'.
+    ls_button-icon = CONV #( icon_release ).
+    ls_button-quickinfo = 'Start of block'.
+    ls_button-text = 'Start of block'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+
+    CLEAR ls_button.
+    ls_button-function = 'F7END'.
+    ls_button-icon = CONV #( icon_outgoing_org_unit ).
+    ls_button-quickinfo = 'End of block'.
+    ls_button-text = 'End of block '.
     ls_button-butn_type = 0.
     APPEND ls_button TO lt_button.
 
@@ -1709,6 +1838,7 @@ CLASS lcl_window IMPLEMENTATION.
     ls_button-text = 'Step over'.
     ls_button-butn_type = 0.
     APPEND ls_button TO lt_button.
+
 
     CLEAR ls_button.
     ls_button-function = 'F7'.
@@ -1727,21 +1857,15 @@ CLASS lcl_window IMPLEMENTATION.
 
     APPEND ls_button TO lt_button.
 
-*    CLEAR ls_button.
-*    ls_button-butn_type = 3.
-*    APPEND ls_button TO lt_button.
+    mo_toolbar->add_button_group( lt_button ).
 
-    CALL METHOD mo_toolbar->add_button_group
-      EXPORTING
-        data_table = lt_button.
 
 * Register events
     ls_events-eventid = cl_gui_toolbar=>m_id_function_selected.
     ls_events-appl_event = space.
     APPEND ls_events TO lt_events.
-    CALL METHOD mo_toolbar->set_registered_events
-      EXPORTING
-        events = lt_events.
+
+    mo_toolbar->set_registered_events( events = lt_events ).
 
     SET HANDLER me->hnd_toolbar FOR mo_toolbar.
 
@@ -1764,6 +1888,13 @@ CLASS lcl_window IMPLEMENTATION.
     APPEND INITIAL LINE TO lt_lines ASSIGNING FIELD-SYMBOL(<line>).
     <line> = iv_line.
     mo_code_viewer->set_marker( EXPORTING marker_number = 7  marker_lines = lt_lines ).
+
+    CLEAR lt_lines.
+    LOOP AT mt_breaks INTO DATA(ls_break) WHERE inclnamesrc = m_prg-include.
+      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
+      <line> = ls_break-linesrc.
+    ENDLOOP.
+    mo_code_viewer->set_marker( EXPORTING marker_number = 9  marker_lines = lt_lines ).
     mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
   ENDMETHOD.
 
@@ -1817,32 +1948,41 @@ CLASS lcl_window IMPLEMENTATION.
 
   METHOD hnd_toolbar.
     CONSTANTS: c_mask TYPE x VALUE '01'.
+    m_debug_button = fcode.
     CASE fcode.
-      WHEN 'REFRESH'."
-        mo_debugger->run_script( ).
-      WHEN 'INITIALS'."Show/hide empty variables
-        mo_debugger->go_tree_local->m_hide = mo_debugger->go_tree_local->m_hide BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'GLOBALS'."Show/hide global variables
-        mo_debugger->go_tree_local->m_globals =  mo_debugger->go_tree_local->m_globals BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
-        mo_debugger->go_tree_local->m_class_data =  mo_debugger->go_tree_local->m_class_data BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'CHANGED'."Show only changed values/all values
-        mo_debugger->go_tree_local->m_changed =  mo_debugger->go_tree_local->m_changed BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'LDB'."Show/hide LDB variables (globals)
-        mo_debugger->go_tree_local->m_ldb =  mo_debugger->go_tree_local->m_ldb BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'F5'.
+      WHEN 'HIST'.
+        m_history = m_history BIT-XOR c_mask.
+        IF m_history IS INITIAL.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_red_xcircle ) text = 'History OFF' ).
+        ELSE.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_graduate ) text = 'History ON' ).
+        ENDIF.
+
+      WHEN 'F5' OR 'F7END' OR 'F6BEG'.
         mo_debugger->f5( ).
+
       WHEN 'F6'.
-        mo_debugger->f6( ).
+        IF m_history IS INITIAL.
+          mo_debugger->f6( ).
+        ELSE.
+          READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
+          mo_debugger->m_f6_level = ls_stack-stacklevel.
+          mo_debugger->f5( ).
+        ENDIF.
+
       WHEN 'F7'.
-        mo_debugger->f7( ).
+        IF m_history IS INITIAL.
+          mo_debugger->f7( ).
+        ELSE.
+          mo_debugger->f5( ).
+        ENDIF.
+
       WHEN 'F8'.
-        mo_debugger->f8( ).
+        IF m_history IS INITIAL.
+          mo_debugger->f8( ).
+        ELSE.
+          mo_debugger->f5( ).
+        ENDIF.
     ENDCASE.
   ENDMETHOD.
 
