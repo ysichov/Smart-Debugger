@@ -1,6 +1,5 @@
-# SDDE
-Simple Debugger - Data Explorer
-Multi-windows program for viewing all objects and data structures in debug
+# SmartDebugger
+Smart Debugger - SAP Script program for viewing all objects and data structures in debug
 
 при запуске скрипт считает все ваши локальные и глобальные переменные, включая SYST и покажет в виде иерархии.
 
