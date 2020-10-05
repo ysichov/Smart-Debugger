@@ -3,7 +3,7 @@
 *& Advanced Reverse Ingeneering Abap Debugger with New Analytycs
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
-*& version: beta 0.4.168.170
+*& version: beta 0.5.185.185
 *& Git https://github.com/ysichov/SDDE
 *& RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *& EN description - https://github.com/ysichov/SDDE/wiki
@@ -43,11 +43,23 @@ CLASS lcl_appl DEFINITION.
            BEGIN OF var_table,
              step  TYPE i,
              stack TYPE i,
+             first TYPE xfeld,
              leaf  TYPE string,
              name  TYPE string,
+             short TYPE string,
              key   TYPE salv_de_node_key,
              ref   TYPE REF TO data,
+             tree  TYPE REF TO lcl_rtti_tree,
            END OF var_table,
+
+           BEGIN OF var_table_temp,
+             step  TYPE i,
+             stack TYPE i,
+             first TYPE xfeld,
+             leaf  TYPE string,
+             name  TYPE string,
+             short TYPE string,
+           END OF var_table_temp,
 
            BEGIN OF t_obj,
              name       TYPE string,
@@ -518,6 +530,8 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           m_zcode                TYPE x,
           m_prg                  TYPE tpda_scr_prg_info,
           m_debug_button         LIKE sy-ucomm,
+          m_show_step            TYPE xfeld,
+          m_update_tree          TYPE xfeld,
           mo_debugger            TYPE REF TO lcl_debugger_script,
           mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
           mo_splitter_var        TYPE REF TO cl_gui_splitter_container,
@@ -1323,6 +1337,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD run_script_hist.
+
+    DATA: lv_prev_step TYPE i,
+          lt_prev_var  TYPE STANDARD TABLE OF lcl_appl=>var_table.
+
+    lv_prev_step = m_hist_step.
+
     IF mo_window->m_debug_button = 'BACK' AND m_hist_step > 1.
       SUBTRACT 1 FROM m_hist_step.
     ENDIF.
@@ -1331,12 +1351,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ADD 1  TO m_hist_step.
     ENDIF.
 
+    CHECK lv_prev_step NE m_hist_step.
+
     READ TABLE mt_steps INTO DATA(ls_step) INDEX m_hist_step.
     mo_window->set_program( CONV #( ls_step-include ) ).
     mo_window->set_program_line( ls_step-line ).
 
     READ TABLE mo_window->mt_stack INTO DATA(ls_stack) INDEX 1.
-    MOVE-CORRESPONDING ls_stack to mo_window->m_prg.
+    MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
     IF ls_stack-stacklevel NE ls_step-stacklevel.
 
       IF ls_stack-stacklevel < ls_step-stacklevel.
@@ -1345,10 +1367,57 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ELSE.
         DELETE mo_window->mt_stack WHERE stacklevel > ls_step-stacklevel.
       ENDIF.
-    READ TABLE mo_window->mt_stack INTO ls_stack INDEX 1.
-    MOVE-CORRESPONDING ls_stack to mo_window->m_prg.
-    mo_window->show_stack( ).
+      READ TABLE mo_window->mt_stack INTO ls_stack INDEX 1.
+      MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
+      mo_window->show_stack( ).
     ENDIF.
+
+    LOOP AT mt_vars_hist INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X'.
+      ASSIGN ls_hist-ref->* TO FIELD-SYMBOL(<var>).
+      ls_hist-tree->add_variable( EXPORTING iv_root_name = ls_hist-short
+                                           iv_full_name = ls_hist-name
+                                  CHANGING io_var =  <var>  ).
+    ENDLOOP.
+
+
+    IF mo_window->m_debug_button = 'FORW'.
+      LOOP AT mt_vars_hist INTO ls_hist WHERE step = lv_prev_step  AND first NE 'X' .
+        ASSIGN ls_hist-ref->* TO <var>.
+        ls_hist-tree->add_variable( EXPORTING iv_root_name = ls_hist-short
+                                             iv_full_name = ls_hist-name
+                                    CHANGING io_var =  <var>  ).
+      ENDLOOP.
+    ENDIF.
+
+    IF mo_window->m_debug_button = 'BACK'.
+
+      LOOP AT mt_vars_hist INTO ls_hist WHERE step = lv_prev_step.
+        LOOP AT mt_vars_hist INTO DATA(ls_var) WHERE step < ls_hist-step AND name = ls_hist-name AND short = ls_hist-short.
+          ASSIGN ls_var-ref->* TO <var>.
+          ls_var-tree->add_variable( EXPORTING iv_root_name = ls_var-short
+                                             iv_full_name = ls_var-name
+                                    CHANGING io_var =  <var>  ).
+          exit.
+        ENDLOOP.
+      ENDLOOP.
+    ENDIF.
+
+
+*    LOOP AT mt_vars_hist INTO DATA(ls_hist) WHERE step = m_hist_step.
+*      ASSIGN ls_hist-ref->* TO FIELD-SYMBOL(<var>).
+*      ls_hist-tree->add_variable( EXPORTING iv_root_name = ls_hist-short
+*                                           iv_full_name = ls_hist-name
+*                                  CHANGING io_var =  <var>  ).
+*    ENDLOOP.
+
+    go_tree_imp->display( ).
+    go_tree_local->display( ).
+    go_tree_exp->display( ).
+
+    IF mo_window->m_visualization IS INITIAL AND mo_window->m_debug_button NE 'F5'.
+      mo_window->m_show_step = abap_true.
+    ENDIF.
+
   ENDMETHOD.
 
   METHOD run_script.
@@ -1359,48 +1428,59 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           l_class          TYPE seu_name,
           lv_stack_changed TYPE xfeld.
 
-    DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
-    MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
-    READ TABLE mo_window->mt_stack INDEX 1 INTO DATA(ls_stack).
-
-    IF is_step = abap_true.
-      ADD 1 TO m_step.
-      m_hist_step = m_step.
-      APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
-      MOVE-CORRESPONDING ls_stack TO <step>.
-      <step>-step = m_step.
-      CLEAR is_step.
-    ENDIF.
-
-    CALL METHOD cl_tpda_script_bp_services=>get_all_bps RECEIVING p_bps_it = mo_window->mt_breaks.
-
-
-    CALL METHOD abap_source->program RECEIVING p_prg = DATA(l_program).
+*    IF mo_window->m_show_step = abap_false
+*     AND mo_window->m_visualization = abap_false
+*     AND mo_window->m_history = abap_true.
+*      mo_window->m_update_tree = ''.
+*     ELSE.
+*      mo_window->m_update_tree = 'X'.
+*    ENDIF.
 
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = mo_window->m_prg ).
 
+        DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
+        MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
+        READ TABLE mo_window->mt_stack INDEX 1 INTO DATA(ls_stack).
+
+        IF is_step = abap_true.
+
+          ADD 1 TO m_step.
+          m_hist_step = m_step.
+
+          APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
+          MOVE-CORRESPONDING ls_stack TO <step>.
+          <step>-step = m_step.
+          CLEAR is_step.
+        ENDIF.
+
+        CALL METHOD cl_tpda_script_bp_services=>get_all_bps RECEIVING p_bps_it = mo_window->mt_breaks.
+        CALL METHOD abap_source->program RECEIVING p_prg = DATA(l_program).
+
         IF mo_window->m_prg-event-eventname NE go_tree_local->m_prg_info-event-eventname.
-
+          "OR ( mo_window->m_show_step = abap_true and mo_window->m_update_tree = abap_true ).
+          "IF mo_window->m_prg-
           lv_stack_changed = abap_true.
-          CLEAR: m_step_delta, go_tree_local->m_no_refresh.
-          go_tree_local->m_prg_info-event-eventname = mo_window->m_prg-event-eventname.
 
-          CLEAR mt_ret_exp.
-          CLEAR mt_obj.
+          go_tree_local->m_prg_info-event-eventname = mo_window->m_prg-event-eventname.
 
           DELETE go_tree_local->mt_state WHERE stack > ls_stack-stacklevel.
           DELETE go_tree_exp->mt_state WHERE stack > ls_stack-stacklevel.
           DELETE go_tree_imp->mt_state WHERE stack > ls_stack-stacklevel.
 
-            go_tree_local->clear( ).
-            go_tree_exp->clear( ).
-            go_tree_imp->clear( ).
+          CLEAR: m_step_delta,
+                 mt_ret_exp,
+                 mt_obj.
+
+          go_tree_local->clear( ).
+          go_tree_exp->clear( ).
+          go_tree_imp->clear( ).
 
           go_tree_local->m_leaf = go_tree_imp->m_leaf = go_tree_exp->m_leaf =  'Locals'.
           CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
-          CLEAR mt_ret_exp.
           SORT mt_locals.
+
+          CLEAR mt_ret_exp.
 
           READ TABLE mt_locals WITH KEY name = 'ME' TRANSPORTING NO FIELDS.
           IF sy-subrc = 0.
@@ -1439,7 +1519,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     LOOP AT mt_locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
-
       transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_local i_no_cl_twin = 'X' ).
     ENDLOOP.
 
@@ -1556,6 +1635,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     go_tree_local->m_no_refresh = 'X'.
     go_tree_exp->m_no_refresh = 'X'.
     go_tree_imp->m_no_refresh = 'X'.
+    CLEAR mo_window->m_show_step.
 
     IF mo_window->m_debug_button = 'F5'.
       IF mo_window->m_visualization IS INITIAL.
@@ -1714,12 +1794,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     mo_window->show_stack( ).
     go_tree_imp->display( ).
     go_tree_local->display( ).
-    go_tree_exp->display(  ).
+    go_tree_exp->display( ).
+    IF mo_window->m_visualization IS INITIAL AND mo_window->m_debug_button NE 'F5'.
+      mo_window->m_show_step = abap_true.
+    ENDIF.
   ENDMETHOD.
 
   METHOD save_hist.
     DATA: lv_add       TYPE xfeld,
           lv_name(100).
+
+    CHECK mo_window->m_debug_button NE 'BACK' AND mo_window->m_debug_button NE 'FORW'.
 
     i_state-step = m_step - m_step_delta.
     ASSIGN i_state-ref->* TO FIELD-SYMBOL(<state>).
@@ -1727,9 +1812,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF lv_name+0(2) NE '{O'.
       READ TABLE mt_vars_hist WITH KEY stack = i_state-stack name = i_state-name INTO DATA(lv_hist).
       IF sy-subrc NE 0.
-        IF <state> IS NOT INITIAL.
-          lv_add = abap_on.
-        ENDIF.
+*        IF <state> IS NOT INITIAL.
+        lv_add = abap_on.
+*        ENDIF.
       ELSE.
         ASSIGN lv_hist-ref->* TO FIELD-SYMBOL(<hist>).
         IF <hist> NE <state>.
@@ -1745,15 +1830,22 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lv_add = abap_on.
         ENDIF.
       ELSE.
-        IF <state> IS NOT INITIAL.
+"        IF <state> IS NOT INITIAL.
           lv_add = abap_on.
-        ENDIF.
+"        ENDIF.
       ENDIF.
 
     ENDIF.
     IF lv_add = abap_on.
+
+      CLEAR i_state-first.
+      IF m_step_delta = 0.
+        i_state-first = 'X'.
+      ENDIF.
       INSERT i_state INTO mt_vars_hist INDEX 1.
     ENDIF.
+
+
   ENDMETHOD.
 
 ENDCLASS.                    "lcl_debugger_script IMPLEMENTATION
@@ -2059,8 +2151,8 @@ CLASS lcl_window IMPLEMENTATION.
 
     CREATE OBJECT mo_code_viewer
       EXPORTING
-        parent = mo_editor_container.
-*       max_number_chars = 72
+        parent           = mo_editor_container
+        max_number_chars = 100.
 
     mo_code_viewer->init_completer( ).
     mo_code_viewer->upload_properties(
@@ -3754,16 +3846,22 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
   METHOD clear.
     tree->get_nodes( )->delete_all( ).
+
     CLEAR: m_globals_key,
            m_locals_key,
            m_ldb_key,
            m_debug_key,
            m_class_key,
            mt_vars,
-           mt_classes_leaf.
+           mt_classes_leaf,
+           m_no_refresh.
   ENDMETHOD.
 
   METHOD add_node.
+*    IF mo_debugger->mo_window->m_update_tree = abap_false.
+*      RETURN.
+*    ENDIF.
+
     main_node_key =
           tree->get_nodes( )->add_node(
             related_node   = ''
@@ -3794,7 +3892,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     DATA lv_text TYPE lvc_value.
     DATA lv_node_key TYPE salv_de_node_key.
     DATA lv_icon TYPE salv_de_tree_image.
-    DATA         ls_tree TYPE ts_table.
+    DATA ls_tree TYPE ts_table.
+
+*IF mo_debugger->mo_window->m_update_tree = abap_false.
+*      RETURN.
+*    ENDIF.
 
     CLEAR: ev_public_key,
            ev_protected_key,
@@ -3818,6 +3920,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       e_root_key = <class>-key.
     ELSE.
 
+      "IF NOT ( mo_debugger->mo_window->m_show_step = abap_false and mo_debugger->mo_window->m_visualization = abap_false ).
       e_root_key = lv_node_key = tree->get_nodes( )->add_node(
         related_node   = l_new_node
         relationship   = iv_rel
@@ -3826,6 +3929,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         data_row       = ls_tree
         text           = lv_text
         folder         = abap_false )->get_key( ).
+      "ENDIF.
+
 
       APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
       <class>-name = iv_full.
@@ -4012,7 +4117,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         <obj>-alv_viewer = NEW #(  i_additional_name = 'Steps' ir_tab = r_tab ).
         <obj>-alv_viewer->mo_sel->raise_selection_done( ).
 
-        GET REFERENCE OF mo_debugger->mt_vars_hist INTO r_tab.
+        DATA: lt_hist TYPE TABLE OF lcl_appl=>var_table_temp.
+        MOVE-CORRESPONDING  mo_debugger->mt_vars_hist TO lt_hist.
+        GET REFERENCE OF lt_hist INTO r_tab.
         <obj>-alv_viewer = NEW #(  i_additional_name = 'History' ir_tab = r_tab ).
         <obj>-alv_viewer->mo_sel->raise_selection_done( ).
 
@@ -4481,8 +4588,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
     <vars>-leaf = m_leaf.
     <vars>-name = iv_fullname.
+    <vars>-short = iv_name.
     <vars>-key = e_root_key.
     <vars>-ref = ir_up.
+    <vars>-tree = me.
 
     READ TABLE mt_state
       WITH KEY name = iv_fullname
@@ -4638,9 +4747,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
         <vars>-leaf = m_leaf.
         <vars>-name = iv_fullname.
+        <vars>-short = iv_name.
         <vars>-key = e_root_key.
         <vars>-ref = ir_up.
         <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
+        <vars>-tree = me.
 
         READ TABLE mt_state
           WITH KEY name = iv_fullname
