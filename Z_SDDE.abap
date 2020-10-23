@@ -1462,7 +1462,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF mo_window->m_debug_button = 'BACK'.
-      
+
       LOOP AT mt_var_step INTO step WHERE step = m_hist_step.
         APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
         MOVE-CORRESPONDING step TO <hist> .
@@ -1590,7 +1590,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           go_tree_exp->save_stack_vars( lv_step ).
           go_tree_imp->save_stack_vars( lv_step ).
 
-
           DELETE go_tree_local->mt_state WHERE stack > ms_stack-stacklevel.
           DELETE go_tree_exp->mt_state WHERE stack > ms_stack-stacklevel.
           DELETE go_tree_imp->mt_state WHERE stack > ms_stack-stacklevel.
@@ -1604,10 +1603,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           go_tree_exp->clear( ).
           go_tree_imp->clear( ).
 
-
           go_tree_local->m_leaf = go_tree_imp->m_leaf = go_tree_exp->m_leaf =  'Locals'.
-
-
         ELSE.
           CLEAR lv_stack_changed.
           m_step_delta = 1.
@@ -1771,6 +1767,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     go_tree_exp->m_no_refresh = 'X'.
     go_tree_imp->m_no_refresh = 'X'.
     CLEAR mo_window->m_show_step.
+
+    IF lv_stack_changed = abap_true.
+      go_tree_local->save_stack_vars( m_step ).
+      go_tree_exp->save_stack_vars( m_step ).
+      go_tree_imp->save_stack_vars( m_step ).
+    ENDIF.
 
     IF mo_window->m_debug_button = 'F5'.
       IF mo_window->m_visualization IS INITIAL.
