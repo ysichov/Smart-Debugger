@@ -21,9 +21,9 @@
 
 CLASS lcl_data_receiver DEFINITION DEFERRED.
 CLASS lcl_data_transmitter DEFINITION DEFERRED.
-CLASS lcl_table_viewer DEFINITION DEFERRED.
 CLASS lcl_rtti_tree DEFINITION DEFERRED.
 CLASS lcl_window DEFINITION DEFERRED.
+CLASS lcl_table_viewer DEFINITION DEFERRED.
 
 CLASS lcl_box_handler DEFINITION."for memory clearing
   PUBLIC SECTION.
@@ -38,6 +38,40 @@ CLASS lcl_appl DEFINITION.
              icon_name(64) TYPE c,
              icon          TYPE aqadh_type_of_icon,
            END OF sign_option_icon_s,
+
+           BEGIN OF var_table,
+             step    TYPE i,
+             stack   TYPE i,
+             first   TYPE xfeld,
+             leaf    TYPE string,
+             name    TYPE string,
+             short   TYPE string,
+             key     TYPE salv_de_node_key,
+             cl_leaf TYPE int4,
+             ref     TYPE REF TO data,
+             tree    TYPE REF TO lcl_rtti_tree,
+             class   TYPE string,
+           END OF var_table,
+
+           BEGIN OF var_table_h,
+             step    TYPE i,
+             leaf    TYPE string,
+             name    TYPE string,
+             short   TYPE string,
+             cl_leaf TYPE int4,
+             ref     TYPE REF TO data,
+             tree    TYPE REF TO lcl_rtti_tree,
+           END OF var_table_h,
+
+           BEGIN OF var_table_temp,
+             step  TYPE i,
+             stack TYPE i,
+             first TYPE xfeld,
+             leaf  TYPE string,
+             name  TYPE string,
+             short TYPE string,
+             class TYPE string,
+           END OF var_table_temp,
 
            BEGIN OF t_obj,
              name       TYPE string,
@@ -73,7 +107,6 @@ CLASS lcl_appl DEFINITION.
              line       TYPE tpda_sc_line,
              eventtype  TYPE tpda_event_type,
              eventname  TYPE tpda_event,
-             start      TYPE xfeld,
            END OF t_step_counter.
 
     CLASS-DATA: m_option_icons     TYPE TABLE OF sign_option_icon_s,
@@ -149,7 +182,6 @@ CLASS lcl_popup IMPLEMENTATION.
 
 ENDCLASS.
 
-
 CLASS lcl_ddic DEFINITION.
   PUBLIC SECTION.
     CLASS-METHODS: get_text_table IMPORTING i_tname TYPE tabname
@@ -178,7 +210,6 @@ CLASS lcl_dragdrop DEFINITION.
       drag FOR EVENT ondrag OF cl_gui_alv_grid IMPORTING e_dragdropobj e_row e_column ,
       drop FOR EVENT ondrop OF cl_gui_alv_grid IMPORTING e_dragdropobj e_row.
 ENDCLASS.
-
 
 CLASS lcl_alv_common DEFINITION.
   PUBLIC SECTION.
@@ -262,79 +293,6 @@ CLASS lcl_rtti DEFINITION.
                                     e_handle TYPE REF TO cl_abap_structdescr.
 ENDCLASS.
 
-
-
-CLASS lcl_types DEFINITION ABSTRACT.
-  PUBLIC SECTION.
-    TYPES:
-      BEGIN OF selection_display_s,
-        ind         TYPE i,
-        field_label TYPE lvc_fname,
-        int_type(1),
-        inherited   TYPE aqadh_type_of_icon,
-        emitter     TYPE aqadh_type_of_icon,
-        sign        TYPE tvarv_sign,
-        opti        TYPE tvarv_opti,
-        option_icon TYPE aqadh_type_of_icon,
-        low         TYPE string,
-        high        TYPE string,
-        more_icon   TYPE aqadh_type_of_icon,
-        range       TYPE aqadh_t_ranges,
-        name        TYPE reptext,
-        element     TYPE text60,
-        domain      TYPE text60,
-        datatype    TYPE string,
-        length      TYPE i,
-        transmitter TYPE REF TO lcl_data_transmitter,
-        receiver    TYPE REF TO lcl_data_receiver,
-        color       TYPE lvc_t_scol,
-        style       TYPE lvc_t_styl,
-      END OF selection_display_s,
-
-      BEGIN OF t_sel_row,
-        sign        TYPE tvarv_sign,
-        opti        TYPE tvarv_opti,
-        option_icon TYPE aqadh_type_of_icon,
-        low         TYPE string,
-        high        TYPE string,
-        more_icon   TYPE aqadh_type_of_icon,
-        range       TYPE aqadh_t_ranges,
-      END OF t_sel_row,
-
-      BEGIN OF t_var_table,
-        step     TYPE i,
-        "stack    TYPE i,
-        start    TYPE xfeld,
-        name     TYPE string,
-        value    TYPE string,
-        fullname TYPE string,
-        ref      TYPE REF TO data,
-        type     type xfeld,
-      END OF t_var_table,
-
-      BEGIN OF t_var_stack,
-        name  TYPE string,
-        value TYPE string,
-        ref   TYPE REF TO data,
-        type  type xfeld,
-      END OF t_var_stack,
-      tt_var_stack TYPE STANDARD TABLE OF t_var_stack WITH DEFAULT KEY,
-
-      BEGIN OF t_stack,
-        stackpointer TYPE tpda_stack_pointer,
-        stacklevel   TYPE tpda_stack_level,
-        program      TYPE tpda_program,
-        include      TYPE tpda_include,
-        line         TYPE tpda_sc_line,
-        eventtype    TYPE tpda_event_type,
-        eventname    TYPE tpda_event,
-        vars         TYPE tt_var_stack,
-      END OF t_stack.
-
-
-    CLASS-DATA: mt_sel TYPE TABLE OF lcl_types=>selection_display_s.
-ENDCLASS.
-
 CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super.
 
   PUBLIC SECTION.
@@ -342,94 +300,51 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
              name TYPE string,
            END OF t_obj.
 
-    DATA: "mt_obj           TYPE TABLE OF t_obj,
-      mo_window     TYPE REF TO lcl_window,
-      m_variable    TYPE REF TO data,
-      m_object      TYPE REF TO object,
-      m_prg         TYPE tpda_scr_prg_info,
-      mt_locals     TYPE tpda_scr_locals_it,
-      mt_globals    TYPE tpda_scr_globals_it,
-      mt_ret_exp    TYPE tpda_scr_locals_it,
-      mt_vars       TYPE TABLE OF lcl_types=>t_var_table,
-      mt_steps      TYPE  TABLE OF lcl_appl=>t_step_counter,
-      "mt_var_step      TYPE  TABLE OF lcl_appl=>var_table_h,
-      m_step        TYPE i,
-      mt_stack      TYPE TABLE OF lcl_appl=>t_stack,
-      mt_stack_     TYPE TABLE OF lcl_types=>t_stack,
-      ms_stack_prev TYPE   lcl_appl=>t_stack,
-      ms_stack      TYPE   lcl_appl=>t_stack,
-      "is_history       TYPE xfeld,
-      "m_hist_step      TYPE i,
-      m_step_delta  TYPE i,
-      "mt_vars_hist     TYPE STANDARD TABLE OF lcl_appl=>var_table,
-      "mt_classes_types TYPE TABLE OF lcl_appl=>t_classes_types,
-      is_step       TYPE xfeld,
-      is_start      TYPE xfeld,
-      go_tree_imp   TYPE REF TO lcl_rtti_tree,
-      go_tree_local TYPE REF TO lcl_rtti_tree,
-      go_tree_exp   TYPE REF TO lcl_rtti_tree,
-
-      m_classname   TYPE string.
-    "m_f6_level       TYPE i.
+    DATA: mt_obj           TYPE TABLE OF t_obj,
+          mt_locals        TYPE tpda_scr_locals_it,
+          mt_globals       TYPE tpda_scr_globals_it,
+          mt_ret_exp       TYPE tpda_scr_locals_it,
+          mt_steps         TYPE  TABLE OF lcl_appl=>t_step_counter,
+          mt_var_step      TYPE  TABLE OF lcl_appl=>var_table_h,
+          m_step           TYPE i,
+          ms_stack_prev    TYPE   lcl_appl=>t_stack,
+          ms_stack         TYPE   lcl_appl=>t_stack,
+          is_history       TYPE xfeld,
+          m_hist_step      TYPE i,
+          m_step_delta     TYPE i,
+          mt_vars_hist     TYPE STANDARD TABLE OF lcl_appl=>var_table,
+          mt_classes_types TYPE TABLE OF lcl_appl=>t_classes_types,
+          is_step          TYPE xfeld,
+          mo_window        TYPE REF TO lcl_window,
+          mv_f7_stop       TYPE xfeld,
+          go_tree_imp      TYPE REF TO lcl_rtti_tree,
+          go_tree_local    TYPE REF TO lcl_rtti_tree,
+          go_tree_exp      TYPE REF TO lcl_rtti_tree,
+          m_classname      TYPE string,
+          m_f6_level       TYPE i.
 
     METHODS: prologue  REDEFINITION,
       init    REDEFINITION,
       script  REDEFINITION,
       end     REDEFINITION,
       run_script,
+      run_script_hist,
       f5,
-      show_step,
-      get_obj_index IMPORTING iv_name TYPE any RETURNING VALUE(e_index) TYPE string.
+      f6,
+      f7,
+      f8,
+      get_obj_index IMPORTING iv_name TYPE any RETURNING VALUE(e_index) TYPE string,
+
+      save_hist CHANGING i_state TYPE lcl_appl=>var_table,
+      show_step.
 
   PRIVATE SECTION.
+    METHODS: transfer_variable IMPORTING i_name       TYPE string
+                                         i_tree       TYPE REF TO lcl_rtti_tree
+                                         i_shortname  TYPE string OPTIONAL
+                                         i_new_node   TYPE salv_de_node_key OPTIONAL
+                                         i_no_cl_twin TYPE xfeld OPTIONAL,
 
-    CONSTANTS: BEGIN OF c_kind,
-                 struct LIKE cl_abap_typedescr=>kind_struct VALUE cl_abap_typedescr=>kind_struct,
-                 table  LIKE cl_abap_typedescr=>kind_table VALUE cl_abap_typedescr=>kind_table,
-                 elem   LIKE cl_abap_typedescr=>kind_elem VALUE cl_abap_typedescr=>kind_elem,
-                 class  LIKE cl_abap_typedescr=>kind_class VALUE cl_abap_typedescr=>kind_class,
-                 intf   LIKE cl_abap_typedescr=>kind_intf VALUE cl_abap_typedescr=>kind_intf,
-                 ref    LIKE cl_abap_typedescr=>kind_ref VALUE cl_abap_typedescr=>kind_ref,
-               END OF c_kind.
-
-
-    METHODS: transfer_variable IMPORTING i_name     TYPE string
-                                         i_fullname TYPE string OPTIONAL,
-
-      add_variable
-        IMPORTING
-          iv_name      TYPE string
-          iv_full_name TYPE string OPTIONAL
-          iv_fullname  TYPE string
-        CHANGING
-          io_var       TYPE any  .
-
-    METHODS traverse
-      IMPORTING
-        io_type_descr  TYPE REF TO cl_abap_typedescr
-        iv_name        TYPE clike
-        iv_fullname    TYPE string OPTIONAL
-        ir_up          TYPE REF TO data OPTIONAL
-        iv_parent_name TYPE string OPTIONAL.
-
-    METHODS traverse_struct
-      IMPORTING
-        io_type_descr  TYPE REF TO cl_abap_typedescr
-        iv_name        TYPE clike
-        iv_fullname    TYPE string OPTIONAL
-        ir_up          TYPE REF TO data OPTIONAL
-        iv_parent_name TYPE string OPTIONAL.
-
-    METHODS traverse_elem
-      IMPORTING
-        io_type_descr  TYPE REF TO cl_abap_typedescr
-        iv_name        TYPE clike
-        iv_fullname    TYPE string OPTIONAL
-        iv_value       TYPE any OPTIONAL
-        ir_up          TYPE REF TO data OPTIONAL
-        iv_parent_name TYPE string OPTIONAL.
-
-    METHODS:
       create_simple_var IMPORTING i_name        TYPE string
                         RETURNING VALUE(er_var) TYPE REF TO data,
 
@@ -489,7 +404,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
           m_leaf          TYPE string,
           m_variable      TYPE REF TO data,
           m_object        TYPE REF TO object,
-          "m_correction    TYPE i,
           m_hide          TYPE x,
           m_globals       TYPE x,
           m_class_data    TYPE x,
@@ -501,12 +415,11 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
           m_ldb_key       TYPE salv_de_node_key,
           m_debug_key     TYPE salv_de_node_key,
           m_icon          TYPE salv_de_tree_image,
-          "mt_vars         TYPE STANDARD TABLE OF lcl_appl=>var_table,
-          "mt_state        TYPE STANDARD TABLE OF lcl_appl=>var_table,
+          mt_vars         TYPE STANDARD TABLE OF lcl_appl=>var_table,
+          mt_state        TYPE STANDARD TABLE OF lcl_appl=>var_table,
           mt_classes_leaf TYPE TABLE OF t_classes_leaf,
           m_new_node      TYPE salv_de_node_key,
           m_no_refresh    TYPE xfeld,
-          "m_ref           TYPE xfeld,
           m_prg_info      TYPE tpda_scr_prg_info,
           mo_debugger     TYPE REF TO lcl_debugger_script,
           tree            TYPE REF TO cl_salv_tree.
@@ -527,6 +440,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
         io_var       TYPE any  .
 
     METHODS clear.
+    METHODS save_stack_vars IMPORTING iv_step TYPE i.
 
     METHODS add_buttons.
     METHODS add_node
@@ -539,13 +453,8 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
       IMPORTING
                 iv_name           TYPE lvc_value
                 iv_full           TYPE string OPTIONAL
-                "it_attr           TYPE tpda_script_object_attribut_it
                 i_new_node        TYPE salv_de_node_key OPTIONAL
                 iv_rel            TYPE salv_de_node_relation
-*      EXPORTING
-*                ev_public_key     TYPE salv_de_node_key
-*                ev_protected_key  TYPE salv_de_node_key
-*                ev_private_key    TYPE salv_de_node_key
       RETURNING VALUE(e_root_key) TYPE salv_de_node_key.
 
     METHODS add_obj_var
@@ -571,7 +480,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                END OF c_kind.
 
     DATA: tree_table TYPE tt_table.
-
 
     METHODS traverse
       IMPORTING
@@ -627,6 +535,1845 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
       check_change.
 ENDCLASS.
 
+CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
+  PUBLIC SECTION.
+
+    TYPES: BEGIN OF ts_table,
+             ref      TYPE REF TO data,
+             kind(1),
+             value    TYPE string,
+             typename TYPE abap_abstypename,
+             fullname TYPE string,
+           END OF ts_table.
+
+    TYPES tt_table TYPE STANDARD TABLE OF ts_table
+          WITH NON-UNIQUE DEFAULT KEY.
+
+    DATA: m_history              TYPE x,
+          m_visualization        TYPE x,
+          m_zcode                TYPE x,
+          m_prg                  TYPE tpda_scr_prg_info,
+          m_debug_button         LIKE sy-ucomm,
+          m_show_step            TYPE xfeld,
+          m_update_tree          TYPE xfeld,
+          mo_debugger            TYPE REF TO lcl_debugger_script,
+          mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
+          mo_splitter_var        TYPE REF TO cl_gui_splitter_container,
+          mo_toolbar_container   TYPE REF TO cl_gui_container,
+
+          mo_importing_container TYPE REF TO cl_gui_container,
+          mo_locals_container    TYPE REF TO cl_gui_container,
+          mo_exporting_container TYPE REF TO cl_gui_container,
+          mo_code_container      TYPE REF TO cl_gui_container,
+          mo_editor_container    TYPE REF TO cl_gui_container,
+          mo_stack_container     TYPE REF TO cl_gui_container,
+          mo_code_viewer         TYPE REF TO cl_gui_abapedit,
+          mt_stack               TYPE TABLE OF lcl_appl=>t_stack,
+          mo_toolbar             TYPE REF TO cl_gui_toolbar,
+          mo_salv_stack          TYPE REF TO cl_salv_table,
+          mt_tree_imp            TYPE tt_table,
+          mt_tree_loc            TYPE tt_table,
+          mt_tree_exp            TYPE tt_table,
+          mo_tree_imp            TYPE REF TO cl_salv_tree,
+          mo_tree_loc            TYPE REF TO cl_salv_tree,
+          mo_tree_exp            TYPE REF TO cl_salv_tree,
+          mt_breaks              TYPE tpda_bp_persistent_it.
+
+    METHODS: constructor IMPORTING i_debugger TYPE REF TO lcl_debugger_script i_additional_name TYPE string OPTIONAL,
+      add_toolbar_buttons,
+      hnd_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode,
+      set_program IMPORTING iv_program TYPE program.
+
+    METHODS set_program_line IMPORTING iv_line LIKE sy-index.
+    METHODS create_code_viewer.
+    METHODS show_stack.
+ENDCLASS.
+
+CLASS lcl_debugger_script IMPLEMENTATION.
+  METHOD prologue.
+    super->prologue( ).
+  ENDMETHOD.                    "prolog
+
+  METHOD init.
+    is_step = abap_on.
+    lcl_appl=>init_lang( ).
+    lcl_appl=>init_icons_table( ).
+
+    mo_window = NEW lcl_window( me ).
+    go_tree_imp = NEW lcl_rtti_tree( i_header = 'Importing parameters' i_type = 'I' i_cont = mo_window->mo_importing_container
+                                     i_debugger = me  ).
+    go_tree_local = NEW lcl_rtti_tree( i_header =  'Variables' i_type = 'L'
+                     i_cont = mo_window->mo_locals_container
+                     i_debugger = me ).
+    go_tree_exp = NEW lcl_rtti_tree( i_header = 'Exporting parameters' i_type = 'E' i_cont = mo_window->mo_exporting_container
+                                     i_debugger = me ).
+  ENDMETHOD.                    "init
+
+  METHOD create_simple_var.
+    DATA: lr_symbsimple TYPE REF TO tpda_sys_symbsimple,
+          lo_elem       TYPE REF TO cl_abap_elemdescr.
+
+    CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+      EXPORTING
+        p_var_name   = i_name
+      RECEIVING
+        p_symb_quick = DATA(quick).
+
+    ASSIGN quick-quickdata TO FIELD-SYMBOL(<lv_value>).
+    lr_symbsimple ?= <lv_value>.
+    ASSIGN lr_symbsimple->* TO FIELD-SYMBOL(<simple>).
+
+    CALL METHOD cl_abap_complexdescr=>describe_by_name
+      EXPORTING
+        p_name         = quick-abstypename
+      RECEIVING
+        p_descr_ref    = DATA(lo_type)
+      EXCEPTIONS
+        type_not_found = 1.
+
+    lo_elem ?= lo_type.
+    CREATE DATA er_var TYPE HANDLE lo_elem.
+    ASSIGN er_var->* TO FIELD-SYMBOL(<new_elem>).
+    <new_elem> = <simple>-valstring.
+  ENDMETHOD.
+
+  METHOD create_simple_string.
+    DATA: lr_string TYPE REF TO tpda_sys_symbstring,
+          lr_struc  TYPE REF TO data,
+          lo_elem   TYPE REF TO cl_abap_elemdescr..
+
+    FIELD-SYMBOLS: <string>   TYPE tpda_sys_symbstring,
+                   <lv_value> TYPE any.
+
+    CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+      EXPORTING
+        p_var_name   = i_name
+      RECEIVING
+        p_symb_quick = DATA(quick).
+
+    ASSIGN quick-quickdata TO <lv_value>.
+    lr_string ?= <lv_value>.
+    ASSIGN lr_string->* TO <string>.
+
+    CALL METHOD cl_abap_complexdescr=>describe_by_name
+      EXPORTING
+        p_name      = quick-abstypename
+      RECEIVING
+        p_descr_ref = DATA(lo_type).
+
+    lo_elem ?= lo_type.
+
+    CREATE DATA lr_struc TYPE HANDLE lo_elem.
+    ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_string>).
+
+    e_string = <string>-valstring.
+  ENDMETHOD.
+
+  METHOD create_struc.
+    DATA: lo_new_type    TYPE REF TO cl_abap_structdescr,
+          ls_comp        TYPE abap_componentdescr,
+          lt_components  TYPE abap_component_tab,
+          lr_symbsimple  TYPE REF TO tpda_sys_symbsimple,
+          lo_struc_descr TYPE REF TO cl_tpda_script_structdescr,
+          comp_full      TYPE  tpda_scr_struct_comp_it,
+          comp_it        TYPE tpda_script_struc_componentsit.
+
+    FIELD-SYMBOLS: <lv_value> TYPE any,
+                   <simple>   TYPE tpda_sys_symbsimple.
+
+    CLEAR er_struc.
+    CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+      EXPORTING
+        p_var_name   = i_name
+      RECEIVING
+        p_symb_quick = DATA(quick).
+
+    lo_struc_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
+    lo_struc_descr->components( IMPORTING p_components_it = comp_it p_components_full_it = comp_full ).
+
+    lcl_rtti=>create_struc_handle( EXPORTING i_tname = CONV #( replace( val = quick-abstypename sub = '/TYPE=' with = '' )  ) IMPORTING e_handle = lo_new_type ).
+    IF lo_new_type IS NOT INITIAL.
+      CREATE DATA er_struc TYPE HANDLE lo_new_type.
+    ELSE.
+
+      LOOP AT comp_full INTO DATA(l_comp).
+        ls_comp-name = l_comp-compname.
+
+        ASSIGN l_comp-symbquick-quickdata TO <lv_value>.
+        lr_symbsimple ?= <lv_value>.
+        ASSIGN lr_symbsimple->* TO <simple>.
+
+        CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+          EXPORTING
+            p_var_name   = |{ i_name }-{ l_comp-compname }|
+          RECEIVING
+            p_symb_quick = DATA(quick_sub).
+
+        CALL METHOD cl_abap_complexdescr=>describe_by_name
+          EXPORTING
+            p_name         = quick_sub-abstypename
+          RECEIVING
+            p_descr_ref    = DATA(lo_type)
+          EXCEPTIONS
+            type_not_found = 1.
+
+        IF sy-subrc = 0.
+          ls_comp-type ?= lo_type.
+          APPEND ls_comp TO lt_components.
+        ENDIF.
+      ENDLOOP.
+      lo_new_type  = cl_abap_structdescr=>create( lt_components ).
+      CREATE DATA er_struc TYPE HANDLE lo_new_type.
+    ENDIF.
+
+    ASSIGN er_struc->* TO FIELD-SYMBOL(<new_struc>).
+
+    LOOP AT comp_full INTO l_comp.
+      ASSIGN l_comp-symbquick-quickdata TO <lv_value>.
+      lr_symbsimple ?= <lv_value>.
+      ASSIGN COMPONENT l_comp-compname OF STRUCTURE <new_struc> TO FIELD-SYMBOL(<new>).
+      <new> = lr_symbsimple->valstring.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD get_deep_struc.
+    DATA: lr_struc       TYPE REF TO data,
+          lo_struc_descr TYPE REF TO cl_tpda_script_structdescr,
+          comp_full      TYPE  tpda_scr_struct_comp_it,
+          comp_it        TYPE tpda_script_struc_componentsit,
+          lr_symbsimple  TYPE REF TO tpda_sys_symbsimple,
+          lr_symbstring  TYPE REF TO tpda_sys_symbstring,
+          lr_symbstruc   TYPE REF TO tpda_sys_symbstruct,
+          r_data         TYPE REF TO data.
+
+    FIELD-SYMBOLS: <lv_value> TYPE any.
+
+    ASSIGN r_obj->* TO FIELD-SYMBOL(<new_deep>).
+    lo_struc_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
+    lo_struc_descr->components( IMPORTING p_components_it = comp_it p_components_full_it = comp_full ).
+
+    LOOP AT comp_full INTO DATA(comp).
+      CASE comp-symbquick-metatype.
+        WHEN cl_tpda_script_data_descr=>mt_simple.
+          ASSIGN comp-symbquick-quickdata TO <lv_value>.
+          lr_symbsimple ?= <lv_value>.
+          ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO FIELD-SYMBOL(<new>).
+          <new> = lr_symbsimple->valstring.
+
+        WHEN cl_tpda_script_data_descr=>mt_string.
+          ASSIGN comp-symbquick-quickdata TO <lv_value>.
+          lr_symbstring ?= <lv_value>.
+          ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO <new>.
+          <new> = lr_symbstring->valstring.
+
+        WHEN cl_tpda_script_data_descr=>mt_struct.
+          ASSIGN comp-symbquick-quickdata TO <lv_value>.
+          ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO <new>.
+          GET REFERENCE OF <new> INTO lr_struc.
+          lr_symbstruc ?= <lv_value>.
+          get_deep_struc( EXPORTING i_name = |{ i_name }-{ comp-compname }|
+                           r_obj = lr_struc ).
+
+        WHEN cl_tpda_script_data_descr=>mt_tab.
+          FIELD-SYMBOLS: <new_table> TYPE ANY TABLE.
+          ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO <new_table>.
+          GET REFERENCE OF <new_table> INTO r_data.
+          get_table( EXPORTING i_name = |{ i_name }-{ comp-compname }|
+                     CHANGING c_obj = r_data ).
+      ENDCASE.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD get_form_parameters.
+
+    TYPES: BEGIN OF t_param,
+             form TYPE string,
+             name TYPE string,
+             type TYPE char1,
+           END OF t_param.
+
+    DATA: gr_scan  TYPE REF TO cl_ci_scan,
+          lt_param TYPE TABLE OF t_param,
+          ls_param TYPE t_param,
+          lv_par   TYPE char1,
+          lv_type  TYPE char1.
+    DATA(gr_source) = cl_ci_source_include=>create( p_name = CONV #( i_prg-include ) ).
+    CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
+
+    LOOP AT gr_scan->tokens INTO DATA(l_token) WHERE str = 'FORM' .
+      READ TABLE gr_scan->statements INTO DATA(l_statement) WITH KEY from =  sy-tabix.
+
+      LOOP AT gr_scan->tokens FROM l_statement-from TO l_statement-to INTO l_token.
+        IF sy-tabix = l_statement-from.
+          CONTINUE.
+        ENDIF.
+        IF sy-tabix = l_statement-from + 1.
+          ls_param-form = l_token-str.
+          CONTINUE.
+        ENDIF.
+        IF l_token-str = 'USING'.
+          ls_param-type = 'I'.
+          CLEAR: lv_type, lv_par.
+          CONTINUE.
+        ELSEIF l_token-str = 'CHANGING'.
+          IF ls_param-name IS NOT INITIAL.
+            APPEND ls_param TO lt_param.
+            CLEAR: lv_type, lv_par, ls_param-name.
+          ENDIF.
+          ls_param-type = 'E'.
+          CLEAR: lv_type, lv_par.
+          CONTINUE.
+        ENDIF.
+        IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str NE 'TYPE'.
+          APPEND ls_param TO lt_param.
+          CLEAR: lv_par, ls_param-name.
+        ENDIF.
+
+        IF lv_par IS INITIAL.
+          ls_param-name = l_token-str.
+          lv_par = abap_true.
+          CONTINUE.
+        ENDIF.
+        IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str = 'TYPE'.
+          lv_type = abap_true.
+          CONTINUE.
+        ENDIF.
+        IF lv_par = abap_true AND lv_type = abap_true.
+          APPEND ls_param TO lt_param.
+          CLEAR: lv_type, lv_par, ls_param-name.
+        ENDIF.
+      ENDLOOP.
+      "read table gr_scan->tokens into data(l_token2) index lv_ind.
+    ENDLOOP.
+    IF ls_param-name IS NOT INITIAL.
+      APPEND ls_param TO lt_param.
+    ENDIF.
+
+    LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
+      IF ls_param-type = 'I'.
+        transfer_variable( EXPORTING i_name = CONV #( ls_param-name ) i_tree = go_tree_imp ).
+        DELETE mt_locals WHERE name = ls_param-name.
+      ENDIF.
+
+      IF ls_param-type = 'E'.
+        APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
+        <ret_exp>-name = ls_param-name.
+        DELETE mt_locals WHERE name = ls_param-name.
+      ENDIF.
+    ENDLOOP.
+    IF mo_window->m_visualization IS NOT INITIAL.
+      go_tree_imp->display( ).
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD get_method_parameters.
+    DATA: l_clref  TYPE REF TO cl_abap_classdescr.
+    CALL METHOD cl_abap_classdescr=>describe_by_name
+      EXPORTING
+        p_name      = get_class_name( 'ME' )
+      RECEIVING
+        p_descr_ref = DATA(l_dref).
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
+
+    l_clref ?= l_dref.
+    READ TABLE l_clref->methods INTO DATA(x_methods) WITH KEY name = i_name.
+
+    IF sy-subrc = 0.
+      LOOP AT x_methods-parameters INTO DATA(x_parameters).
+        IF x_parameters-parm_kind = 'I'. "importing
+          transfer_variable( EXPORTING i_name = CONV #( x_parameters-name ) i_tree = go_tree_imp ).
+          DELETE mt_locals WHERE name = x_parameters-name.
+        ENDIF.
+        IF x_parameters-parm_kind = 'E' OR x_parameters-parm_kind = 'R'. "exporting or returning
+          APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
+          <ret_exp>-name = x_parameters-name.
+          DELETE mt_locals WHERE name = x_parameters-name.
+        ENDIF.
+      ENDLOOP.
+      IF mo_window->m_visualization IS NOT INITIAL.
+        go_tree_imp->display(  ).
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD get_func_parameters.
+
+    DATA: lt_imp    TYPE TABLE OF rsimp,
+          lt_chng   TYPE TABLE OF   rscha,
+          lt_exp    TYPE TABLE OF rsexp,
+          lt_tables TYPE TABLE OF rstbl,
+          lt_exc    TYPE TABLE OF rsexc,
+          lt_doc    TYPE TABLE OF rsfdo,
+          lt_source TYPE TABLE OF rssource.
+
+    CALL FUNCTION 'RPY_FUNCTIONMODULE_READ'
+      EXPORTING
+        functionname       = CONV rs38l_fnam( i_name )
+      TABLES
+        import_parameter   = lt_imp
+        changing_parameter = lt_chng
+        export_parameter   = lt_exp
+        tables_parameter   = lt_tables
+        exception_list     = lt_exc
+        documentation      = lt_doc
+        source             = lt_source
+      EXCEPTIONS
+        error_message      = 1
+        function_not_found = 2
+        invalid_name       = 3
+        OTHERS             = 4.
+
+    LOOP AT lt_imp INTO DATA(ls_imp).
+      transfer_variable( EXPORTING i_name = CONV #( ls_imp-parameter ) i_tree = go_tree_imp ).
+      DELETE mt_locals WHERE name = ls_imp-parameter.
+    ENDLOOP.
+
+    LOOP AT lt_exp INTO DATA(ls_exp). "exporting
+      APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
+      <ret_exp>-name = ls_exp-parameter.
+      DELETE mt_locals WHERE name = ls_exp-parameter.
+    ENDLOOP.
+
+    LOOP AT lt_chng INTO DATA(ls_chng). "exporting
+      APPEND INITIAL LINE TO mt_ret_exp ASSIGNING <ret_exp>.
+      <ret_exp>-name = ls_chng-parameter.
+      DELETE mt_locals WHERE name = ls_chng-parameter.
+    ENDLOOP.
+
+    LOOP AT lt_tables INTO DATA(ls_tables). "exporting
+      APPEND INITIAL LINE TO mt_ret_exp ASSIGNING <ret_exp>.
+      <ret_exp>-name = ls_tables-parameter.
+      DELETE mt_locals WHERE name = ls_tables-parameter.
+    ENDLOOP.
+
+    IF mo_window->m_visualization IS NOT INITIAL.
+      go_tree_imp->display( ).
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD get_table. "construct deep tables
+    DATA: r_data         TYPE REF TO data,
+          lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
+          table_clone    TYPE REF TO data,
+          lo_tabl        TYPE REF TO cl_abap_tabledescr,
+          lo_struc       TYPE REF TO cl_abap_structdescr,
+          r_struc        TYPE REF TO data.
+
+    FIELD-SYMBOLS: <f>         TYPE ANY TABLE,
+                   <new_table> TYPE ANY TABLE.
+
+    ASSIGN c_obj->* TO <new_table>.
+    lo_tabl ?= cl_abap_typedescr=>describe_by_data( <new_table> ).
+    lo_struc ?= lo_tabl->get_table_line_type( ).
+
+    CREATE DATA r_data TYPE HANDLE lo_struc.
+    ASSIGN r_data->* TO FIELD-SYMBOL(<new_line>).
+
+    lo_table_descr ?= cl_tpda_script_data_descr=>factory(  i_name ).
+    TRY.
+        table_clone = lo_table_descr->elem_clone( ).
+        ASSIGN table_clone->* TO <f>.
+        DATA: l_count TYPE i.
+
+        LOOP AT <f> ASSIGNING FIELD-SYMBOL(<fs>).
+          l_count = sy-tabix.
+          CLEAR <new_line>.
+
+          DO.
+            ASSIGN COMPONENT sy-index OF STRUCTURE <fs> TO FIELD-SYMBOL(<from>).
+            IF sy-subrc NE 0.
+              EXIT.
+            ENDIF.
+
+            ASSIGN COMPONENT sy-index OF STRUCTURE <new_line> TO FIELD-SYMBOL(<to>).
+            DESCRIBE FIELD <from> TYPE DATA(from_type).
+            DESCRIBE FIELD   <to> TYPE DATA(to_type).
+
+            IF from_type = to_type.
+              <to> = <from>.
+            ELSEIF to_type = 'h'.
+              lo_struc ?= cl_abap_typedescr=>describe_by_data( <fs> ).
+              READ TABLE lo_struc->components INDEX sy-index INTO DATA(ls_comp).
+              GET REFERENCE OF <to> INTO r_data.
+              get_table( EXPORTING i_name = |{ i_name }[ { l_count } ]-{ ls_comp-name }|
+                         CHANGING c_obj = r_data ).
+            ENDIF.
+          ENDDO.
+          INSERT <new_line> INTO TABLE <new_table>.
+        ENDLOOP.
+      CATCH cx_root.
+        DATA(l_cnt) = lo_table_descr->linecnt( ).
+        DO l_cnt TIMES.
+          r_struc = create_struc( i_name = |{ i_name }[{ sy-index }]| ).
+          ASSIGN r_struc->* TO <new_line>.
+          INSERT <new_line> INTO TABLE <new_table>.
+        ENDDO.
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD transfer_variable.
+    DATA: lr_struc       TYPE REF TO data,
+          lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
+          table_clone    TYPE REF TO data,
+          l_name         TYPE string,
+          lo_deep_handle TYPE REF TO cl_abap_datadescr,
+          deep_ref       TYPE REF TO cl_abap_typedescr,
+          lo_tabl        TYPE REF TO cl_abap_tabledescr,
+          lo_struc       TYPE REF TO cl_abap_structdescr,
+          r_header       TYPE REF TO data,
+          r_elem         TYPE REF TO data.
+
+    FIELD-SYMBOLS: <lv_value> TYPE any.
+
+    TRY.
+        CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+          EXPORTING
+            p_var_name   = i_name
+          RECEIVING
+            p_symb_quick = DATA(quick).
+      CATCH cx_tpda_varname .
+    ENDTRY.
+
+    IF i_shortname IS NOT INITIAL.
+      l_name = i_shortname.
+    ELSE.
+      l_name = i_name.
+    ENDIF.
+
+    TRY.
+        ASSIGN quick-quickdata->* TO <lv_value>.
+
+        IF quick-typid = 'h'."internal table
+          lo_table_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
+          table_clone = lo_table_descr->elem_clone( ).
+          ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
+
+          "check header area
+          DATA td       TYPE sydes_desc.
+          DESCRIBE FIELD <f> INTO td.
+
+          READ TABLE td-names INTO DATA(l_names) INDEX 1.
+          IF sy-subrc = 0.
+            TRY.
+                CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+                  EXPORTING
+                    p_var_name   = |{ i_name }-{ l_names-name }|
+                  RECEIVING
+                    p_symb_quick = DATA(l_quick).
+
+                lo_tabl ?= cl_abap_typedescr=>describe_by_data( <f> ).
+                lo_struc ?= lo_tabl->get_table_line_type( ).
+                CREATE DATA r_header TYPE HANDLE lo_struc.
+                ASSIGN r_header->* TO FIELD-SYMBOL(<header>).
+                LOOP AT td-names INTO l_names.
+                  CLEAR r_elem.
+                  r_elem = create_simple_var( EXPORTING i_name = |{ i_name }-{ l_names-name }| ).
+                  IF r_elem IS NOT INITIAL.
+                    ASSIGN r_elem->* TO FIELD-SYMBOL(<elem>).
+                    ASSIGN COMPONENT l_names-name OF STRUCTURE <header> TO FIELD-SYMBOL(<to>).
+                    <to> = <elem>.
+                  ENDIF.
+                ENDLOOP.
+                i_tree->add_variable( EXPORTING iv_root_name = l_name
+                                                 iv_key = i_new_node
+                                                 iv_full_name = l_name
+                                                 i_icon = CONV #( icon_header )
+                                       CHANGING io_var =  <header>  ).
+
+                l_name = l_name && '[]'.
+              CATCH cx_tpda_varname .
+            ENDTRY.
+          ENDIF.
+
+          i_tree->add_variable( EXPORTING iv_root_name = l_name
+                                           iv_key = i_new_node
+                                           iv_full_name = l_name
+                                  CHANGING io_var =  <f>  ).
+
+        ELSEIF quick-typid = 'l'. "data ref
+          DATA: ls_info TYPE tpda_scr_quick_info.
+
+          FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbdatref.
+
+          ls_info = cl_tpda_script_data_descr=>get_quick_info( i_name ).
+          ASSIGN ls_info-quickdata->* TO <ls_symobjref>.
+
+          "IF <ls_symobjref>-instancename <> '{A:initial}'.
+          transfer_variable( EXPORTING i_name = CONV #( <ls_symobjref>-instancename )
+                                           i_shortname = i_name
+                                           i_tree = i_tree ).
+
+        ELSEIF quick-typid = 'r'. "reference
+          DATA: l_rel   TYPE salv_de_node_relation,
+                lv_node TYPE salv_de_node_key.
+          "
+          l_rel = if_salv_c_node_relation=>last_child.
+          lv_node = i_new_node.
+
+          READ TABLE go_tree_local->mt_vars WITH KEY name = l_name INTO DATA(l_var).
+          IF sy-subrc = 0.
+            l_rel = if_salv_c_node_relation=>next_sibling.
+            lv_node = l_var-key.
+          ENDIF.
+
+          create_reference( EXPORTING i_name = i_name
+                                     i_shortname = l_name
+                                     i_new_node = lv_node
+                                     iv_rel = l_rel
+                                     i_quick = quick
+                                     i_no_cl_twin = i_no_cl_twin ).
+
+        ELSEIF quick-typid = 'v' OR quick-typid = 'u'."deep structure or structure
+
+          CALL METHOD cl_abap_complexdescr=>describe_by_name
+            EXPORTING
+              p_name         = quick-abstypename
+            RECEIVING
+              p_descr_ref    = deep_ref
+            EXCEPTIONS
+              type_not_found = 1.
+
+          IF sy-subrc = 0.
+            lo_deep_handle ?= deep_ref.
+            CREATE DATA lr_struc TYPE HANDLE lo_deep_handle.
+            get_deep_struc( EXPORTING i_name = i_name r_obj = lr_struc ).
+            ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_deep>).
+            i_tree->add_variable( EXPORTING iv_root_name = l_name
+                                             iv_key = i_new_node
+                                             iv_full_name = l_name
+                                   CHANGING io_var =  <new_deep>  ).
+          ELSE.
+            create_struc2( EXPORTING i_name = i_name i_shortname = l_name i_new_node = i_new_node ).
+          ENDIF.
+
+        ELSEIF quick-typid = 'g'."string
+          DATA(new_string) = create_simple_string( i_name ).
+          i_tree->add_variable( EXPORTING iv_root_name = i_name
+                                           iv_full_name = i_name
+                                           CHANGING io_var =  new_string ).
+        ELSE.
+          lr_struc = create_simple_var( i_name ).
+          ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_elem>).
+          i_tree->add_variable( EXPORTING iv_root_name = l_name
+                                           iv_key = i_new_node
+                                           iv_full_name = l_name
+                                           CHANGING io_var =  <new_elem>  ).
+        ENDIF.
+      CATCH cx_root.
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD get_class_name.
+    DATA: lo_object TYPE REF TO cl_tpda_script_objectdescr,
+          lo_descr  TYPE REF TO cl_tpda_script_data_descr.
+
+    FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
+
+    TRY.
+        CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+          EXPORTING
+            p_var_name   = i_name
+          RECEIVING
+            p_symb_quick = DATA(l_quick).
+
+        ASSIGN l_quick-quickdata->* TO <ls_symobjref>.
+        IF <ls_symobjref>-instancename <> '{O:initial}'.
+
+          lo_descr = cl_tpda_script_data_descr=>factory( <ls_symobjref>-instancename ).
+          lo_object ?= lo_descr.
+
+          e_name = lo_object->classname( ).
+        ENDIF.
+      CATCH cx_tpda_varname .
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD create_reference.
+
+    DATA: ls_obj         LIKE LINE OF mt_obj,
+          lr_struc       TYPE REF TO data,
+          lv_node_key    TYPE salv_de_node_key,
+          lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
+          table_clone    TYPE REF TO data,
+          lo_object      TYPE REF TO cl_tpda_script_objectdescr,
+          lo_descr       TYPE REF TO cl_tpda_script_data_descr,
+          lt_attributes  TYPE tpda_script_object_attribut_it.
+
+    FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
+
+    ASSIGN i_quick-quickdata->* TO <ls_symobjref>.
+    IF <ls_symobjref>-instancename <> '{O:initial}'.
+
+      READ TABLE mt_obj WITH KEY name = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
+      IF sy-subrc = 0.
+        IF i_no_cl_twin IS INITIAL.
+          go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
+                                          iv_full = <ls_symobjref>-instancename
+                                            iv_key = i_new_node ).
+        ENDIF.
+      ENDIF.
+      ls_obj-name = <ls_symobjref>-instancename.
+      COLLECT ls_obj INTO mt_obj.
+
+      TRY.
+          lo_descr = cl_tpda_script_data_descr=>factory( <ls_symobjref>-instancename ).
+          ls_obj-name = <ls_symobjref>-instancename.
+          COLLECT ls_obj INTO mt_obj.
+          lo_object ?= lo_descr.
+
+          lt_attributes = lo_object->attributes( ).
+          DATA(lv_name) = lo_object->classname( ).
+
+          DATA(lv_obj_ind) =  get_obj_index( <ls_symobjref>-instancename ).
+
+          SORT lt_attributes BY acckind name.
+
+          READ TABLE mt_classes_types WITH KEY full = lv_obj_ind TRANSPORTING NO FIELDS.
+          IF sy-subrc NE 0.
+            LOOP AT lt_attributes ASSIGNING FIELD-SYMBOL(<ls_attribute>).
+              AT NEW acckind.
+                APPEND INITIAL LINE TO mt_classes_types ASSIGNING FIELD-SYMBOL(<cl_type>).
+                <cl_type>-name = i_name.
+                <cl_type>-full = lv_obj_ind.
+                <cl_type>-type = <ls_attribute>-acckind.
+              ENDAT.
+            ENDLOOP.
+          ENDIF.
+
+          e_root_key = go_tree_local->add_obj_nodes( EXPORTING iv_name = CONV #( i_shortname )
+                                     iv_full = <ls_symobjref>-instancename
+                                     i_new_node = i_new_node
+                                     iv_rel = iv_rel ).
+
+          LOOP AT lt_attributes ASSIGNING <ls_attribute>.
+
+            READ TABLE go_tree_local->mt_classes_leaf WITH KEY name = <ls_symobjref>-instancename type = <ls_attribute>-acckind INTO DATA(ls_leaf). .
+            IF sy-subrc = 0.
+              lv_node_key = ls_leaf-key.
+            ENDIF.
+
+            TRY.
+                lo_descr = cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
+                DATA(ls_info) = cl_tpda_script_data_descr=>get_quick_info( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
+
+                CASE ls_info-metatype.
+                  WHEN cl_tpda_script_data_descr=>mt_simple.
+                    lr_struc = create_simple_var( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
+                    ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_elem>).
+
+                    go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
+                                           iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
+                                           i_cl_leaf = <ls_attribute>-acckind
+                                           CHANGING io_var =  <new_elem> ).
+
+                  WHEN cl_tpda_script_data_descr=>mt_struct.
+                    lr_struc = create_struc(  EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
+                    IF lr_struc IS NOT INITIAL.
+                      ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_struc>).
+                      go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
+                                             iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
+                                             i_cl_leaf = <ls_attribute>-acckind
+                                             CHANGING io_var =  <new_struc> ).
+                    ENDIF.
+
+                  WHEN cl_tpda_script_data_descr=>mt_string.
+                    DATA(new_string) = create_simple_string( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
+                    go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
+                                           iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
+                                           i_cl_leaf = <ls_attribute>-acckind
+                                           CHANGING io_var =  new_string ).
+
+                  WHEN cl_tpda_script_data_descr=>mt_tab.
+                    lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
+                    table_clone = lo_table_descr->elem_clone( ).
+                    ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
+                    go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
+                                           iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
+                                           i_cl_leaf = <ls_attribute>-acckind
+                                           CHANGING io_var =  <f> ).
+
+                  WHEN OTHERS.
+                    READ TABLE mt_obj WITH KEY name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| TRANSPORTING NO FIELDS.
+                    IF sy-subrc NE 0.
+
+                      transfer_variable( EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }|
+                                                   i_shortname = <ls_attribute>-name i_new_node = lv_node_key
+                                                   i_tree = go_tree_local ).
+                    ENDIF.
+
+                ENDCASE.
+              CATCH cx_root.
+            ENDTRY.
+          ENDLOOP.
+        CATCH cx_tpda_varname .
+      ENDTRY.
+    ELSE.
+      IF i_new_node IS NOT INITIAL.
+        go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
+                                        iv_value = <ls_symobjref>-instancename
+                                          iv_key = i_new_node ).
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD create_struc2.
+    DATA: lo_struc_descr TYPE REF TO cl_tpda_script_structdescr,
+          lt_components  TYPE abap_component_tab,
+          comp_full      TYPE  tpda_scr_struct_comp_it,
+          ls_comp        TYPE abap_componentdescr,
+          comp_it        TYPE tpda_script_struc_componentsit,
+          structdescr    TYPE REF TO cl_abap_structdescr,
+          r_data         TYPE REF TO data.
+
+    FIELD-SYMBOLS: <str> TYPE any.
+
+    lo_struc_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
+    lo_struc_descr->components( IMPORTING p_components_it = comp_it p_components_full_it = comp_full ).
+
+    LOOP AT comp_it INTO DATA(l_comp).
+      ls_comp-name = l_comp-compname.
+      IF l_comp-typid = 'u'.
+        r_data = create_struc( EXPORTING i_name = |{ l_comp-longname }| ).
+      ELSE.
+        r_data = create_simple_var( EXPORTING i_name = |{ l_comp-longname }| ).
+      ENDIF.
+      ASSIGN r_data->* TO FIELD-SYMBOL(<item>).
+
+      CALL METHOD cl_abap_complexdescr=>describe_by_data
+        EXPORTING
+          p_data      = <item>
+        RECEIVING
+          p_descr_ref = DATA(lo_type).
+
+      ls_comp-type ?= lo_type.
+      APPEND ls_comp TO lt_components.
+    ENDLOOP.
+
+    structdescr = cl_abap_structdescr=>create( lt_components ).
+    CREATE DATA r_data TYPE HANDLE structdescr.
+    ASSIGN r_data->* TO <str>.
+
+    get_deep_struc( EXPORTING i_name = i_name r_obj = r_data ).
+    ASSIGN r_data->* TO FIELD-SYMBOL(<new_deep>).
+
+    go_tree_local->add_variable( EXPORTING iv_root_name = i_shortname iv_key = i_new_node CHANGING io_var =  <new_deep>  ).
+  ENDMETHOD.
+
+  METHOD script.
+    run_script( ).
+  ENDMETHOD.
+
+  METHOD run_script_hist.
+
+    DATA: lv_prev_step TYPE i,
+          lt_prev_var  TYPE STANDARD TABLE OF lcl_appl=>var_table,
+          lv_node_key  TYPE salv_de_node_key,
+          lt_hist      LIKE mt_vars_hist.
+
+    is_history = abap_true.
+    lv_prev_step = m_hist_step.
+
+    IF mo_window->m_debug_button = 'BACK' AND m_hist_step > 1.
+      SUBTRACT 1 FROM m_hist_step.
+    ENDIF.
+
+    IF mo_window->m_debug_button = 'FORW' AND m_hist_step < m_step.
+      ADD 1  TO m_hist_step.
+    ENDIF.
+
+    CHECK lv_prev_step NE m_hist_step.
+
+    READ TABLE mt_steps INTO DATA(ls_step) INDEX m_hist_step.
+    mo_window->set_program( CONV #( ls_step-include ) ).
+    mo_window->set_program_line( ls_step-line ).
+
+    READ TABLE mo_window->mt_stack INTO DATA(ls_stack) INDEX 1.
+    MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
+
+    IF ls_stack-stacklevel NE ls_step-stacklevel.
+      go_tree_local->save_stack_vars( lv_prev_step ).
+      go_tree_exp->save_stack_vars( lv_prev_step ).
+      go_tree_imp->save_stack_vars( lv_prev_step ).
+
+      CLEAR: m_step_delta,
+       mt_ret_exp,
+       mt_obj,
+       mt_ret_exp.
+
+      go_tree_local->clear( ).
+      go_tree_exp->clear( ).
+      go_tree_imp->clear( ).
+
+      go_tree_local->m_leaf = go_tree_imp->m_leaf = go_tree_exp->m_leaf =  'Locals'.
+      IF go_tree_local->m_no_refresh IS INITIAL.
+        go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_life_events ) ).
+      ELSE.
+        go_tree_local->main_node_key = go_tree_local->m_locals_key.
+      ENDIF.
+
+      IF ls_stack-stacklevel < ls_step-stacklevel.
+        MOVE-CORRESPONDING ls_step TO ls_stack.
+        CLEAR mo_window->mt_stack[ 1 ]-stackpointer.
+        INSERT ls_stack INTO mo_window->mt_stack INDEX 1.
+      ELSE.
+        DELETE mo_window->mt_stack WHERE stacklevel > ls_step-stacklevel.
+      ENDIF.
+      READ TABLE mo_window->mt_stack INTO ls_stack INDEX 1.
+      MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
+      mo_window->show_stack( ).
+    ENDIF.
+
+    LOOP AT mt_vars_hist INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X'.
+      APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
+      <hist> = ls_hist.
+    ENDLOOP.
+
+    IF mo_window->m_debug_button = 'FORW'.
+      LOOP AT mt_var_step INTO DATA(step) WHERE step = m_hist_step.
+        APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+        MOVE-CORRESPONDING step TO <hist> .
+      ENDLOOP.
+      IF sy-subrc NE 0.
+        LOOP AT mt_vars_hist INTO ls_hist WHERE step = lv_prev_step  AND first NE 'X' .
+          APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+          <hist> = ls_hist.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+
+    IF mo_window->m_debug_button = 'BACK'.
+
+      LOOP AT mt_var_step INTO step WHERE step = m_hist_step.
+        APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+        MOVE-CORRESPONDING step TO <hist> .
+      ENDLOOP.
+
+      IF sy-subrc NE 0.
+        LOOP AT mt_vars_hist INTO ls_hist WHERE step = m_hist_step. "lv_prev_step.
+          LOOP AT mt_vars_hist INTO DATA(ls_var) WHERE step < ls_hist-step AND name = ls_hist-name AND short = ls_hist-short.
+            READ TABLE lt_hist ASSIGNING <hist> WITH KEY name = ls_var-name.
+            IF sy-subrc NE 0.
+              APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+            ENDIF.
+            <hist> = ls_var.
+            EXIT.
+          ENDLOOP.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+
+    LOOP AT lt_hist ASSIGNING <hist>.
+      IF <hist>-cl_leaf IS NOT INITIAL.
+
+        DATA(l_obj_name) =  get_obj_index( <hist>-name ).
+        FIND FIRST OCCURRENCE OF '-' IN <hist>-name MATCH OFFSET DATA(lv_offset).
+        DATA(l_name) =  <hist>-name+0(lv_offset).
+
+        READ TABLE mt_classes_types WITH KEY full = l_obj_name INTO DATA(l_cl_type).
+        IF sy-subrc = 0.
+          <hist>-tree->add_obj_nodes( EXPORTING iv_name = CONV #( l_cl_type-name )
+                      iv_full = l_name
+                      iv_rel = if_salv_c_node_relation=>last_child ).
+
+          READ TABLE <hist>-tree->mt_classes_leaf WITH KEY name = l_name type = <hist>-cl_leaf INTO DATA(ls_leaf).
+          IF sy-subrc = 0.
+            <hist>-key = ls_leaf-key.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      ASSIGN <hist>-ref->* TO FIELD-SYMBOL(<var>).
+      CHECK sy-subrc = 0.
+      IF <hist>-key IS INITIAL.
+        <hist>-tree->add_variable( EXPORTING iv_root_name = <hist>-short
+                                          iv_full_name = <hist>-name
+                                          i_cl_leaf   = <hist>-cl_leaf
+                                 CHANGING io_var =  <var>  ).
+      ELSE.
+        <hist>-tree->add_variable( EXPORTING iv_root_name = <hist>-short
+                                              iv_key = <hist>-key
+                                              iv_full_name = <hist>-name
+                                              i_cl_leaf   = <hist>-cl_leaf
+                                       CHANGING io_var =  <var>  ).
+      ENDIF.
+    ENDLOOP.
+
+    go_tree_imp->display( ).
+    go_tree_local->display( ).
+    go_tree_exp->display( ).
+
+    IF mo_window->m_visualization IS INITIAL AND mo_window->m_debug_button NE 'F5'.
+      mo_window->m_show_step = abap_true.
+    ENDIF.
+
+    go_tree_local->m_no_refresh = 'X'.
+    go_tree_exp->m_no_refresh = 'X'.
+    go_tree_imp->m_no_refresh = 'X'.
+
+  ENDMETHOD.
+
+  METHOD run_script.
+    DATA: l_name(40),
+          lt_compo         TYPE TABLE OF scompo,
+          lt_compo_tmp     TYPE TABLE OF scompo,
+          lt_inc           TYPE TABLE OF  d010inc,
+          l_class          TYPE seu_name,
+          lv_stack_changed TYPE xfeld.
+
+    "Are we in class
+    DATA: l_clref  TYPE REF TO cl_abap_classdescr.
+    CALL METHOD cl_abap_classdescr=>describe_by_name
+      EXPORTING
+        p_name         = get_class_name( 'ME' )
+      RECEIVING
+        p_descr_ref    = DATA(l_dref)
+      EXCEPTIONS
+        type_not_found = 1.
+    IF sy-subrc = 0.
+      l_clref ?= l_dref.
+      m_classname = l_clref->absolute_name.
+    ELSE.
+      CLEAR m_classname.
+    ENDIF.
+
+    TRY.
+        cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = mo_window->m_prg ).
+
+        DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
+        READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack_prev.
+        MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
+        READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack.
+
+        IF is_step = abap_true.
+
+          ADD 1 TO m_step.
+          m_hist_step = m_step.
+
+          APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
+          MOVE-CORRESPONDING ms_stack TO <step>.
+          <step>-step = m_step.
+          CLEAR is_step.
+        ENDIF.
+
+        CALL METHOD cl_tpda_script_bp_services=>get_all_bps RECEIVING p_bps_it = mo_window->mt_breaks.
+        DATA(l_program) =  abap_source->program( ).
+
+        IF mo_window->m_prg-event-eventname NE go_tree_local->m_prg_info-event-eventname.
+          lv_stack_changed = abap_true.
+
+          go_tree_local->m_prg_info-event-eventname = mo_window->m_prg-event-eventname.
+
+          DATA: lv_step TYPE i.
+          lv_step = m_step - 1.
+
+          go_tree_local->save_stack_vars( lv_step ).
+          go_tree_exp->save_stack_vars( lv_step ).
+          go_tree_imp->save_stack_vars( lv_step ).
+
+          DELETE go_tree_local->mt_state WHERE stack > ms_stack-stacklevel.
+          DELETE go_tree_exp->mt_state WHERE stack > ms_stack-stacklevel.
+          DELETE go_tree_imp->mt_state WHERE stack > ms_stack-stacklevel.
+
+          CLEAR: m_step_delta,
+                 mt_ret_exp,
+                 mt_obj,
+                 mt_ret_exp.
+
+          go_tree_local->clear( ).
+          go_tree_exp->clear( ).
+          go_tree_imp->clear( ).
+
+          go_tree_local->m_leaf = go_tree_imp->m_leaf = go_tree_exp->m_leaf =  'Locals'.
+        ELSE.
+          CLEAR lv_stack_changed.
+          m_step_delta = 1.
+        ENDIF.
+      CATCH cx_tpda_src_info.
+    ENDTRY.
+
+    IF lv_stack_changed = abap_true OR is_history = abap_true.
+      CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
+      SORT mt_locals.
+
+      READ TABLE mt_locals WITH KEY name = 'ME' TRANSPORTING NO FIELDS.
+      IF sy-subrc = 0.
+        get_method_parameters( mo_window->m_prg-event-eventname ).
+      ENDIF.
+
+      IF mo_window->m_prg-event-eventtype = 'FORM'.
+        get_form_parameters( mo_window->m_prg ).
+      ENDIF.
+
+      IF mo_window->m_prg-event-eventtype = 'FUNCTION'.
+        get_func_parameters( mo_window->m_prg-event-eventname ).
+      ENDIF.
+
+      CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
+      SORT mt_globals.
+    ENDIF.
+
+    CLEAR is_history.
+    go_tree_imp->m_prg_info = mo_window->m_prg.
+    IF mo_window->m_visualization IS NOT INITIAL.
+      mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+      mo_window->set_program_line( mo_window->m_prg-line ).
+      mo_window->show_stack( ).
+    ENDIF.
+
+    IF go_tree_local->m_no_refresh IS INITIAL.
+      go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_life_events ) ).
+    ELSE.
+      go_tree_local->main_node_key = go_tree_local->m_locals_key.
+    ENDIF.
+
+    LOOP AT mt_locals INTO DATA(ls_local).
+      CHECK NOT ls_local-name CA '[]'.
+      transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_local i_no_cl_twin = 'X' ).
+    ENDLOOP.
+
+    LOOP AT mt_ret_exp INTO ls_local.
+      transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_exp  i_no_cl_twin = 'X' ).
+    ENDLOOP.
+
+    go_tree_local->m_leaf = 'Class-data global variables'.
+    IF go_tree_local->m_class_data IS NOT INITIAL.
+      IF go_tree_local->m_class_key IS INITIAL.
+        go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_oo_class_attribute ) ).
+      ELSE.
+        go_tree_local->main_node_key = go_tree_local->m_class_key.
+      ENDIF.
+
+      l_name = l_program.
+      CALL FUNCTION 'RS_PROGRAM_INDEX'
+        EXPORTING
+          pg_name      = l_name
+        TABLES
+          compo        = lt_compo
+          inc          = lt_inc
+        EXCEPTIONS
+          syntax_error = 1
+          OTHERS       = 2.
+
+      lt_compo_tmp = lt_compo.
+      DELETE lt_compo_tmp WHERE  type NE '+' OR exposure NE 2.
+      SORT lt_compo_tmp BY class.
+
+      LOOP AT lt_compo_tmp ASSIGNING FIELD-SYMBOL(<compo>).
+        TRY.
+            CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+              EXPORTING
+                p_var_name   = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
+              RECEIVING
+                p_symb_quick = DATA(quick).
+          CATCH cx_tpda_varname .
+            CLEAR <compo>-type.
+        ENDTRY.
+      ENDLOOP.
+
+      LOOP AT lt_compo_tmp ASSIGNING <compo> WHERE type = '+'.
+        IF l_class NE <compo>-class.
+          l_class = <compo>-class.
+          go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( <compo>-class ) RECEIVING er_key = DATA(l_key) ).
+        ENDIF.
+        transfer_variable( EXPORTING i_name = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
+                                     i_shortname = CONV #( <compo>-name )
+                                      i_new_node = l_key
+                                      i_tree = go_tree_local ).
+      ENDLOOP.
+    ELSE.
+      IF go_tree_local->m_class_key IS NOT INITIAL.
+        go_tree_local->delete_node( go_tree_local->m_class_key ).
+        DELETE go_tree_local->mt_vars WHERE leaf = go_tree_local->m_leaf.
+        CLEAR go_tree_local->m_class_key.
+      ENDIF.
+    ENDIF.
+
+    lt_compo_tmp = lt_compo.
+    DELETE lt_compo_tmp WHERE  type NE 'D'.
+
+    go_tree_local->m_leaf = 'LDB'.
+    IF go_tree_local->m_ldb IS NOT INITIAL.
+      IF go_tree_local->m_ldb_key IS INITIAL.
+        go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_biw_report_view ) ).
+      ELSE.
+        go_tree_local->main_node_key = go_tree_local->m_ldb_key.
+      ENDIF.
+      LOOP AT mt_globals INTO DATA(ls_global).
+        READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
+        IF sy-subrc NE 0.
+          transfer_variable( EXPORTING i_name = ls_global-name i_tree = go_tree_local ).
+        ENDIF.
+      ENDLOOP.
+    ELSE.
+      IF go_tree_local->m_ldb_key IS NOT INITIAL.
+        go_tree_local->delete_node( go_tree_local->m_ldb_key ).
+        DELETE go_tree_local->mt_vars WHERE leaf = go_tree_local->m_leaf.
+        CLEAR go_tree_local->m_ldb_key.
+      ENDIF.
+    ENDIF.
+
+    go_tree_local->m_leaf = 'Globals'.
+    IF go_tree_local->m_globals IS NOT INITIAL.
+
+      IF go_tree_local->m_globals_key IS INITIAL.
+        go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_foreign_trade ) ).
+      ELSE.
+        go_tree_local->main_node_key = go_tree_local->m_globals_key.
+      ENDIF.
+
+      transfer_variable( EXPORTING i_name = 'SYST' i_tree = go_tree_local ).
+      LOOP AT mt_globals INTO ls_global.
+        READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0.
+          transfer_variable( EXPORTING i_name = ls_global-name i_tree = go_tree_local ).
+        ENDIF.
+      ENDLOOP.
+    ELSE.
+      IF go_tree_local->m_globals_key IS NOT INITIAL.
+        go_tree_local->delete_node( go_tree_local->m_globals_key ).
+        DELETE go_tree_local->mt_vars WHERE leaf = go_tree_local->m_leaf.
+
+        CLEAR go_tree_local->m_globals_key.
+      ENDIF.
+    ENDIF.
+
+    IF go_tree_local->m_no_refresh IS INITIAL.
+      go_tree_local->mt_state = go_tree_local->mt_vars.
+    ENDIF.
+
+    go_tree_local->m_no_refresh = 'X'.
+    go_tree_exp->m_no_refresh = 'X'.
+    go_tree_imp->m_no_refresh = 'X'.
+    CLEAR mo_window->m_show_step.
+
+    IF lv_stack_changed = abap_true.
+      go_tree_local->save_stack_vars( m_step ).
+      go_tree_exp->save_stack_vars( m_step ).
+      go_tree_imp->save_stack_vars( m_step ).
+    ENDIF.
+
+    IF mo_window->m_debug_button = 'F5'.
+      IF mo_window->m_visualization IS INITIAL.
+        show_step( ).
+      ENDIF.
+      me->break( ).
+
+    ELSEIF mo_window->m_debug_button = 'F6'.
+      "READ TABLE mo_window->mt_stack INDEX 1 INTO data(ls_stack).
+      IF m_f6_level IS NOT INITIAL AND m_f6_level = ms_stack-stacklevel.
+        CLEAR m_f6_level.
+        IF mo_window->m_visualization IS INITIAL.
+          show_step( ).
+        ENDIF.
+        me->break( ).
+      ELSE.
+        IF mo_window->m_history IS NOT INITIAL.
+          f5( ).
+        ENDIF.
+      ENDIF.
+
+    ELSEIF mo_window->m_debug_button = 'F7END'.
+      IF mo_window->m_prg-flag_eoev IS NOT INITIAL.
+        IF mo_window->m_visualization IS INITIAL.
+          show_step( ).
+        ENDIF.
+        me->break( ).
+      ELSE.
+        f5( ).
+      ENDIF.
+    ELSEIF mo_window->m_debug_button = 'F7'.
+
+      IF mv_f7_stop = abap_true.
+        IF mo_window->m_visualization IS INITIAL.
+          show_step( ).
+        ENDIF.
+        me->break( ).
+        CLEAR mv_f7_stop.
+      ELSE.
+        IF mo_window->m_prg-flag_eoev IS NOT INITIAL.
+          mv_f7_stop = abap_true.
+        ENDIF.
+        f5( ).
+      ENDIF.
+
+    ELSEIF mo_window->m_debug_button IS NOT INITIAL.
+      READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = mo_window->m_prg-include linesrc = mo_window->m_prg-line INTO DATA(gs_break).
+      IF sy-subrc = 0.
+        IF mo_window->m_visualization IS INITIAL.
+          show_step( ).
+        ENDIF.
+        me->break( ).
+      ELSE.
+        IF mo_window->m_debug_button = 'F6BEG' AND lv_stack_changed IS NOT INITIAL.
+          IF mo_window->m_visualization IS INITIAL.
+            show_step( ).
+          ENDIF.
+          me->break( ).
+        ELSE.
+          IF mo_window->m_history IS NOT INITIAL.
+            f5( ).
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ELSE.
+      IF mo_window->m_visualization IS INITIAL.
+        show_step( ).
+      ENDIF.
+      me->break( ).
+    ENDIF.
+
+    IF mo_window->m_debug_button = 'F7END' AND mo_window->m_prg-flag_eoev IS NOT INITIAL.
+      IF mo_window->m_visualization IS INITIAL.
+        show_step( ).
+      ENDIF.
+      me->break( ).
+    ENDIF.
+
+    IF mo_window->m_debug_button = 'F6BEG' AND lv_stack_changed IS NOT INITIAL.
+      IF mo_window->m_visualization IS INITIAL.
+        show_step( ).
+      ENDIF.
+      me->break( ).
+    ENDIF.
+
+    IF mo_window->m_history IS INITIAL AND mo_window->m_debug_button NE 'F7END' AND mo_window->m_debug_button NE 'F6BEG'.
+      IF mo_window->m_visualization IS INITIAL.
+        show_step( ).
+      ENDIF.
+      me->break( ).
+    ENDIF.
+  ENDMETHOD.                    "script
+
+  METHOD end.
+  ENDMETHOD.
+
+  METHOD f5.
+    IF mo_window->m_debug_button NE 'F5' AND mo_window->m_zcode IS NOT INITIAL.
+      READ TABLE mo_window->mt_stack INTO DATA(stack) INDEX 1.
+      IF stack-program+0(1) NE 'Z'.
+
+        f7( ).
+        RETURN.
+      ENDIF.
+    ENDIF.
+    TRY.
+        CALL METHOD debugger_controller->debug_step
+          EXPORTING
+            p_command = cl_tpda_script_debugger_ctrl=>debug_step_into.
+        is_step = abap_true.
+      CATCH cx_tpda_scr_rtctrl_status .
+      CATCH cx_tpda_scr_rtctrl .
+    ENDTRY.
+    me->run_script( ).
+  ENDMETHOD.
+
+  METHOD f6.
+    TRY.
+        CALL METHOD debugger_controller->debug_step
+          EXPORTING
+            p_command = cl_tpda_script_debugger_ctrl=>debug_step_over.
+        is_step = abap_true.
+      CATCH cx_tpda_scr_rtctrl_status .
+      CATCH cx_tpda_scr_rtctrl .
+    ENDTRY.
+    me->run_script( ).
+  ENDMETHOD.
+
+  METHOD f7.
+    TRY.
+        CALL METHOD debugger_controller->debug_step
+          EXPORTING
+            p_command = cl_tpda_script_debugger_ctrl=>debug_step_out.
+        is_step = abap_true.
+      CATCH cx_tpda_scr_rtctrl_status .
+      CATCH cx_tpda_scr_rtctrl .
+    ENDTRY.
+    me->run_script( ).
+  ENDMETHOD.
+
+  METHOD f8.
+    TRY.
+        CALL METHOD debugger_controller->debug_step
+          EXPORTING
+            p_command = cl_tpda_script_debugger_ctrl=>debug_continue.
+        is_step = abap_true.
+      CATCH cx_tpda_scr_rtctrl_status .
+      CATCH cx_tpda_scr_rtctrl .
+    ENDTRY.
+    me->run_script( ).
+  ENDMETHOD.
+
+  METHOD get_obj_index.
+    FIND FIRST OCCURRENCE OF '*' IN iv_name MATCH OFFSET DATA(lv_offset).
+    e_index =  iv_name+0(lv_offset).
+  ENDMETHOD.
+
+
+  METHOD show_step.
+    mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+    mo_window->set_program_line( mo_window->m_prg-line ).
+    mo_window->show_stack( ).
+    go_tree_imp->display( ).
+    go_tree_local->display( ).
+    go_tree_exp->display( ).
+    IF mo_window->m_visualization IS INITIAL AND mo_window->m_debug_button NE 'F5'.
+      mo_window->m_show_step = abap_true.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD save_hist.
+    DATA: lv_add       TYPE xfeld,
+          lv_name(100).
+
+    CHECK mo_window->m_debug_button NE 'BACK' AND mo_window->m_debug_button NE 'FORW'.
+
+    i_state-step = m_step - m_step_delta.
+    ASSIGN i_state-ref->* TO FIELD-SYMBOL(<state>).
+    lv_name = i_state-name.
+    IF lv_name+0(2) NE '{O'.
+      READ TABLE mt_vars_hist WITH KEY stack = i_state-stack name = i_state-name INTO DATA(lv_hist).
+      IF sy-subrc NE 0.
+        lv_add = abap_on.
+      ELSE.
+        ASSIGN lv_hist-ref->* TO FIELD-SYMBOL(<hist>).
+        IF <hist> NE <state>.
+          lv_add = abap_on.
+        ENDIF.
+      ENDIF.
+    ELSE.
+      CLEAR i_state-leaf.
+      READ TABLE mt_vars_hist WITH KEY name = i_state-name INTO lv_hist.
+      IF sy-subrc = 0.
+        ASSIGN lv_hist-ref->* TO <hist>.
+        IF <hist> NE <state>.
+          lv_add = abap_on.
+        ENDIF.
+      ELSE.
+        lv_add = abap_on.
+      ENDIF.
+
+    ENDIF.
+    IF lv_add = abap_on.
+
+      CLEAR i_state-first.
+
+      IF  ms_stack_prev-stacklevel IS INITIAL OR
+       ms_stack-stacklevel > ms_stack_prev-stacklevel.
+        i_state-first = 'X'.
+      ENDIF.
+      CLEAR i_state-key.
+      i_state-class = m_classname.
+      INSERT i_state INTO mt_vars_hist INDEX 1.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.                    "lcl_debugger_script IMPLEMENTATION
+
+CLASS lcl_types DEFINITION ABSTRACT.
+  PUBLIC SECTION.
+    TYPES:
+      BEGIN OF selection_display_s,
+        ind         TYPE i,
+        field_label TYPE lvc_fname,
+        int_type(1),
+        inherited   TYPE aqadh_type_of_icon,
+        emitter     TYPE aqadh_type_of_icon,
+        sign        TYPE tvarv_sign,
+        opti        TYPE tvarv_opti,
+        option_icon TYPE aqadh_type_of_icon,
+        low         TYPE string,
+        high        TYPE string,
+        more_icon   TYPE aqadh_type_of_icon,
+        range       TYPE aqadh_t_ranges,
+        name        TYPE reptext,
+        element     TYPE text60,
+        domain      TYPE text60,
+        datatype    TYPE string,
+        length      TYPE i,
+        transmitter TYPE REF TO lcl_data_transmitter,
+        receiver    TYPE REF TO lcl_data_receiver,
+        color       TYPE lvc_t_scol,
+        style       TYPE lvc_t_styl,
+      END OF selection_display_s,
+      BEGIN OF t_sel_row,
+        sign        TYPE tvarv_sign,
+        opti        TYPE tvarv_opti,
+        option_icon TYPE aqadh_type_of_icon,
+        low         TYPE string, "aqadh_range_value,
+        high        TYPE string, "aqadh_range_value,
+        more_icon   TYPE aqadh_type_of_icon,
+        range       TYPE aqadh_t_ranges,
+      END OF t_sel_row.
+
+    CLASS-DATA: mt_sel TYPE TABLE OF lcl_types=>selection_display_s.
+ENDCLASS.
+
+
+CLASS lcl_window IMPLEMENTATION.
+
+  METHOD constructor.
+    super->constructor( ).
+    mo_debugger = i_debugger.
+    m_history = '01'.
+    m_zcode = '01'.
+
+    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.2' i_width = 1200 i_hight = 400 ).
+    CREATE OBJECT mo_splitter ##FM_SUBRC_OK
+      EXPORTING
+        parent  = mo_box
+        rows    = 3
+        columns = 1
+      EXCEPTIONS
+        OTHERS  = 1.
+
+    mo_splitter->get_container(
+     EXPORTING
+       row       = 2
+       column    = 1
+     RECEIVING
+       container = mo_code_container ).
+
+    mo_splitter->get_container(
+      EXPORTING
+        row       = 1
+        column    = 1
+      RECEIVING
+        container = mo_toolbar_container ).
+
+    mo_splitter->set_row_height( id = 1  height = '3' ).
+
+    mo_splitter->set_row_sash( id    = 1
+                               type  = 0
+                               value = 0 ).
+
+    mo_splitter->get_container(
+      EXPORTING
+        row       = 3
+        column    = 1
+      RECEIVING
+        container = mo_variables_container ).
+
+    CREATE OBJECT mo_splitter_code ##FM_SUBRC_OK
+      EXPORTING
+        parent  = mo_code_container
+        rows    = 1
+        columns = 2
+      EXCEPTIONS
+        OTHERS  = 1.
+
+    mo_splitter_code->get_container(
+         EXPORTING
+           row       = 1
+           column    = 1
+         RECEIVING
+           container = mo_editor_container ).
+
+    mo_splitter_code->get_container(
+         EXPORTING
+           row       = 1
+           column    = 2
+         RECEIVING
+           container = mo_stack_container ).
+
+    mo_splitter_code->set_column_width( EXPORTING id = 1 width = '67' ).
+
+    CREATE OBJECT mo_splitter_var ##FM_SUBRC_OK
+      EXPORTING
+        parent  = mo_variables_container
+        rows    = 1
+        columns = 3
+      EXCEPTIONS
+        OTHERS  = 1.
+
+    mo_splitter_var->set_column_width( EXPORTING id = 1 width = '25' ).
+    mo_splitter_var->set_column_width( EXPORTING id = 2 width = '50' ).
+    mo_splitter_var->set_column_width( EXPORTING id = 3 width = '25' ).
+
+
+    mo_splitter_var->get_container(
+             EXPORTING
+               row       = 1
+               column    = 1
+             RECEIVING
+               container = mo_importing_container ).
+
+    mo_splitter_var->get_container(
+         EXPORTING
+           row       = 1
+           column    = 2
+         RECEIVING
+           container = mo_locals_container ).
+
+    mo_splitter_var->get_container(
+             EXPORTING
+               row       = 1
+               column    = 3
+             RECEIVING
+               container = mo_exporting_container ).
+
+    SET HANDLER on_box_close FOR mo_box.
+
+    CREATE OBJECT mo_toolbar EXPORTING parent = mo_toolbar_container.
+    add_toolbar_buttons( ).
+    mo_toolbar->set_visible( 'X' ).
+    create_code_viewer( ).
+
+  ENDMETHOD.
+
+  METHOD add_toolbar_buttons.
+    DATA: lt_button TYPE ttb_button,
+          ls_button LIKE LINE OF lt_button,
+          lt_events TYPE cntl_simple_events,
+          ls_events LIKE LINE OF lt_events.
+
+    CLEAR ls_button.
+    ls_button-function = 'HIST'.
+    ls_button-icon = CONV #( icon_graduate ).
+    ls_button-quickinfo = 'History On'.
+    ls_button-text = 'History On'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'VIS'.
+    ls_button-icon = CONV #( icon_flight ).
+    ls_button-quickinfo = 'Visualization Off'.
+    ls_button-text = 'Visualization Off'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'CODE'.
+    ls_button-icon = CONV #( icon_customer_warehouse ).
+    ls_button-quickinfo = 'Only Z'.
+    ls_button-text = 'Only Z'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-butn_type = 3.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F5'.
+    ls_button-icon = CONV #( icon_debugger_step_into ).
+    ls_button-quickinfo = 'Step into'.
+    ls_button-text = 'Step into'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F6BEG'.
+    ls_button-icon = CONV #( icon_release ).
+    ls_button-quickinfo = 'Start of block'.
+    ls_button-text = 'Start of block'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+
+    CLEAR ls_button.
+    ls_button-function = 'F7END'.
+    ls_button-icon = CONV #( icon_outgoing_org_unit ).
+    ls_button-quickinfo = 'End of block'.
+    ls_button-text = 'End of block '.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F6'.
+    ls_button-icon = CONV #( icon_debugger_step_over ).
+    ls_button-quickinfo = 'Step over'.
+    ls_button-text = 'Step over'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F7'.
+    ls_button-icon = CONV #( icon_debugger_step_out ).
+    ls_button-quickinfo = 'Step out'.
+    ls_button-text = 'Step out'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'F8'.
+    ls_button-icon = CONV #( icon_debugger_continue ).
+    ls_button-quickinfo = 'Continue'.
+    ls_button-text = 'Continue'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-butn_type = 3.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'BACK'.
+    ls_button-icon = CONV #( icon_column_left ).
+    ls_button-quickinfo = 'Step Back'.
+    ls_button-text = 'Step Back'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    CLEAR ls_button.
+    ls_button-function = 'FORW'.
+    ls_button-icon = CONV #( icon_column_right ).
+    ls_button-quickinfo = 'Step forward'.
+    ls_button-text = 'Forward'.
+    ls_button-butn_type = 0.
+    APPEND ls_button TO lt_button.
+
+    mo_toolbar->add_button_group( lt_button ).
+
+* Register events
+    ls_events-eventid = cl_gui_toolbar=>m_id_function_selected.
+    ls_events-appl_event = space.
+    APPEND ls_events TO lt_events.
+
+    mo_toolbar->set_registered_events( events = lt_events ).
+
+    SET HANDLER me->hnd_toolbar FOR mo_toolbar.
+
+  ENDMETHOD.
+
+  METHOD set_program.
+    DATA gr_scan TYPE REF TO cl_ci_scan.
+    DATA(gr_source) = cl_ci_source_include=>create( p_name = iv_program ).
+
+    CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
+    mo_code_viewer->set_text( table = gr_source->lines  ).
+  ENDMETHOD.
+
+  METHOD set_program_line.
+    TYPES: lntab TYPE STANDARD TABLE OF i.
+    DATA lt_lines TYPE lntab.
+
+    APPEND INITIAL LINE TO lt_lines ASSIGNING FIELD-SYMBOL(<line>).
+    <line> = iv_line.
+    mo_code_viewer->set_marker( EXPORTING marker_number = 7  marker_lines = lt_lines ).
+
+    CLEAR lt_lines.
+
+    LOOP AT mt_breaks INTO DATA(ls_break) WHERE inclnamesrc = m_prg-include.
+      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
+      <line> = ls_break-linesrc.
+    ENDLOOP.
+    mo_code_viewer->set_marker( EXPORTING marker_number = 9  marker_lines = lt_lines ).
+    mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
+  ENDMETHOD.
+
+  METHOD create_code_viewer.
+    CHECK mo_code_viewer IS INITIAL.
+
+    CREATE OBJECT mo_code_viewer
+      EXPORTING
+        parent           = mo_editor_container
+        max_number_chars = 100.
+
+    mo_code_viewer->init_completer( ).
+    mo_code_viewer->upload_properties(
+           EXCEPTIONS
+             dp_error_create  = 1
+             dp_error_general = 2
+             dp_error_send    = 3
+             OTHERS           = 4 ).
+
+    mo_code_viewer->set_statusbar_mode( statusbar_mode = cl_gui_abapedit=>true ).
+    mo_code_viewer->create_document( ).
+    mo_code_viewer->set_readonly_mode( 1 ).
+  ENDMETHOD.
+
+
+  METHOD show_stack.
+    IF mo_salv_stack IS INITIAL.
+      cl_salv_table=>factory(
+  EXPORTING
+    r_container = mo_stack_container
+  IMPORTING
+  r_salv_table = mo_salv_stack
+  CHANGING
+  t_table = mt_stack ).
+
+      DATA:  lo_column  TYPE REF TO cl_salv_column.
+
+      DATA(lo_columns) = mo_salv_stack->get_columns( ).
+      lo_columns->set_optimize( 'X' ).
+
+      lo_column ?= lo_columns->get_column( 'STACKPOINTER' ).
+      lo_column->set_output_length( '5' ).
+
+      lo_column ?= lo_columns->get_column( 'STACKLEVEL' ).
+      lo_column->set_output_length( '5' ).
+      mo_salv_stack->display( ).
+    ELSE.
+      mo_salv_stack->refresh( ).
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD hnd_toolbar.
+    CONSTANTS: c_mask TYPE x VALUE '01'.
+    m_debug_button = fcode.
+    CASE fcode.
+      WHEN 'VIS'.
+        m_visualization = m_visualization BIT-XOR c_mask.
+        IF m_visualization IS INITIAL.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'VIS' icon = CONV #( icon_flight ) text = 'Visualization OFF' ).
+        ELSE.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'VIS' icon = CONV #( icon_car ) text = 'Visualization ON' ).
+        ENDIF.
+
+      WHEN 'HIST'.
+        m_history = m_history BIT-XOR c_mask.
+        IF m_history IS INITIAL.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_red_xcircle ) text = 'History OFF' ).
+        ELSE.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_graduate ) text = 'History ON' ).
+        ENDIF.
+
+      WHEN 'CODE'.
+        m_zcode = m_zcode BIT-XOR c_mask.
+        IF m_zcode IS INITIAL.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'CODE'  text = 'Z & Standard' ).
+        ELSE.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'CODE'  text = 'Only Z code' ).
+        ENDIF.
+
+      WHEN 'F5' OR 'F7END' OR 'F6BEG'.
+        mo_debugger->f5( ).
+
+      WHEN 'F6'.
+        IF m_history IS INITIAL.
+          mo_debugger->f6( ).
+        ELSE.
+          READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
+          mo_debugger->m_f6_level = ls_stack-stacklevel.
+          mo_debugger->f5( ).
+        ENDIF.
+
+      WHEN 'F7'.
+        IF m_history IS INITIAL.
+          mo_debugger->f7( ).
+        ELSE.
+          mo_debugger->f5( ).
+        ENDIF.
+
+      WHEN 'F8'.
+        IF m_history IS INITIAL.
+          mo_debugger->f8( ).
+        ELSE.
+          mo_debugger->f5( ).
+        ENDIF.
+      WHEN 'BACK' OR 'FORW'.
+        mo_debugger->run_script_hist( ).
+    ENDCASE.
+  ENDMETHOD.
+
+ENDCLASS.
 
 CLASS lcl_sel_opt DEFINITION DEFERRED.
 
@@ -780,9 +2527,6 @@ CLASS lcl_text_viewer DEFINITION FINAL INHERITING FROM lcl_popup.
     DATA: mo_text     TYPE REF TO cl_gui_textedit.
     METHODS: constructor IMPORTING ir_str TYPE REF TO data.
 ENDCLASS.
-
-
-
 
 CLASS lcl_text_viewer IMPLEMENTATION.
   METHOD constructor.
@@ -1340,21 +3084,14 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     CHECK es_row_no-row_id IS NOT INITIAL.
     ASSIGN mr_table->* TO  <f_tab>.
     READ TABLE <f_tab> INDEX es_row_no-row_id ASSIGNING FIELD-SYMBOL(<tab>).
-
     ASSIGN COMPONENT |{ e_column-fieldname }_REF| OF STRUCTURE <tab> TO FIELD-SYMBOL(<ref>).
     IF sy-subrc = 0.
       lcl_appl=>open_int_table( EXPORTING iv_name = CONV #( e_column-fieldname ) it_ref = <ref> ).
-*      APPEND INITIAL LINE TO lcl_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
-*      <obj>-alv_viewer = NEW #(  i_additional_name = CONV #( e_column-fieldname ) ir_tab = <ref>  ).
-*      <obj>-alv_viewer->mo_sel->raise_selection_done( ).
     ELSE.
       TRY.
-          lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ 1 ]-{ e_column-fieldname }| ).
+          lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| ).
           table_clone = lo_table_descr->elem_clone( ).
-          lcl_appl=>open_int_table( EXPORTING iv_name = |{ m_additional_name }[ 1 ]-{ e_column-fieldname }| it_ref = table_clone ).
-*          APPEND INITIAL LINE TO lcl_appl=>mt_obj ASSIGNING <obj>.
-*          <obj>-alv_viewer = NEW #(  i_additional_name = CONV #( |{ m_additional_name }[ 1 ]-{ e_column-fieldname }| ) ir_tab = table_clone ).
-*          <obj>-alv_viewer->mo_sel->raise_selection_done( ).
+          lcl_appl=>open_int_table( EXPORTING iv_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone ).
         CATCH cx_sy_move_cast_error.
       ENDTRY.
     ENDIF.
@@ -2127,6 +3864,1042 @@ CLASS lcl_appl IMPLEMENTATION.
   ENDMETHOD.
 ENDCLASS.
 
+CLASS lcl_rtti_tree IMPLEMENTATION.
+  METHOD constructor.
+
+    super->constructor( ).
+    mo_debugger = i_debugger.
+
+    IF i_type = 'L'.
+         cl_salv_tree=>factory(
+           EXPORTING r_container = i_cont
+           IMPORTING r_salv_tree = tree
+           CHANGING t_table = tree_table ).
+    ELSEIF i_type = 'I'.
+      cl_salv_tree=>factory(
+       EXPORTING r_container = i_cont
+       IMPORTING r_salv_tree = tree
+       CHANGING t_table = tree_table ).
+    ELSEIF i_type = 'E'.
+      cl_salv_tree=>factory(
+           EXPORTING r_container = i_cont
+           IMPORTING r_salv_tree = tree
+           CHANGING t_table = tree_table ).
+    ENDIF.
+
+    DATA(lo_setting) =  tree->get_tree_settings( ).
+    lo_setting->set_hierarchy_header( i_header ).
+    lo_setting->set_hierarchy_size( 30 ).
+    lo_setting->set_hierarchy_icon( CONV #( icon_tree ) ).
+
+    DATA(lo_columns) = tree->get_columns( ).
+    "lo_columns->set_optimize( abap_true ).
+    lo_columns->get_column( 'VALUE' )->set_short_text( 'Value' ).
+    lo_columns->get_column( 'VALUE' )->set_output_length( 40 ).
+
+    lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full name' ).
+    lo_columns->get_column( 'FULLNAME' )->set_output_length( 40 ).
+
+    IF i_type NE 'L'.
+      lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
+    ENDIF.
+    lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
+    lo_columns->get_column( 'TYPENAME' )->set_output_length( 20 ).
+
+    add_buttons( ).
+
+    tree->get_nodes( )->expand_all( ).
+    DATA(lo_event) = tree->get_event( ) .
+    SET HANDLER hndl_double_click
+                hndl_user_command FOR lo_event.
+
+    tree->display( ).
+  ENDMETHOD.
+
+  METHOD add_buttons.
+    DATA(lo_functions) = tree->get_functions( ).
+    lo_functions->set_all( ).
+
+    CHECK mo_debugger IS NOT INITIAL.
+
+    lo_functions->add_function(
+       name     = 'INITIALS'
+       icon     = CONV #( icon_start_viewer )
+       text     = 'Initials'
+       tooltip  = 'Show/hide initial values'
+       position = if_salv_c_function_position=>right_of_salv_functions ).
+
+    lo_functions->add_function(
+       name     = 'GLOBALS'
+       icon     = CONV #( icon_foreign_trade )
+       text     = 'Globals'
+       tooltip  = 'Show/hide global variables'
+       position = if_salv_c_function_position=>right_of_salv_functions ).
+
+    lo_functions->add_function(
+       name     = 'CLASS_DATA'
+       icon     = CONV #( icon_oo_class_attribute )
+       text     = 'CLASS-DATA'
+       tooltip  = 'Show/hide Class-Data variables (global)'
+       position = if_salv_c_function_position=>right_of_salv_functions ).
+
+    lo_functions->add_function(
+           name     = 'LDB'
+           icon     = CONV #( icon_biw_report_view )
+           text     = 'LDB'
+           tooltip  = 'Show/hide Local Data Base variables (global)'
+           position = if_salv_c_function_position=>right_of_salv_functions ).
+
+    lo_functions->add_function(
+       name     = 'CHANGED'
+       icon     = CONV #( icon_interchange )
+       text     = ''
+       tooltip  = 'Show only changed values/all values'
+       position = if_salv_c_function_position=>right_of_salv_functions ).
+
+    lo_functions->add_function(
+           name     = 'TEST'
+           icon     = CONV #( icon_test )
+           text     = 'Steps'
+           tooltip  = 'Steps'
+           position = if_salv_c_function_position=>right_of_salv_functions ).
+
+    lo_functions->add_function(
+       name     = 'REFRESH'
+       icon     = CONV #( icon_refresh )
+       text     = ''
+       tooltip  = 'Refresh'
+       position = if_salv_c_function_position=>left_of_salv_functions ).
+  ENDMETHOD.
+
+  METHOD clear.
+
+    tree->get_nodes( )->delete_all( ).
+
+    CLEAR: m_globals_key,
+           m_locals_key,
+           m_ldb_key,
+           m_debug_key,
+           m_class_key,
+           mt_vars,
+           mt_classes_leaf,
+           m_no_refresh.
+  ENDMETHOD.
+
+  METHOD save_stack_vars.
+
+    LOOP AT mt_state INTO DATA(vars). "WHERE step = lv_step.
+      READ TABLE mo_debugger->mt_var_step WITH KEY name = vars-name step = iv_step TRANSPORTING NO FIELDS  .
+      IF sy-subrc NE 0.
+        APPEND INITIAL LINE TO mo_debugger->mt_var_step ASSIGNING FIELD-SYMBOL(<step>).
+        MOVE-CORRESPONDING vars TO <step>.
+        <step>-step = iv_step.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD add_node.
+
+    main_node_key =
+          tree->get_nodes( )->add_node(
+            related_node   = ''
+            collapsed_icon = iv_icon
+            expanded_icon = iv_icon
+            relationship   = if_salv_c_node_relation=>last_child
+            row_style = if_salv_c_tree_style=>emphasized_a
+            text           = CONV #( iv_name )
+            folder         = abap_true
+          )->get_key( ).
+
+    CASE iv_name.
+      WHEN 'Locals'.
+        m_locals_key = main_node_key.
+      WHEN 'Globals'.
+        m_globals_key = main_node_key.
+      WHEN 'LDB'.
+        m_ldb_key = main_node_key.
+      WHEN 'Class-data global variables'.
+        m_class_key = main_node_key.
+      WHEN 'Debug point'.
+        m_debug_key = main_node_key.
+    ENDCASE.
+  ENDMETHOD.
+
+  METHOD add_obj_nodes.
+    DATA l_new_node TYPE salv_de_node_key.
+    DATA lv_text TYPE lvc_value.
+    DATA lv_node_key TYPE salv_de_node_key.
+    DATA lv_icon TYPE salv_de_tree_image.
+    DATA ls_tree TYPE ts_table.
+
+    lv_icon = icon_oo_object.
+    lv_text = iv_name.
+
+    IF i_new_node IS SUPPLIED AND i_new_node IS NOT INITIAL.
+      l_new_node = i_new_node.
+    ELSE.
+      l_new_node =  main_node_key.
+    ENDIF.
+
+    IF iv_full IS SUPPLIED.
+      ls_tree-fullname = iv_full.
+    ENDIF.
+
+    DATA(lv_obj_index)  =  mo_debugger->get_obj_index( iv_full ).
+
+    READ TABLE mt_classes_leaf WITH KEY name = iv_full type = '' ASSIGNING FIELD-SYMBOL(<class>).
+    IF sy-subrc = 0.
+      e_root_key = <class>-key.
+    ELSE.
+
+      e_root_key =  tree->get_nodes( )->add_node(
+        related_node   = l_new_node
+        relationship   = iv_rel
+        collapsed_icon = lv_icon
+        expanded_icon  = lv_icon
+        data_row       = ls_tree
+        text           = lv_text
+        folder         = abap_false )->get_key( ).
+
+      APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
+      <class>-name = iv_full.
+      <class>-key = e_root_key.
+      <class>-type = ''.
+
+      APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+      <vars>-leaf = m_leaf.
+      <vars>-name = iv_full.
+      <vars>-key = e_root_key.
+    ENDIF.
+
+    lv_icon = icon_led_green.
+    READ TABLE mo_debugger->mt_classes_types WITH KEY full = lv_obj_index type = '1' TRANSPORTING NO FIELDS.
+
+    IF sy-subrc = 0.
+      READ TABLE mt_classes_leaf WITH KEY name = iv_full type = 1 ASSIGNING <class>.
+      IF sy-subrc NE 0.
+        lv_node_key =
+          tree->get_nodes( )->add_node(
+            related_node   = e_root_key
+            relationship   = if_salv_c_node_relation=>last_child
+            collapsed_icon = lv_icon
+            expanded_icon  = lv_icon
+            text           = 'Public'
+            folder         = abap_true
+          )->get_key( ).
+
+        APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
+        <class>-name = iv_full.
+        <class>-key = lv_node_key.
+        <class>-type = 1.
+      ENDIF.
+    ENDIF.
+
+    READ TABLE mo_debugger->mt_classes_types WITH KEY full = lv_obj_index type = '3' TRANSPORTING NO FIELDS.
+
+    IF sy-subrc = 0.
+      lv_icon = icon_led_yellow.
+
+      READ TABLE mt_classes_leaf WITH KEY name = iv_full type = 3 ASSIGNING <class>.
+      IF sy-subrc NE 0.
+        lv_node_key =
+          tree->get_nodes( )->add_node(
+            related_node   = e_root_key
+            relationship   = if_salv_c_node_relation=>last_child
+            collapsed_icon = lv_icon
+            expanded_icon  = lv_icon
+            text           = 'Protected'
+            folder         = abap_true
+          )->get_key( ).
+
+        APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
+        <class>-name = iv_full.
+        <class>-key = lv_node_key.
+        <class>-type = 3.
+      ENDIF.
+    ENDIF.
+
+    READ TABLE mo_debugger->mt_classes_types WITH KEY full = lv_obj_index type = '2' TRANSPORTING NO FIELDS.
+    IF sy-subrc = 0.
+      lv_icon = icon_led_red.
+      READ TABLE mt_classes_leaf WITH KEY name = iv_full type = 2 ASSIGNING <class>.
+      IF sy-subrc NE 0.
+        lv_node_key =
+          tree->get_nodes( )->add_node(
+            related_node   = e_root_key
+            relationship   = if_salv_c_node_relation=>last_child
+            collapsed_icon = lv_icon
+            expanded_icon  = lv_icon
+            text           = 'Private'
+            folder         = abap_true
+          )->get_key( ).
+
+        APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
+        <class>-name = iv_full.
+        <class>-key = lv_node_key.
+        <class>-type = 2.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD add_obj_var.
+
+    DATA: lv_icon TYPE salv_de_tree_image,
+          ls_tree TYPE ts_table,
+          l_key   TYPE salv_de_node_key.
+
+    IF iv_icon IS NOT SUPPLIED.
+      lv_icon = icon_oo_class.
+    ELSE.
+      lv_icon = iv_icon.
+    ENDIF.
+
+    IF iv_full IS SUPPLIED.
+      ls_tree-fullname = iv_full.
+    ENDIF.
+
+    IF iv_value IS SUPPLIED.
+      ls_tree-value = iv_value.
+    ENDIF.
+
+    IF iv_key IS SUPPLIED.
+      l_key = iv_key.
+    ELSE.
+      l_key = main_node_key.
+    ENDIF.
+
+    IF l_key IS INITIAL.
+      l_key = main_node_key.
+    ENDIF.
+
+    er_key = tree->get_nodes( )->add_node(
+      related_node   = l_key
+      relationship   = if_salv_c_node_relation=>last_child
+      collapsed_icon = lv_icon
+      expanded_icon  = lv_icon
+      data_row       = ls_tree
+      text           = iv_name
+      folder         = abap_false
+    )->get_key( ).
+  ENDMETHOD.
+
+  METHOD delete_node.
+    DATA(lo_nodes) = tree->get_nodes( ).
+    DATA(l_node) =  lo_nodes->get_node( iv_key ).
+    IF sy-subrc = 0.
+      l_node->delete( ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD display.
+
+    DATA(lo_columns) = tree->get_columns( ).
+    lo_columns->get_column( 'KIND' )->set_visible( abap_false ).
+    DATA(lo_nodes) = tree->get_nodes( ).
+    DATA(lt_nodes) =  lo_nodes->get_all_nodes( ).
+
+    "expanding only first level nodes.
+    DATA lt_sub TYPE salv_t_nodes.
+    LOOP AT lt_nodes INTO DATA(l_node).
+      READ TABLE lt_sub WITH KEY node = l_node-node TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
+        TRY.
+            l_node-node->expand( ).
+            lt_sub = l_node-node->get_subtree( ).
+          CATCH cx_root.
+        ENDTRY.
+      ENDIF.
+    ENDLOOP.
+
+    tree->display( ).
+  ENDMETHOD.
+
+  METHOD hndl_user_command.
+    CONSTANTS: c_mask TYPE x VALUE '01'.
+    CASE e_salv_function.
+      WHEN 'REFRESH'."
+        mo_debugger->run_script( ).
+      WHEN 'INITIALS'."Show/hide empty variables
+        m_hide = m_hide BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'GLOBALS'."Show/hide global variables
+        m_globals = m_globals BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
+        m_class_data = m_class_data BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'CHANGED'."Show only changed values/all values
+        m_changed = m_changed BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'LDB'."Show/hide LDB variables (globals)
+        m_ldb = m_ldb BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'TEST'.
+
+        "lcl_appl=>open_int_table( iv_name = 'Classes' it_tab =  mo_debugger->mt_classes_types ).
+        "lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
+        "lcl_appl=>open_int_table( iv_name = 'stack hist'   it_tab =  mo_debugger->mt_var_step ).
+
+        DATA: lt_hist TYPE TABLE OF lcl_appl=>var_table_temp.
+        MOVE-CORRESPONDING  mo_debugger->mt_vars_hist TO lt_hist.
+        lcl_appl=>open_int_table( iv_name = 'History' it_tab =  lt_hist ).
+
+    ENDCASE.
+  ENDMETHOD.
+
+  METHOD hndl_double_click.
+    DATA(lo_nodes) = tree->get_nodes( ).
+    DATA(l_node) =  lo_nodes->get_node( node_key ).
+    DATA r_row TYPE REF TO data.
+    DATA r_ref TYPE REF TO data.
+
+    r_row = l_node->get_data_row( ).
+    ASSIGN r_row->* TO FIELD-SYMBOL(<row>).
+    ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
+    ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
+    ASSIGN COMPONENT 'FULLNAME' OF STRUCTURE <row> TO FIELD-SYMBOL(<fullname>).
+
+    CASE <kind>.
+      WHEN cl_abap_datadescr=>typekind_table.
+        lcl_appl=>open_int_table( iv_name = <fullname> it_ref = <ref> ).
+      WHEN cl_abap_datadescr=>typekind_string.
+        NEW lcl_text_viewer( <ref> ).
+    ENDCASE.
+  ENDMETHOD.
+
+  METHOD add_variable.
+    DATA: lr_new   TYPE REF TO data,
+          lr_struc TYPE REF TO data,
+          l_name   TYPE string,
+          l_key    TYPE salv_de_node_key,
+          l_rel    TYPE salv_de_node_relation.
+
+    FIELD-SYMBOLS: <new>      TYPE any,
+                   <tab_from> TYPE ANY TABLE,
+                   <tab_to>   TYPE STANDARD TABLE.
+
+    IF i_icon IS SUPPLIED.
+      m_icon = i_icon.
+    ELSE.
+      CLEAR m_icon.
+    ENDIF.
+
+    DATA l_full_name TYPE string.
+    IF iv_full_name IS SUPPLIED.
+      l_full_name = iv_full_name.
+    ELSE.
+      l_full_name = iv_root_name.
+    ENDIF.
+
+    l_name = iv_root_name.
+    DESCRIBE FIELD io_var TYPE DATA(lv_type).
+    IF lv_type NE cl_abap_typedescr=>typekind_table.
+      CREATE DATA lr_new LIKE io_var.
+      ASSIGN lr_new->*  TO <new>.
+      <new> = io_var.
+    ELSE.
+      ASSIGN io_var TO <tab_from>.
+      CREATE DATA lr_struc LIKE LINE OF <tab_from>.
+      ASSIGN lr_struc->* TO FIELD-SYMBOL(<ls_record>).
+      CREATE DATA lr_new LIKE STANDARD TABLE OF <ls_record>.
+      ASSIGN lr_new->* TO <tab_to>.
+      <tab_to> = <tab_from>.
+    ENDIF.
+    m_variable = lr_new.
+
+    DATA td TYPE sydes_desc.
+    DESCRIBE FIELD io_var INTO td.
+    IF td-types[ 1 ]-type = 'r'.
+      m_object = io_var.
+    ENDIF.
+
+    IF iv_key IS SUPPLIED AND iv_key IS NOT INITIAL.
+      l_key = iv_key.
+    ELSE.
+      l_key = main_node_key.
+    ENDIF.
+
+    l_rel = if_salv_c_node_relation=>last_child.
+
+    ASSIGN m_variable->* TO FIELD-SYMBOL(<new_value>).
+
+    READ TABLE mt_vars WITH KEY name = l_full_name INTO DATA(l_var).
+    IF sy-subrc = 0.
+
+      DATA(lo_nodes) = tree->get_nodes( ).
+      DATA(l_node) =  lo_nodes->get_node( l_var-key ).
+      DATA r_row TYPE REF TO data.
+      DATA r_ref TYPE REF TO data.
+
+      IF sy-subrc = 0.
+        TRY.
+            r_row = l_node->get_data_row( ).
+            ASSIGN r_row->* TO FIELD-SYMBOL(<row>).
+            ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
+            ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
+            r_ref = <ref>.
+            ASSIGN r_ref->* TO FIELD-SYMBOL(<old_value>).
+            IF <old_value> NE <new_value>.
+              l_key = l_var-key.
+              l_rel = if_salv_c_node_relation=>next_sibling.
+              IF <kind> NE 'v' AND <kind> NE 'u'.
+                DELETE mt_vars WHERE name = l_full_name.
+              ENDIF.
+            ELSE.
+
+              IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
+                IF <kind> NE 'v' AND <kind> NE 'u'.
+                  DELETE mt_vars WHERE name = l_full_name.
+                  l_node->delete( ).
+                ENDIF.
+              ENDIF.
+
+              READ TABLE mt_state
+                WITH KEY name = l_full_name
+                         stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+               ASSIGNING FIELD-SYMBOL(<state>) .
+
+              IF sy-subrc = 0.
+                ASSIGN <state>-ref->* TO <old_value>.
+                IF <old_value> = <new_value>.
+                  IF <kind> NE 'v' AND <kind> NE 'u'.
+                    IF m_changed IS NOT INITIAL.
+                      DELETE mt_vars WHERE name = l_full_name.
+                      l_node->delete( ).
+                      RETURN.
+                    ELSE.
+                      RETURN.
+                    ENDIF.
+                  ENDIF.
+                ELSE.
+                  IF <kind> NE 'v' AND <kind> NE 'u'.
+                    DELETE mt_vars WHERE name = l_full_name.
+                    l_node->delete( ).
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+
+            IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
+              DELETE mt_vars WHERE name = l_full_name.
+              l_node->delete( ).
+              RETURN.
+            ENDIF.
+          CATCH cx_root.
+        ENDTRY.
+      ENDIF.
+    ELSE.
+
+      IF m_changed IS NOT INITIAL."check changed
+        READ TABLE mt_state
+          WITH KEY name = l_full_name
+                   stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+           ASSIGNING <state>.
+
+        IF sy-subrc = 0.
+          ASSIGN <state>-ref->* TO <old_value>.
+          IF <old_value> = <new_value>.
+            DELETE mt_vars WHERE name = l_full_name.
+            IF l_node IS NOT INITIAL.
+              l_node->delete( ).
+            ENDIF.
+            RETURN.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      IF lv_type NE cl_abap_typedescr=>typekind_table.
+        IF <new> IS INITIAL AND m_hide IS NOT INITIAL.
+          RETURN.
+        ENDIF.
+      ELSE.
+        IF <tab_to> IS INITIAL AND m_hide IS NOT INITIAL.
+          RETURN.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+    DATA(l_root_key) = traverse(
+     io_type_descr = cl_abap_typedescr=>describe_by_data_ref( m_variable )
+     iv_parent_key = l_key
+     iv_rel  = l_rel
+     iv_name = l_name
+     iv_fullname = l_full_name
+     ir_up = m_variable
+     iv_parent_name = l_name
+     i_cl_leaf = i_cl_leaf ).
+
+    READ TABLE mt_vars WITH KEY name = l_full_name TRANSPORTING NO FIELDS.
+    IF sy-subrc NE 0.
+      APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+      <vars>-leaf = m_leaf.
+      <vars>-name = l_full_name.
+      <vars>-key = l_root_key.
+      <vars>-ref = m_variable.
+      <vars>-cl_leaf = i_cl_leaf.
+    ENDIF.
+
+    IF l_rel = if_salv_c_node_relation=>next_sibling.
+      IF <kind> NE 'v' AND <kind> NE 'u'.
+        IF l_node IS NOT INITIAL.
+          l_node->delete( ).
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD traverse.
+    CASE io_type_descr->kind.
+      WHEN c_kind-struct.
+        e_root_key = traverse_struct( io_type_descr = io_type_descr
+                                      iv_parent_key = iv_parent_key
+                                      iv_rel  = iv_rel
+                                      iv_name = iv_name
+                                      iv_fullname = iv_fullname
+                                      i_cl_leaf = i_cl_leaf
+                                      ir_up = ir_up iv_parent_name = iv_parent_name ).
+
+      WHEN c_kind-table.
+        e_root_key = traverse_table( io_type_descr = io_type_descr
+                                     iv_parent_key = iv_parent_key
+                                     iv_rel  = iv_rel
+                                     iv_name = iv_name
+                                     iv_fullname = iv_fullname
+                                     ir_up = ir_up
+                                     i_cl_leaf = i_cl_leaf
+                                      iv_parent_name = iv_parent_name ).
+      WHEN c_kind-elem.
+        e_root_key = traverse_elem( io_type_descr = io_type_descr
+                                    iv_parent_key = iv_parent_key
+                                    iv_rel  = iv_rel
+                                    iv_name = iv_name
+                                    iv_fullname = iv_fullname
+                                    ir_up = ir_up
+                                    i_cl_leaf = i_cl_leaf
+                                    iv_parent_name = iv_parent_name ).
+    ENDCASE.
+  ENDMETHOD.
+
+  METHOD traverse_struct.
+    DATA: lt_component    TYPE abap_component_tab,
+          ls_component    LIKE LINE OF lt_component,
+          lo_struct_descr TYPE REF TO cl_abap_structdescr,
+          ls_tree         TYPE ts_table,
+          lv_text         TYPE lvc_value,
+          lv_node_key     TYPE salv_de_node_key,
+          lv_icon         TYPE salv_de_tree_image.
+
+    lo_struct_descr ?= io_type_descr.
+    ls_tree-ref =  ir_up.
+    ls_tree-typename = lo_struct_descr->absolute_name.
+    REPLACE FIRST OCCURRENCE OF '\TYPE=' IN ls_tree-typename+0(6) WITH ''.
+    IF ls_tree-typename+0(1) = '%'.
+      ls_tree-typename = |{ lo_struct_descr->type_kind }({ lo_struct_descr->length / 2 })|.
+    ENDIF.
+
+    ls_tree-kind = lo_struct_descr->type_kind.
+
+    IF m_icon IS INITIAL.
+      lv_icon = icon_structure.
+    ELSE.
+      lv_icon = m_icon.
+    ENDIF.
+
+    IF iv_name IS NOT INITIAL.
+      lv_text = iv_name.
+    ELSE.
+      lv_text = ls_tree-typename.
+    ENDIF.
+
+    ls_tree-fullname = iv_fullname.
+    IF lv_text IS NOT INITIAL.
+
+      READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
+      IF sy-subrc NE 0.
+        e_root_key = m_new_node = lv_node_key =
+          tree->get_nodes( )->add_node(
+            related_node   = iv_parent_key
+            relationship   = iv_rel
+            collapsed_icon = lv_icon
+            expanded_icon  = lv_icon
+            data_row       = ls_tree
+            text           = lv_text
+            folder         = abap_true
+          )->get_key( ).
+      ELSE.
+        lv_node_key = l_var-key.
+      ENDIF.
+    ENDIF.
+
+    lt_component = lo_struct_descr->get_components( ).
+    LOOP AT lt_component INTO ls_component. "WHERE name IS NOT INITIAL.
+      DATA: lr_new_struc TYPE REF TO data.
+      ASSIGN ir_up->* TO FIELD-SYMBOL(<up>).
+      IF ls_component-name IS INITIAL.
+        lr_new_struc = ir_up.
+      ELSE.
+        ASSIGN COMPONENT ls_component-name OF STRUCTURE <up> TO FIELD-SYMBOL(<new>).
+        GET REFERENCE OF <new> INTO lr_new_struc.
+      ENDIF.
+
+      traverse(
+        io_type_descr = ls_component-type
+        iv_parent_key = lv_node_key
+        iv_rel  = if_salv_c_node_relation=>last_child
+        iv_name = ls_component-name
+        iv_fullname = |{ iv_fullname }-{ ls_component-name }|
+        ir_up = lr_new_struc
+        iv_parent_name = |{ iv_parent_name }-{ ls_component-name }| ).
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD traverse_elem.
+    DATA: lo_elem_descr TYPE REF TO cl_abap_elemdescr,
+          ls_tree       TYPE ts_table,
+          lv_text       TYPE lvc_value,
+          lv_icon       TYPE salv_de_tree_image,
+          lv_node_key   TYPE salv_de_node_key,
+          l_key         TYPE salv_de_node_key,
+          l_rel         TYPE salv_de_node_relation.
+
+    lo_elem_descr ?= io_type_descr.
+    ls_tree-ref = ir_up.
+
+    ls_tree-typename = lo_elem_descr->absolute_name.
+    REPLACE FIRST OCCURRENCE OF '\TYPE=' IN ls_tree-typename WITH ''.
+    IF ls_tree-typename+0(1) = '%'.
+      ls_tree-typename = |{ lo_elem_descr->type_kind }({ lo_elem_descr->length / 2 })|.
+    ENDIF.
+
+    ls_tree-kind = lo_elem_descr->type_kind.
+
+    ASSIGN ir_up->* TO FIELD-SYMBOL(<new_value>).
+    IF iv_value IS SUPPLIED.
+      ls_tree-value = iv_value.
+    ELSE.
+      IF <new_value> IS NOT INITIAL.
+        ls_tree-value = <new_value>.
+      ENDIF.
+    ENDIF.
+
+    CASE lo_elem_descr->type_kind.
+      WHEN 'D'.
+        lv_icon = icon_date.
+      WHEN 'T'.
+        lv_icon = icon_bw_time_sap.
+      WHEN 'C'.
+        lv_icon = icon_wd_input_field.
+      WHEN 'P'.
+        lv_icon = icon_increase_decimal.
+      WHEN 'g'.
+        lv_icon = icon_text_act.
+      WHEN 'N' OR 'I'.
+        lv_icon = icon_pm_order.
+
+      WHEN OTHERS.
+        lv_icon = icon_element.
+    ENDCASE.
+
+    lv_text = iv_name.
+
+    IF ls_tree-value IS INITIAL AND m_hide IS NOT INITIAL.
+      RETURN.
+    ENDIF.
+
+    ls_tree-fullname = iv_fullname.
+
+    IF iv_parent_key IS NOT INITIAL.
+      l_key = iv_parent_key.
+    ELSE.
+      l_key = main_node_key.
+    ENDIF.
+
+    l_rel = iv_rel.
+    READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
+    IF sy-subrc = 0.
+
+      DATA(lo_nodes) = tree->get_nodes( ).
+      DATA(l_node) =  lo_nodes->get_node( l_var-key ).
+      DATA r_row TYPE REF TO data.
+      DATA r_ref TYPE REF TO data.
+
+      TRY.
+          r_row = l_node->get_data_row( ).
+          ASSIGN r_row->* TO FIELD-SYMBOL(<row>).
+          ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
+          ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
+          r_ref = <ref>.
+          ASSIGN r_ref->* TO FIELD-SYMBOL(<old_value>).
+          IF <old_value> NE <new_value>.
+            l_key = l_var-key.
+            l_rel = if_salv_c_node_relation=>next_sibling.
+            IF <kind> NE 'v' AND <kind> NE 'u'.
+              DELETE mt_vars WHERE name = iv_fullname.
+            ENDIF.
+          ELSE.
+            IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
+              IF <kind> NE 'v' AND <kind> NE 'u'.
+                DELETE mt_vars WHERE name = iv_fullname.
+                l_node->delete( ).
+              ENDIF.
+            ENDIF.
+            READ TABLE mt_state
+             WITH KEY name = iv_fullname
+                      stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+             ASSIGNING FIELD-SYMBOL(<state>).
+
+            IF sy-subrc = 0.
+              ASSIGN <state>-ref->* TO <old_value>.
+              IF <old_value> = <new_value>.
+                IF <kind> NE 'v' AND <kind> NE 'u' AND m_changed IS NOT INITIAL.
+                  DELETE mt_vars WHERE name = iv_fullname.
+                  l_node->delete( ).
+                ENDIF.
+                RETURN.
+              ELSE.
+                <state>-ref = ir_up.
+                mo_debugger->save_hist( CHANGING i_state = <state> ).
+              ENDIF.
+            ENDIF.
+          ENDIF.
+
+          IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
+            DELETE mt_vars WHERE name = iv_fullname.
+            l_node->delete( ).
+            RETURN.
+          ENDIF.
+        CATCH cx_root.
+      ENDTRY.
+    ELSE.
+
+      READ TABLE mt_state
+        WITH KEY name = iv_fullname
+                 stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+        ASSIGNING <state>.
+
+      IF sy-subrc = 0.
+        ASSIGN <state>-ref->* TO <old_value>.
+        IF <old_value> = <new_value>.
+          IF m_changed IS NOT INITIAL.
+            DELETE mt_vars WHERE name = iv_fullname.
+            IF l_node IS NOT INITIAL.
+              l_node->delete( ).
+            ENDIF.
+            RETURN.
+          ENDIF.
+        ELSE.
+          <state>-ref = ir_up.
+          mo_debugger->save_hist( CHANGING i_state = <state> ).
+        ENDIF.
+      ENDIF.
+
+      IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+    e_root_key = tree->get_nodes( )->add_node(
+       related_node   = l_key
+       relationship   = l_rel
+       data_row       = ls_tree
+       collapsed_icon = lv_icon
+       expanded_icon  = lv_icon
+       text           = lv_text
+       folder         = abap_false )->get_key( ).
+
+    APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+    <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
+    <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
+    <vars>-leaf = m_leaf.
+    <vars>-name = iv_fullname.
+    <vars>-short = iv_name.
+    <vars>-key = e_root_key.
+    <vars>-ref = ir_up.
+    <vars>-tree = me.
+    <vars>-cl_leaf = i_cl_leaf.
+
+    READ TABLE mt_state
+      WITH KEY name = iv_fullname
+               stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+      ASSIGNING <state>.
+
+    IF sy-subrc <> 0.
+
+      APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
+      <state> = <vars>.
+      mo_debugger->save_hist( CHANGING i_state = <state> ).
+    ENDIF.
+
+    IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
+      l_node->delete( ).
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD check_change.
+  ENDMETHOD.
+
+  METHOD traverse_table.
+    DATA: lo_table_descr TYPE REF TO cl_abap_tabledescr,
+          ls_tree        TYPE ts_table,
+          lv_text        TYPE lvc_value,
+          lv_node_key    TYPE salv_de_node_key,
+          lv_icon        TYPE salv_de_tree_image,
+          l_key          TYPE salv_de_node_key,
+          l_rel          TYPE salv_de_node_relation.
+
+    FIELD-SYMBOLS: <tab> TYPE ANY TABLE.
+
+    ASSIGN ir_up->* TO <tab>.
+    DATA(lines) = lines( <tab> ).
+    ls_tree-ref = ir_up.
+
+    lo_table_descr ?= io_type_descr.
+
+    ls_tree-fullname = |{ iv_name } ({ lines })|.
+    ls_tree-kind = lo_table_descr->type_kind.
+    ls_tree-typename = replace( val = lo_table_descr->absolute_name sub = '\TYPE=' with = ''   ).
+    lv_icon = icon_view_table.
+
+    IF iv_name IS NOT INITIAL.
+      lv_text = ls_tree-fullname.
+    ELSE.
+      lv_text = ls_tree-typename.
+    ENDIF.
+
+    l_rel = iv_rel.
+    ASSIGN ir_up->* TO FIELD-SYMBOL(<new_value>).
+    READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
+    IF sy-subrc = 0.
+
+      DATA(lo_nodes) = tree->get_nodes( ).
+      DATA(l_node) =  lo_nodes->get_node( l_var-key ).
+      DATA r_row TYPE REF TO data.
+      DATA r_ref TYPE REF TO data.
+
+      TRY.
+          r_row = l_node->get_data_row( ).
+          ASSIGN r_row->* TO FIELD-SYMBOL(<row>).
+          ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
+          ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
+          r_ref = <ref>.
+          ASSIGN r_ref->* TO FIELD-SYMBOL(<old_value>).
+          IF <old_value> NE <new_value>.
+            l_key = l_var-key.
+            l_rel = if_salv_c_node_relation=>next_sibling.
+            IF <kind> NE 'v' AND <kind> NE 'u'.
+              DELETE mt_vars WHERE name = iv_fullname.
+            ENDIF.
+          ELSE.
+            IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
+              IF <kind> NE 'v' AND <kind> NE 'u'.
+                DELETE mt_vars WHERE name = iv_fullname.
+                l_node->delete( ).
+              ENDIF.
+            ENDIF.
+            READ TABLE mt_state
+              WITH KEY name = iv_fullname
+                       stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+              ASSIGNING FIELD-SYMBOL(<state>).
+
+            IF sy-subrc = 0.
+              ASSIGN <state>-ref->* TO <old_value>.
+              IF <old_value> = <new_value>.
+                IF <kind> NE 'v' AND <kind> NE 'u' AND m_changed IS NOT INITIAL." AND m_changed is not INITIAL.
+                  DELETE mt_vars WHERE name = iv_fullname.
+                  l_node->delete( ).
+                ENDIF.
+                RETURN.
+              ELSE.
+                <state>-ref = ir_up.
+                mo_debugger->save_hist( CHANGING i_state = <state> ).
+              ENDIF.
+            ENDIF.
+          ENDIF.
+
+          IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
+            DELETE mt_vars WHERE name = iv_fullname.
+            l_node->delete( ).
+            RETURN.
+          ENDIF.
+        CATCH cx_root.
+      ENDTRY.
+    ELSE.
+
+      READ TABLE mt_state
+        WITH KEY name = iv_fullname
+                 stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+        ASSIGNING <state>.
+
+      IF sy-subrc = 0.
+        ASSIGN <state>-ref->* TO <old_value>.
+        IF <old_value> = <new_value>.
+          IF m_changed IS NOT INITIAL.
+            DELETE mt_vars WHERE name = iv_fullname.
+            IF l_node IS NOT INITIAL.
+              l_node->delete( ).
+            ENDIF.
+            RETURN.
+          ENDIF.
+        ELSE.
+          <state>-ref = ir_up.
+          mo_debugger->save_hist( CHANGING i_state = <state> ).
+        ENDIF.
+      ENDIF.
+
+      IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+    IF lines > 0 OR  m_hide IS INITIAL.
+      READ TABLE mt_vars WITH KEY name = iv_parent_name TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
+
+        ls_tree-fullname = iv_fullname.
+        e_root_key =
+          tree->get_nodes( )->add_node(
+            related_node   = iv_parent_key
+            relationship   = iv_rel
+            collapsed_icon = lv_icon
+            expanded_icon  = lv_icon
+            data_row       = ls_tree
+            text           = lv_text
+            folder         = abap_true
+          )->get_key( ).
+
+        APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+        <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
+        <vars>-leaf = m_leaf.
+        <vars>-name = iv_fullname.
+        <vars>-short = iv_name.
+        <vars>-key = e_root_key.
+        <vars>-ref = ir_up.
+        <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
+        <vars>-tree = me.
+        <vars>-cl_leaf = i_cl_leaf.
+
+        READ TABLE mt_state
+          WITH KEY name = iv_fullname
+                   stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+          ASSIGNING <state>.
+
+        IF sy-subrc <> 0.
+
+          APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
+          <state> = <vars>.
+          mo_debugger->save_hist( CHANGING i_state = <state> ).
+        ENDIF.
+
+        IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
+          l_node->delete( ).
+        ENDIF.
+
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
+
 CLASS lcl_dragdrop IMPLEMENTATION.
   METHOD drag.
     DATA(dataobj) = NEW lcl_dd_data( ).
@@ -2265,2844 +5038,5 @@ CLASS lcl_dragdrop IMPLEMENTATION.
 
     lo_alv ?= e_dragdropobj->droptargetctrl.
     lo_to->raise_selection_done( ).
-  ENDMETHOD.
-ENDCLASS.
-
-
-CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
-  PUBLIC SECTION.
-
-    TYPES: BEGIN OF ts_table,
-             ref      TYPE REF TO data,
-             kind(1),
-             value    TYPE string,
-             typename TYPE abap_abstypename,
-             fullname TYPE string,
-           END OF ts_table.
-
-    TYPES tt_table TYPE STANDARD TABLE OF ts_table
-          WITH NON-UNIQUE DEFAULT KEY.
-
-    DATA: m_history              TYPE x,
-          m_visualization        TYPE x,
-          m_zcode                TYPE x,
-          "m_prg                  TYPE tpda_scr_prg_info,
-          m_debug_button         LIKE sy-ucomm,
-          m_show_step            TYPE xfeld,
-          m_update_tree          TYPE xfeld,
-          mo_debugger            TYPE REF TO lcl_debugger_script,
-          mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
-          mo_splitter_var        TYPE REF TO cl_gui_splitter_container,
-          mo_toolbar_container   TYPE REF TO cl_gui_container,
-
-          mo_importing_container TYPE REF TO cl_gui_container,
-          mo_locals_container    TYPE REF TO cl_gui_container,
-          mo_exporting_container TYPE REF TO cl_gui_container,
-          mo_code_container      TYPE REF TO cl_gui_container,
-          mo_editor_container    TYPE REF TO cl_gui_container,
-          mo_stack_container     TYPE REF TO cl_gui_container,
-          mo_code_viewer         TYPE REF TO cl_gui_abapedit,
-          "mt_stack               TYPE TABLE OF lcl_appl=>t_stack,
-          mo_toolbar             TYPE REF TO cl_gui_toolbar,
-          mo_salv_stack          TYPE REF TO cl_salv_table,
-          mt_tree_imp            TYPE tt_table,
-          mt_tree_loc            TYPE tt_table,
-          mt_tree_exp            TYPE tt_table,
-          mo_tree_imp            TYPE REF TO cl_salv_tree,
-          mo_tree_loc            TYPE REF TO cl_salv_tree,
-          mo_tree_exp            TYPE REF TO cl_salv_tree,
-          mt_breaks              TYPE tpda_bp_persistent_it.
-
-    METHODS: constructor IMPORTING i_debugger TYPE REF TO lcl_debugger_script i_additional_name TYPE string OPTIONAL,
-      add_toolbar_buttons,
-      hnd_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode,
-      set_program IMPORTING iv_program TYPE program.
-
-    METHODS set_program_line IMPORTING iv_line LIKE sy-index.
-    METHODS create_code_viewer.
-    METHODS show_stack.
-ENDCLASS.
-
-
-CLASS lcl_debugger_script IMPLEMENTATION.
-  METHOD prologue.
-    super->prologue( ).
-  ENDMETHOD.                    "prolog
-
-  METHOD init.
-    is_start = abap_on.
-
-    lcl_appl=>init_lang( ).
-    lcl_appl=>init_icons_table( ).
-
-    mo_window = NEW lcl_window( me ).
-    go_tree_imp = NEW lcl_rtti_tree( i_header = 'Importing parameters' i_type = 'I' i_cont = mo_window->mo_importing_container
-                                     i_debugger = me  ).
-    go_tree_local = NEW lcl_rtti_tree( i_header =  'Variables' i_type = 'L'
-                     i_cont = mo_window->mo_locals_container
-                     i_debugger = me ).
-    go_tree_exp = NEW lcl_rtti_tree( i_header = 'Exporting parameters' i_type = 'E' i_cont = mo_window->mo_exporting_container
-                                     i_debugger = me ).
-
-  ENDMETHOD.                    "init
-
-  METHOD create_simple_var.
-    DATA: lr_symbsimple TYPE REF TO tpda_sys_symbsimple,
-          lo_elem       TYPE REF TO cl_abap_elemdescr.
-
-    CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-      EXPORTING
-        p_var_name   = i_name
-      RECEIVING
-        p_symb_quick = DATA(quick).
-
-    ASSIGN quick-quickdata TO FIELD-SYMBOL(<lv_value>).
-    lr_symbsimple ?= <lv_value>.
-    ASSIGN lr_symbsimple->* TO FIELD-SYMBOL(<simple>).
-
-    CALL METHOD cl_abap_complexdescr=>describe_by_name
-      EXPORTING
-        p_name         = quick-abstypename
-      RECEIVING
-        p_descr_ref    = DATA(lo_type)
-      EXCEPTIONS
-        type_not_found = 1.
-
-    lo_elem ?= lo_type.
-    CREATE DATA er_var TYPE HANDLE lo_elem.
-    ASSIGN er_var->* TO FIELD-SYMBOL(<new_elem>).
-    <new_elem> = <simple>-valstring.
-  ENDMETHOD.
-
-  METHOD create_simple_string.
-    DATA: lr_string TYPE REF TO tpda_sys_symbstring,
-          lr_struc  TYPE REF TO data,
-          lo_elem   TYPE REF TO cl_abap_elemdescr..
-
-    FIELD-SYMBOLS: <string>   TYPE tpda_sys_symbstring,
-                   <lv_value> TYPE any.
-
-    CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-      EXPORTING
-        p_var_name   = i_name
-      RECEIVING
-        p_symb_quick = DATA(quick).
-
-    ASSIGN quick-quickdata TO <lv_value>.
-    lr_string ?= <lv_value>.
-    ASSIGN lr_string->* TO <string>.
-
-    CALL METHOD cl_abap_complexdescr=>describe_by_name
-      EXPORTING
-        p_name      = quick-abstypename
-      RECEIVING
-        p_descr_ref = DATA(lo_type).
-
-    lo_elem ?= lo_type.
-
-    CREATE DATA lr_struc TYPE HANDLE lo_elem.
-    ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_string>).
-
-    e_string = <string>-valstring.
-  ENDMETHOD.
-
-  METHOD create_struc.
-    DATA: lo_new_type    TYPE REF TO cl_abap_structdescr,
-          ls_comp        TYPE abap_componentdescr,
-          lt_components  TYPE abap_component_tab,
-          lr_symbsimple  TYPE REF TO tpda_sys_symbsimple,
-          lo_struc_descr TYPE REF TO cl_tpda_script_structdescr,
-          comp_full      TYPE  tpda_scr_struct_comp_it,
-          comp_it        TYPE tpda_script_struc_componentsit.
-
-    FIELD-SYMBOLS: <lv_value> TYPE any,
-                   <simple>   TYPE tpda_sys_symbsimple.
-
-    CLEAR er_struc.
-    CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-      EXPORTING
-        p_var_name   = i_name
-      RECEIVING
-        p_symb_quick = DATA(quick).
-
-    lo_struc_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
-    lo_struc_descr->components( IMPORTING p_components_it = comp_it p_components_full_it = comp_full ).
-
-    lcl_rtti=>create_struc_handle( EXPORTING i_tname = CONV #( replace( val = quick-abstypename sub = '/TYPE=' with = '' )  ) IMPORTING e_handle = lo_new_type ).
-    IF lo_new_type IS NOT INITIAL.
-      CREATE DATA er_struc TYPE HANDLE lo_new_type.
-    ELSE.
-
-      LOOP AT comp_full INTO DATA(l_comp).
-        ls_comp-name = l_comp-compname.
-
-        ASSIGN l_comp-symbquick-quickdata TO <lv_value>.
-        lr_symbsimple ?= <lv_value>.
-        ASSIGN lr_symbsimple->* TO <simple>.
-
-        CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-          EXPORTING
-            p_var_name   = |{ i_name }-{ l_comp-compname }|
-          RECEIVING
-            p_symb_quick = DATA(quick_sub).
-
-        CALL METHOD cl_abap_complexdescr=>describe_by_name
-          EXPORTING
-            p_name         = quick_sub-abstypename
-          RECEIVING
-            p_descr_ref    = DATA(lo_type)
-          EXCEPTIONS
-            type_not_found = 1.
-
-        IF sy-subrc = 0.
-          ls_comp-type ?= lo_type.
-          APPEND ls_comp TO lt_components.
-        ENDIF.
-      ENDLOOP.
-      lo_new_type  = cl_abap_structdescr=>create( lt_components ).
-      CREATE DATA er_struc TYPE HANDLE lo_new_type.
-    ENDIF.
-
-    ASSIGN er_struc->* TO FIELD-SYMBOL(<new_struc>).
-
-    LOOP AT comp_full INTO l_comp.
-      ASSIGN l_comp-symbquick-quickdata TO <lv_value>.
-      lr_symbsimple ?= <lv_value>.
-      ASSIGN COMPONENT l_comp-compname OF STRUCTURE <new_struc> TO FIELD-SYMBOL(<new>).
-      <new> = lr_symbsimple->valstring.
-    ENDLOOP.
-  ENDMETHOD.
-
-  METHOD get_deep_struc.
-    DATA: lr_struc       TYPE REF TO data,
-          lo_struc_descr TYPE REF TO cl_tpda_script_structdescr,
-          comp_full      TYPE  tpda_scr_struct_comp_it,
-          comp_it        TYPE tpda_script_struc_componentsit,
-          lr_symbsimple  TYPE REF TO tpda_sys_symbsimple,
-          lr_symbstring  TYPE REF TO tpda_sys_symbstring,
-          lr_symbstruc   TYPE REF TO tpda_sys_symbstruct,
-          r_data         TYPE REF TO data.
-
-    FIELD-SYMBOLS: <lv_value> TYPE any.
-
-    ASSIGN r_obj->* TO FIELD-SYMBOL(<new_deep>).
-    lo_struc_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
-    lo_struc_descr->components( IMPORTING p_components_it = comp_it p_components_full_it = comp_full ).
-
-    LOOP AT comp_full INTO DATA(comp).
-      CASE comp-symbquick-metatype.
-        WHEN cl_tpda_script_data_descr=>mt_simple.
-          ASSIGN comp-symbquick-quickdata TO <lv_value>.
-          lr_symbsimple ?= <lv_value>.
-          ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO FIELD-SYMBOL(<new>).
-          <new> = lr_symbsimple->valstring.
-
-        WHEN cl_tpda_script_data_descr=>mt_string.
-          ASSIGN comp-symbquick-quickdata TO <lv_value>.
-          lr_symbstring ?= <lv_value>.
-          ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO <new>.
-          <new> = lr_symbstring->valstring.
-
-        WHEN cl_tpda_script_data_descr=>mt_struct.
-          ASSIGN comp-symbquick-quickdata TO <lv_value>.
-          ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO <new>.
-          GET REFERENCE OF <new> INTO lr_struc.
-          lr_symbstruc ?= <lv_value>.
-          get_deep_struc( EXPORTING i_name = |{ i_name }-{ comp-compname }|
-                           r_obj = lr_struc ).
-
-        WHEN cl_tpda_script_data_descr=>mt_tab.
-          FIELD-SYMBOLS: <new_table> TYPE ANY TABLE.
-          ASSIGN COMPONENT comp-compname OF STRUCTURE <new_deep> TO <new_table>.
-          GET REFERENCE OF <new_table> INTO r_data.
-          get_table( EXPORTING i_name = |{ i_name }-{ comp-compname }|
-                     CHANGING c_obj = r_data ).
-      ENDCASE.
-    ENDLOOP.
-  ENDMETHOD.
-
-  METHOD get_form_parameters.
-
-    TYPES: BEGIN OF t_param,
-             form TYPE string,
-             name TYPE string,
-             type TYPE char1,
-           END OF t_param.
-
-    DATA: gr_scan  TYPE REF TO cl_ci_scan,
-          lt_param TYPE TABLE OF t_param,
-          ls_param TYPE t_param,
-          lv_par   TYPE char1,
-          lv_type  TYPE char1.
-    DATA(gr_source) = cl_ci_source_include=>create( p_name = CONV #( i_prg-include ) ).
-    CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
-
-    LOOP AT gr_scan->tokens INTO DATA(l_token) WHERE str = 'FORM' .
-      READ TABLE gr_scan->statements INTO DATA(l_statement) WITH KEY from =  sy-tabix.
-
-      LOOP AT gr_scan->tokens FROM l_statement-from TO l_statement-to INTO l_token.
-        IF sy-tabix = l_statement-from.
-          CONTINUE.
-        ENDIF.
-        IF sy-tabix = l_statement-from + 1.
-          ls_param-form = l_token-str.
-          CONTINUE.
-        ENDIF.
-        IF l_token-str = 'USING'.
-          ls_param-type = 'I'.
-          CLEAR: lv_type, lv_par.
-          CONTINUE.
-        ELSEIF l_token-str = 'CHANGING'.
-          IF ls_param-name IS NOT INITIAL.
-            APPEND ls_param TO lt_param.
-            CLEAR: lv_type, lv_par, ls_param-name.
-          ENDIF.
-          ls_param-type = 'E'.
-          CLEAR: lv_type, lv_par.
-          CONTINUE.
-        ENDIF.
-        IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str NE 'TYPE'.
-          APPEND ls_param TO lt_param.
-          CLEAR: lv_par, ls_param-name.
-        ENDIF.
-
-        IF lv_par IS INITIAL.
-          ls_param-name = l_token-str.
-          lv_par = abap_true.
-          CONTINUE.
-        ENDIF.
-        IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str = 'TYPE'.
-          lv_type = abap_true.
-          CONTINUE.
-        ENDIF.
-        IF lv_par = abap_true AND lv_type = abap_true.
-          APPEND ls_param TO lt_param.
-          CLEAR: lv_type, lv_par, ls_param-name.
-        ENDIF.
-      ENDLOOP.
-      "read table gr_scan->tokens into data(l_token2) index lv_ind.
-    ENDLOOP.
-    IF ls_param-name IS NOT INITIAL.
-      APPEND ls_param TO lt_param.
-    ENDIF.
-
-    LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
-      IF ls_param-type = 'I'.
-        transfer_variable( EXPORTING i_name = CONV #( ls_param-name )  ).
-        DELETE mt_locals WHERE name = ls_param-name.
-      ENDIF.
-
-      IF ls_param-type = 'E'.
-        APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
-        <ret_exp>-name = ls_param-name.
-        DELETE mt_locals WHERE name = ls_param-name.
-      ENDIF.
-    ENDLOOP.
-  ENDMETHOD.
-
-  METHOD get_method_parameters.
-    DATA: l_clref  TYPE REF TO cl_abap_classdescr.
-    CALL METHOD cl_abap_classdescr=>describe_by_name
-      EXPORTING
-        p_name      = get_class_name( 'ME' )
-      RECEIVING
-        p_descr_ref = DATA(l_dref).
-    IF sy-subrc <> 0.
-      EXIT.
-    ENDIF.
-
-    l_clref ?= l_dref.
-    m_classname = l_clref->absolute_name.
-    READ TABLE l_clref->methods INTO DATA(x_methods) WITH KEY name = i_name.
-
-    IF sy-subrc = 0.
-      LOOP AT x_methods-parameters INTO DATA(x_parameters).
-        IF x_parameters-parm_kind = 'I'. "importing
-          transfer_variable( EXPORTING i_name = CONV #( x_parameters-name ) ).
-          DELETE mt_locals WHERE name = x_parameters-name.
-        ENDIF.
-        IF x_parameters-parm_kind = 'E' OR x_parameters-parm_kind = 'R'. "exporting or returning
-          APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
-          <ret_exp>-name = x_parameters-name.
-          DELETE mt_locals WHERE name = x_parameters-name.
-        ENDIF.
-      ENDLOOP.
-    ENDIF.
-  ENDMETHOD.
-
-  METHOD get_func_parameters.
-
-    DATA: lt_imp    TYPE TABLE OF rsimp,
-          lt_chng   TYPE TABLE OF   rscha,
-          lt_exp    TYPE TABLE OF rsexp,
-          lt_tables TYPE TABLE OF rstbl,
-          lt_exc    TYPE TABLE OF rsexc,
-          lt_doc    TYPE TABLE OF rsfdo,
-          lt_source TYPE TABLE OF rssource.
-
-    CALL FUNCTION 'RPY_FUNCTIONMODULE_READ'
-      EXPORTING
-        functionname       = CONV rs38l_fnam( i_name )
-      TABLES
-        import_parameter   = lt_imp
-        changing_parameter = lt_chng
-        export_parameter   = lt_exp
-        tables_parameter   = lt_tables
-        exception_list     = lt_exc
-        documentation      = lt_doc
-        source             = lt_source
-      EXCEPTIONS
-        error_message      = 1
-        function_not_found = 2
-        invalid_name       = 3
-        OTHERS             = 4.
-
-    LOOP AT lt_imp INTO DATA(ls_imp).
-      transfer_variable( EXPORTING i_name = CONV #( ls_imp-parameter ) ).
-      DELETE mt_locals WHERE name = ls_imp-parameter.
-    ENDLOOP.
-
-    LOOP AT lt_exp INTO DATA(ls_exp). "exporting
-      APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
-      <ret_exp>-name = ls_exp-parameter.
-      DELETE mt_locals WHERE name = ls_exp-parameter.
-    ENDLOOP.
-
-    LOOP AT lt_chng INTO DATA(ls_chng). "exporting
-      APPEND INITIAL LINE TO mt_ret_exp ASSIGNING <ret_exp>.
-      <ret_exp>-name = ls_chng-parameter.
-      DELETE mt_locals WHERE name = ls_chng-parameter.
-    ENDLOOP.
-
-    LOOP AT lt_tables INTO DATA(ls_tables). "exporting
-      APPEND INITIAL LINE TO mt_ret_exp ASSIGNING <ret_exp>.
-      <ret_exp>-name = ls_tables-parameter.
-      DELETE mt_locals WHERE name = ls_tables-parameter.
-    ENDLOOP.
-
-  ENDMETHOD.
-
-  METHOD get_table. "construct deep tables
-    DATA: r_data         TYPE REF TO data,
-          lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
-          table_clone    TYPE REF TO data,
-          lo_tabl        TYPE REF TO cl_abap_tabledescr,
-          lo_struc       TYPE REF TO cl_abap_structdescr,
-          r_struc        TYPE REF TO data.
-
-    FIELD-SYMBOLS: <f>         TYPE ANY TABLE,
-                   <new_table> TYPE ANY TABLE.
-
-    ASSIGN c_obj->* TO <new_table>.
-    lo_tabl ?= cl_abap_typedescr=>describe_by_data( <new_table> ).
-    lo_struc ?= lo_tabl->get_table_line_type( ).
-
-    CREATE DATA r_data TYPE HANDLE lo_struc.
-    ASSIGN r_data->* TO FIELD-SYMBOL(<new_line>).
-
-    lo_table_descr ?= cl_tpda_script_data_descr=>factory(  i_name ).
-    TRY.
-        table_clone = lo_table_descr->elem_clone( ).
-        ASSIGN table_clone->* TO <f>.
-        DATA: l_count TYPE i.
-
-        LOOP AT <f> ASSIGNING FIELD-SYMBOL(<fs>).
-          l_count = sy-tabix.
-          CLEAR <new_line>.
-
-          DO.
-            ASSIGN COMPONENT sy-index OF STRUCTURE <fs> TO FIELD-SYMBOL(<from>).
-            IF sy-subrc NE 0.
-              EXIT.
-            ENDIF.
-
-            ASSIGN COMPONENT sy-index OF STRUCTURE <new_line> TO FIELD-SYMBOL(<to>).
-            DESCRIBE FIELD <from> TYPE DATA(from_type).
-            DESCRIBE FIELD   <to> TYPE DATA(to_type).
-
-            IF from_type = to_type.
-              <to> = <from>.
-            ELSEIF to_type = 'h'.
-              lo_struc ?= cl_abap_typedescr=>describe_by_data( <fs> ).
-              READ TABLE lo_struc->components INDEX sy-index INTO DATA(ls_comp).
-              GET REFERENCE OF <to> INTO r_data.
-              get_table( EXPORTING i_name = |{ i_name }[ { l_count } ]-{ ls_comp-name }|
-                         CHANGING c_obj = r_data ).
-            ENDIF.
-          ENDDO.
-          INSERT <new_line> INTO TABLE <new_table>.
-        ENDLOOP.
-      CATCH cx_root.
-        DATA(l_cnt) = lo_table_descr->linecnt( ).
-        DO l_cnt TIMES.
-          r_struc = create_struc( i_name = |{ i_name }[{ sy-index }]| ).
-          ASSIGN r_struc->* TO <new_line>.
-          INSERT <new_line> INTO TABLE <new_table>.
-        ENDDO.
-    ENDTRY.
-  ENDMETHOD.
-
-  METHOD transfer_variable.
-    DATA: lr_struc       TYPE REF TO data,
-          lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
-          table_clone    TYPE REF TO data,
-          l_name         TYPE string,
-          l_fullname     TYPE string,
-          lo_deep_handle TYPE REF TO cl_abap_datadescr,
-          deep_ref       TYPE REF TO cl_abap_typedescr,
-          lo_tabl        TYPE REF TO cl_abap_tabledescr,
-          lo_struc       TYPE REF TO cl_abap_structdescr,
-          r_header       TYPE REF TO data,
-          r_elem         TYPE REF TO data.
-
-    FIELD-SYMBOLS: <lv_value> TYPE any.
-
-    TRY.
-        CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-          EXPORTING
-            p_var_name   = i_name
-          RECEIVING
-            p_symb_quick = DATA(quick).
-      CATCH cx_tpda_varname .
-    ENDTRY.
-
-    TRY.
-        ASSIGN quick-quickdata->* TO <lv_value>.
-
-        l_fullname =  i_fullname.
-
-        IF quick-typid = 'h'."internal table
-          lo_table_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
-          table_clone = lo_table_descr->elem_clone( ).
-          ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
-
-          "check header area
-          DATA td       TYPE sydes_desc.
-          DESCRIBE FIELD <f> INTO td.
-
-          READ TABLE td-names INTO DATA(l_names) INDEX 1.
-          IF sy-subrc = 0.
-            TRY.
-                CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-                  EXPORTING
-                    p_var_name   = |{ i_name }-{ l_names-name }|
-                  RECEIVING
-                    p_symb_quick = DATA(l_quick).
-
-                lo_tabl ?= cl_abap_typedescr=>describe_by_data( <f> ).
-                lo_struc ?= lo_tabl->get_table_line_type( ).
-                CREATE DATA r_header TYPE HANDLE lo_struc.
-                ASSIGN r_header->* TO FIELD-SYMBOL(<header>).
-                LOOP AT td-names INTO l_names.
-                  CLEAR r_elem.
-                  r_elem = create_simple_var( EXPORTING i_name = |{ i_name }-{ l_names-name }| ).
-                  IF r_elem IS NOT INITIAL.
-                    ASSIGN r_elem->* TO FIELD-SYMBOL(<elem>).
-                    ASSIGN COMPONENT l_names-name OF STRUCTURE <header> TO FIELD-SYMBOL(<to>).
-                    <to> = <elem>.
-                  ENDIF.
-                ENDLOOP.
-                add_variable( EXPORTING iv_name = i_name
-                                                 "iv_full_name = l_name
-                                        iv_fullname = i_fullname
-                                       CHANGING io_var =  <header>  ).
-
-                l_name = l_name && '[]'.
-              CATCH cx_tpda_varname .
-            ENDTRY.
-          ENDIF.
-
-          DO lo_table_descr->linecnt( ) TIMES.
-            l_name = |{ i_name }[{ sy-index }]|.
-            transfer_variable( EXPORTING  i_name =  l_name ).
-
-          ENDDO.
-
-        ELSEIF quick-typid = 'l'. "data ref
-          DATA: ls_info TYPE tpda_scr_quick_info.
-
-          FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbdatref.
-
-          ls_info = cl_tpda_script_data_descr=>get_quick_info( i_name ).
-          ASSIGN ls_info-quickdata->* TO <ls_symobjref>.
-
-          transfer_variable( EXPORTING i_name = CONV #( <ls_symobjref>-instancename ) i_fullname = |{ i_name }| ).
-
-        ELSEIF quick-typid = 'r'. "reference
-          DATA: l_rel   TYPE salv_de_node_relation,
-                lv_node TYPE salv_de_node_key.
-
-          l_rel = if_salv_c_node_relation=>last_child.
-
-          create_reference( EXPORTING i_name = i_name
-                                     i_shortname = l_name
-                                     i_new_node = lv_node
-                                     iv_rel = l_rel
-                                     i_quick = quick ).
-
-        ELSEIF quick-typid = 'v' OR quick-typid = 'u'."deep structure or structure
-
-          CALL METHOD cl_abap_complexdescr=>describe_by_name
-            EXPORTING
-              p_name         = quick-abstypename
-            RECEIVING
-              p_descr_ref    = deep_ref
-            EXCEPTIONS
-              type_not_found = 1.
-
-          IF sy-subrc = 0.
-            lo_deep_handle ?= deep_ref.
-            CREATE DATA lr_struc TYPE HANDLE lo_deep_handle.
-            get_deep_struc( EXPORTING i_name = i_name r_obj = lr_struc ).
-            ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_deep>).
-            add_variable( EXPORTING iv_name = i_name iv_fullname = l_fullname CHANGING io_var =  <new_deep>  ).
-          ELSE.
-            create_struc2( i_name ).
-          ENDIF.
-
-        ELSEIF quick-typid = 'g'."string
-          DATA(new_string) = create_simple_string( i_name ).
-          add_variable( EXPORTING iv_name = i_name   iv_fullname = l_fullname CHANGING io_var =  new_string ).
-        ELSE.
-          lr_struc = create_simple_var( i_name ).
-          ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_elem>).
-          add_variable( EXPORTING iv_name = i_name  iv_fullname = l_fullname CHANGING io_var =  <new_elem>  ).
-        ENDIF.
-      CATCH cx_root.
-    ENDTRY.
-  ENDMETHOD.
-
-  METHOD add_variable.
-    DATA: lr_new   TYPE REF TO data,
-          lr_struc TYPE REF TO data,
-          l_name   TYPE string.
-
-    FIELD-SYMBOLS: <new>      TYPE any,
-                   <tab_from> TYPE ANY TABLE,
-                   <tab_to>   TYPE STANDARD TABLE.
-
-    l_name = iv_name.
-    DESCRIBE FIELD io_var TYPE DATA(lv_type).
-    IF lv_type NE cl_abap_typedescr=>typekind_table.
-      CREATE DATA lr_new LIKE io_var.
-      ASSIGN lr_new->*  TO <new>.
-      <new> = io_var.
-    ELSE.
-      ASSIGN io_var TO <tab_from>.
-      CREATE DATA lr_struc LIKE LINE OF <tab_from>.
-      ASSIGN lr_struc->* TO FIELD-SYMBOL(<ls_record>).
-      CREATE DATA lr_new LIKE STANDARD TABLE OF <ls_record>.
-      ASSIGN lr_new->* TO <tab_to>.
-      <tab_to> = <tab_from>.
-    ENDIF.
-    m_variable = lr_new.
-
-    DATA td TYPE sydes_desc.
-    DESCRIBE FIELD io_var INTO td.
-    IF td-types[ 1 ]-type = 'r'.
-      m_object = io_var.
-    ENDIF.
-
-    ASSIGN m_variable->* TO FIELD-SYMBOL(<new_value>).
-
-    traverse(
-     io_type_descr = cl_abap_typedescr=>describe_by_data_ref( m_variable )
-     iv_name = iv_name
-     iv_fullname = iv_fullname
-     ir_up = m_variable
-     iv_parent_name = l_name
-      ).
-
-  ENDMETHOD.
-
-  METHOD traverse.
-    CASE io_type_descr->kind.
-      WHEN c_kind-struct.
-        traverse_struct( io_type_descr = io_type_descr
-                                      iv_name = iv_name
-                                      iv_fullname = iv_fullname
-                                      ir_up = ir_up iv_parent_name = iv_parent_name ).
-
-      WHEN c_kind-elem.
-        traverse_elem( io_type_descr = io_type_descr
-                                    iv_name = iv_name
-                                    iv_fullname = iv_fullname
-                                    ir_up = ir_up
-                                    iv_parent_name = iv_parent_name ).
-    ENDCASE.
-  ENDMETHOD.
-
-  METHOD traverse_elem.
-
-    data: l_is_new type xfeld,
-          lo_elem_descr TYPE REF TO cl_abap_elemdescr.
-
-    lo_elem_descr ?= io_type_descr.
-
-    ASSIGN ir_up->* TO FIELD-SYMBOL(<new_value>).
-
-    READ TABLE mt_stack_ ASSIGNING FIELD-SYMBOL(<stack>) INDEX 1.
-    READ TABLE <stack>-vars WITH KEY name = iv_name ASSIGNING FIELD-SYMBOL(<vari>).
-    IF sy-subrc NE 0.
-      APPEND INITIAL LINE TO <stack>-vars ASSIGNING <vari>.
-      <vari>-name = iv_name.
-      <vari>-value = <new_value>.
-      <vari>-type = lo_elem_descr->type_kind.
-      l_is_new = abap_on.
-    ELSE.
-      IF <new_value> NE <vari>-value.
-       l_is_new = abap_on.
-      ENDIF.
-    ENDIF.
-
-    IF l_is_new = abap_on.
-        READ TABLE mt_steps INDEX 1 INTO DATA(ls_step).
-        APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<var>).
-        MOVE-CORRESPONDING ls_step TO <var>.
-        <var>-name = iv_name.
-        <var>-value = <new_value>.
-        <var>-type = lo_elem_descr->type_kind.
-        IF iv_fullname IS INITIAL.
-          <var>-fullname = iv_name.
-        ELSE.
-          <var>-fullname = iv_fullname && '-' && iv_name.
-        ENDIF.
-
-        <var>-start = is_start.
-
-    ENDIF.
-
-  ENDMETHOD.
-
-  METHOD traverse_struct.
-    DATA: lt_component    TYPE abap_component_tab,
-          ls_component    LIKE LINE OF lt_component,
-          lo_struct_descr TYPE REF TO cl_abap_structdescr,
-          lv_text         TYPE lvc_value,
-          l_name          TYPE string,
-          l_len           TYPE i.
-
-    lo_struct_descr ?= io_type_descr.
-    lt_component = lo_struct_descr->get_components( ).
-    LOOP AT lt_component INTO ls_component. "WHERE name IS NOT INITIAL.
-
-      l_len = strlen( iv_name ) - 1.
-
-      IF iv_name+l_len(1) NE '-'.
-        l_name = |{ iv_name }-{ ls_component-name }|.
-      ELSE.
-        l_name = |{ iv_name }{ ls_component-name }|.
-      ENDIF.
-
-      transfer_variable( EXPORTING i_name = l_name i_fullname = iv_fullname ).
-
-    ENDLOOP.
-  ENDMETHOD.
-
-  METHOD get_class_name.
-    DATA: lo_object TYPE REF TO cl_tpda_script_objectdescr,
-          lo_descr  TYPE REF TO cl_tpda_script_data_descr.
-
-    FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
-
-    TRY.
-        CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-          EXPORTING
-            p_var_name   = i_name
-          RECEIVING
-            p_symb_quick = DATA(l_quick).
-
-        ASSIGN l_quick-quickdata->* TO <ls_symobjref>.
-        IF <ls_symobjref>-instancename <> '{O:initial}'.
-
-          lo_descr = cl_tpda_script_data_descr=>factory( <ls_symobjref>-instancename ).
-          lo_object ?= lo_descr.
-
-          e_name = lo_object->classname( ).
-        ENDIF.
-      CATCH cx_tpda_varname .
-    ENDTRY.
-  ENDMETHOD.
-
-  METHOD create_reference.
-
-*    DATA: "ls_obj         LIKE LINE OF mt_obj,
-*          lr_struc       TYPE REF TO data,
-*          lv_node_key    TYPE salv_de_node_key,
-*          lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
-*          table_clone    TYPE REF TO data,
-*          lo_object      TYPE REF TO cl_tpda_script_objectdescr,
-*          lo_descr       TYPE REF TO cl_tpda_script_data_descr,
-*          lt_attributes  TYPE tpda_script_object_attribut_it.
-*
-*    FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
-*
-*    ASSIGN i_quick-quickdata->* TO <ls_symobjref>.
-*    IF <ls_symobjref>-instancename <> '{O:initial}'.
-*
-**      READ TABLE mt_obj WITH KEY name = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
-**      IF sy-subrc = 0.
-**        IF i_no_cl_twin IS INITIAL.
-**          go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
-**                                          iv_full = <ls_symobjref>-instancename
-**                                            iv_key = i_new_node ).
-**        ENDIF.
-**      ENDIF.
-*      "ls_obj-name = <ls_symobjref>-instancename.
-*      "COLLECT ls_obj INTO mt_obj.
-*
-*      TRY.
-*          lo_descr = cl_tpda_script_data_descr=>factory( <ls_symobjref>-instancename ).
-*          ls_obj-name = <ls_symobjref>-instancename.
-*          COLLECT ls_obj INTO mt_obj.
-*          lo_object ?= lo_descr.
-*
-*          lt_attributes = lo_object->attributes( ).
-*          DATA(lv_name) = lo_object->classname( ).
-*
-*          DATA(lv_obj_ind) =  get_obj_index( <ls_symobjref>-instancename ).
-*
-*          SORT lt_attributes BY acckind name.
-*
-*          READ TABLE mt_classes_types WITH KEY full = lv_obj_ind TRANSPORTING NO FIELDS.
-*          IF sy-subrc NE 0.
-*            LOOP AT lt_attributes ASSIGNING FIELD-SYMBOL(<ls_attribute>).
-*              AT NEW acckind.
-*                APPEND INITIAL LINE TO mt_classes_types ASSIGNING FIELD-SYMBOL(<cl_type>).
-*                <cl_type>-name = i_name.
-*                <cl_type>-full = lv_obj_ind.
-*                <cl_type>-type = <ls_attribute>-acckind.
-*              ENDAT.
-*            ENDLOOP.
-*          ENDIF.
-*
-*          e_root_key = go_tree_local->add_obj_nodes( EXPORTING iv_name = CONV #( i_shortname )
-*                                     iv_full = <ls_symobjref>-instancename
-*                                     i_new_node = i_new_node
-*                                     iv_rel = iv_rel ).
-*
-*          LOOP AT lt_attributes ASSIGNING <ls_attribute>.
-*
-*            READ TABLE go_tree_local->mt_classes_leaf WITH KEY name = <ls_symobjref>-instancename type = <ls_attribute>-acckind INTO DATA(ls_leaf). .
-*            IF sy-subrc = 0.
-*              lv_node_key = ls_leaf-key.
-*            ENDIF.
-*
-*            TRY.
-*                lo_descr = cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
-*                DATA(ls_info) = cl_tpda_script_data_descr=>get_quick_info( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
-*
-*                CASE ls_info-metatype.
-*                  WHEN cl_tpda_script_data_descr=>mt_simple.
-*                    lr_struc = create_simple_var( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
-*                    ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_elem>).
-*
-*                    go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
-*                                           iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
-*                                           i_cl_leaf = <ls_attribute>-acckind
-*                                           CHANGING io_var =  <new_elem> ).
-*
-*                  WHEN cl_tpda_script_data_descr=>mt_struct.
-*                    lr_struc = create_struc(  EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
-*                    IF lr_struc IS NOT INITIAL.
-*                      ASSIGN lr_struc->* TO FIELD-SYMBOL(<new_struc>).
-*                      go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
-*                                             iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
-*                                             i_cl_leaf = <ls_attribute>-acckind
-*                                             CHANGING io_var =  <new_struc> ).
-*                    ENDIF.
-*
-*                  WHEN cl_tpda_script_data_descr=>mt_string.
-*                    DATA(new_string) = create_simple_string( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
-*                    go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
-*                                           iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
-*                                           i_cl_leaf = <ls_attribute>-acckind
-*                                           CHANGING io_var =  new_string ).
-*
-*                  WHEN cl_tpda_script_data_descr=>mt_tab.
-*                    lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| ).
-*                    table_clone = lo_table_descr->elem_clone( ).
-*                    ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
-*                    go_tree_local->add_variable( EXPORTING iv_root_name = <ls_attribute>-name iv_key = lv_node_key
-*                                           iv_full_name = |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
-*                                           i_cl_leaf = <ls_attribute>-acckind
-*                                           CHANGING io_var =  <f> ).
-*
-*                  WHEN OTHERS.
-*                    READ TABLE mt_obj WITH KEY name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }| TRANSPORTING NO FIELDS.
-*                    IF sy-subrc NE 0.
-*
-*                      transfer_variable( EXPORTING i_name = |{ <ls_symobjref>-instancename }-{ <ls_attribute>-name }|
-*                                                   i_shortname = <ls_attribute>-name i_new_node = lv_node_key
-*                                                   i_tree = go_tree_local ).
-*                    ENDIF.
-*
-*                ENDCASE.
-*              CATCH cx_root.
-*            ENDTRY.
-*          ENDLOOP.
-*        CATCH cx_tpda_varname .
-*      ENDTRY.
-*    ELSE.
-*      IF i_new_node IS NOT INITIAL.
-*        go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
-*                                        iv_value = <ls_symobjref>-instancename
-*                                          iv_key = i_new_node ).
-*        RETURN.
-*      ENDIF.
-*    ENDIF.
-
-  ENDMETHOD.
-
-  METHOD create_struc2.
-    DATA: lo_struc_descr TYPE REF TO cl_tpda_script_structdescr,
-          lt_components  TYPE abap_component_tab,
-          comp_full      TYPE  tpda_scr_struct_comp_it,
-          ls_comp        TYPE abap_componentdescr,
-          comp_it        TYPE tpda_script_struc_componentsit,
-          structdescr    TYPE REF TO cl_abap_structdescr,
-          r_data         TYPE REF TO data.
-
-    FIELD-SYMBOLS: <str> TYPE any.
-
-    lo_struc_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
-    lo_struc_descr->components( IMPORTING p_components_it = comp_it p_components_full_it = comp_full ).
-
-    LOOP AT comp_it INTO DATA(l_comp).
-      ls_comp-name = l_comp-compname.
-      IF l_comp-typid = 'u'.
-        r_data = create_struc( EXPORTING i_name = |{ l_comp-longname }| ).
-      ELSE.
-        r_data = create_simple_var( EXPORTING i_name = |{ l_comp-longname }| ).
-      ENDIF.
-      ASSIGN r_data->* TO FIELD-SYMBOL(<item>).
-
-      CALL METHOD cl_abap_complexdescr=>describe_by_data
-        EXPORTING
-          p_data      = <item>
-        RECEIVING
-          p_descr_ref = DATA(lo_type).
-
-      ls_comp-type ?= lo_type.
-      APPEND ls_comp TO lt_components.
-    ENDLOOP.
-
-    structdescr = cl_abap_structdescr=>create( lt_components ).
-    CREATE DATA r_data TYPE HANDLE structdescr.
-    ASSIGN r_data->* TO <str>.
-
-    get_deep_struc( EXPORTING i_name = i_name r_obj = r_data ).
-    ASSIGN r_data->* TO FIELD-SYMBOL(<new_deep>).
-
-    "go_tree_local->add_variable( EXPORTING iv_root_name = i_shortname iv_key = i_new_node CHANGING io_var =  <new_deep>  ).
-  ENDMETHOD.
-
-  METHOD script.
-    run_script( ).
-  ENDMETHOD.
-
-  METHOD show_step.
-    mo_window->set_program( CONV #( m_prg-include ) ).
-    mo_window->set_program_line( m_prg-line ).
-    mo_window->show_stack( ).
-    go_tree_imp->display( ).
-    go_tree_local->display( ).
-    go_tree_exp->display( ).
-    IF mo_window->m_visualization IS INITIAL AND mo_window->m_debug_button NE 'F5'.
-      mo_window->m_show_step = abap_true.
-    ENDIF.
-  ENDMETHOD.
-
-  METHOD f5.
-    is_step = abap_true.
-    IF mo_window->m_debug_button NE 'F5' AND mo_window->m_zcode IS NOT INITIAL.
-      READ TABLE mt_stack INTO DATA(stack) INDEX 1.
-*      IF stack-program+0(1) NE 'Z'.
-*        f7( ).
-*        RETURN.
-*      ENDIF.
-    ENDIF.
-    TRY.
-        CALL METHOD debugger_controller->debug_step
-          EXPORTING
-            p_command = cl_tpda_script_debugger_ctrl=>debug_step_into.
-        is_step = abap_true.
-      CATCH cx_tpda_scr_rtctrl_status .
-      CATCH cx_tpda_scr_rtctrl .
-    ENDTRY.
-    .
-    me->run_script( ).
-  ENDMETHOD.
-
-  METHOD run_script.
-    DATA: l_name(40),
-          lt_compo         TYPE TABLE OF scompo,
-          lt_compo_tmp     TYPE TABLE OF scompo,
-          lt_inc           TYPE TABLE OF  d010inc,
-          l_class          TYPE seu_name,
-          lv_stack_changed TYPE xfeld,
-          ls_step          TYPE lcl_appl=>t_step_counter,
-          ls_prg           TYPE tpda_scr_prg_info.
-
-    "Are we in class
-    DATA: l_clref  TYPE REF TO cl_abap_classdescr.
-    CALL METHOD cl_abap_classdescr=>describe_by_name
-      EXPORTING
-        p_name         = get_class_name( 'ME' )
-      RECEIVING
-        p_descr_ref    = DATA(l_dref)
-      EXCEPTIONS
-        type_not_found = 1.
-    IF sy-subrc = 0.
-      l_clref ?= l_dref.
-      m_classname = l_clref->absolute_name.
-    ELSE.
-      CLEAR m_classname.
-    ENDIF.
-
-    TRY.
-        cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = ls_prg ).
-        DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
-
-        MOVE-CORRESPONDING lt_stack TO mt_stack.
-
-        IF ms_stack_prev IS INITIAL.
-          READ TABLE mt_stack INDEX 1 INTO ms_stack_prev.
-        ENDIF.
-
-        BREAK-POINT.
-        IF is_step = abap_true.
-          ADD 1 TO m_step.
-        ENDIF.
-
-        IF is_step = abap_true OR is_start = abap_true.
-          READ TABLE mt_steps WITH KEY step = m_step TRANSPORTING NO FIELDS.
-          IF sy-subrc NE 0.
-            CLEAR ls_step.
-            MOVE-CORRESPONDING ms_stack_prev TO ls_step.
-            ls_step-step = m_step.
-            INSERT ls_step INTO mt_steps INDEX 1.
-          ENDIF.
-        ENDIF.
-
-        READ TABLE mt_stack INDEX 1 INTO ms_stack_prev.
-
-        CALL METHOD cl_tpda_script_bp_services=>get_all_bps RECEIVING p_bps_it = mo_window->mt_breaks.
-        DATA(l_program) =  abap_source->program( ).
-
-        IF m_prg-event-eventname NE ls_prg-event-eventname.
-          lv_stack_changed = abap_true.
-          IF is_step = 'X' AND is_start = abap_false.
-            ADD 1 TO m_step.
-            CLEAR ls_step.
-            MOVE-CORRESPONDING ms_stack_prev TO ls_step.
-            ls_step-step = m_step.
-            INSERT ls_step INTO mt_steps INDEX 1.
-            is_start ='X'.
-            SUBTRACT 1 FROM m_step.
-
-          ENDIF.
-
-          DATA ls_stack_ TYPE lcl_types=>t_stack.
-          DATA: lt_stack_var TYPE TABLE OF lcl_types=>t_var_stack.
-
-          READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
-          READ TABLE mt_stack_ WITH KEY stacklevel = ls_stack-stacklevel TRANSPORTING NO FIELDS.
-
-          IF sy-subrc NE 0.
-            MOVE-CORRESPONDING ls_stack TO ls_stack_.
-            INSERT ls_stack_ INTO mt_stack_ INDEX 1.
-          ENDIF.
-
-
-          "go_tree_local->m_prg_info-event-eventname = mo_window->m_prg-event-eventname.
-
-          "DATA: lv_step TYPE i.
-          "lv_step = m_step - 1.
-
-*          DELETE go_tree_local->mt_state WHERE stack > ms_stack-stacklevel.
-*          DELETE go_tree_exp->mt_state WHERE stack > ms_stack-stacklevel.
-*          DELETE go_tree_imp->mt_state WHERE stack > ms_stack-stacklevel.
-
-          CLEAR: m_step_delta,
-                 mt_ret_exp,
-                 "mt_obj,
-                 mt_ret_exp.
-
-          go_tree_local->clear( ).
-          go_tree_exp->clear( ).
-          go_tree_imp->clear( ).
-
-          go_tree_local->m_leaf = go_tree_imp->m_leaf = go_tree_exp->m_leaf =  'Locals'.
-        ELSE.
-          CLEAR lv_stack_changed.
-          m_step_delta = 1.
-        ENDIF.
-      CATCH cx_tpda_src_info.
-    ENDTRY.
-
-    m_prg = ls_prg.
-
-    CLEAR is_step.
-
-    IF lv_stack_changed = abap_true." OR is_history = abap_true.
-      CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
-      SORT mt_locals.
-
-      READ TABLE mt_locals WITH KEY name = 'ME' TRANSPORTING NO FIELDS.
-      IF sy-subrc = 0.
-        get_method_parameters( m_prg-event-eventname ).
-      ENDIF.
-
-      IF m_prg-event-eventtype = 'FORM'.
-        get_form_parameters( m_prg ).
-      ENDIF.
-
-      IF m_prg-event-eventtype = 'FUNCTION'.
-        get_func_parameters( m_prg-event-eventname ).
-      ENDIF.
-
-      CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
-      SORT mt_globals.
-    ENDIF.
-
-
-    "go_tree_imp->m_prg_info = mo_window->m_prg.
-    IF mo_window->m_visualization IS NOT INITIAL.
-      mo_window->set_program( CONV #( m_prg-include ) ).
-      mo_window->set_program_line( m_prg-line ).
-      mo_window->show_stack( ).
-    ENDIF.
-
-    IF go_tree_local->m_no_refresh IS INITIAL.
-      go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_life_events ) ).
-    ELSE.
-      go_tree_local->main_node_key = go_tree_local->m_locals_key.
-    ENDIF.
-
-
-    LOOP AT mt_locals INTO DATA(ls_local).
-      CHECK NOT ls_local-name CA '[]'.
-
-      transfer_variable( ls_local-name ).
-    ENDLOOP.
-
-    LOOP AT mt_ret_exp INTO ls_local.
-      transfer_variable( ls_local-name ).
-    ENDLOOP.
-
-    lcl_appl=>open_int_table( iv_name = 'Steps' it_tab =  mt_steps ).
-    lcl_appl=>open_int_table( iv_name = 'stack' it_tab =  mt_stack_ ).
-    lcl_appl=>open_int_table( iv_name = 'Locals var history' it_tab =  mt_vars ).
-
-        CLEAR is_start.
-
-    go_tree_local->m_leaf = 'Class-data global variables'.
-    IF go_tree_local->m_class_data IS NOT INITIAL.
-      IF go_tree_local->m_class_key IS INITIAL.
-        go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_oo_class_attribute ) ).
-      ELSE.
-        go_tree_local->main_node_key = go_tree_local->m_class_key.
-      ENDIF.
-
-      l_name = l_program.
-      CALL FUNCTION 'RS_PROGRAM_INDEX'
-        EXPORTING
-          pg_name      = l_name
-        TABLES
-          compo        = lt_compo
-          inc          = lt_inc
-        EXCEPTIONS
-          syntax_error = 1
-          OTHERS       = 2.
-
-      lt_compo_tmp = lt_compo.
-      DELETE lt_compo_tmp WHERE  type NE '+' OR exposure NE 2.
-      SORT lt_compo_tmp BY class.
-
-      LOOP AT lt_compo_tmp ASSIGNING FIELD-SYMBOL(<compo>).
-        TRY.
-            CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-              EXPORTING
-                p_var_name   = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
-              RECEIVING
-                p_symb_quick = DATA(quick).
-          CATCH cx_tpda_varname .
-            CLEAR <compo>-type.
-        ENDTRY.
-      ENDLOOP.
-
-      LOOP AT lt_compo_tmp ASSIGNING <compo> WHERE type = '+'.
-        IF l_class NE <compo>-class.
-          l_class = <compo>-class.
-          go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( <compo>-class ) RECEIVING er_key = DATA(l_key) ).
-        ENDIF.
-*        transfer_variable( EXPORTING i_name = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
-*                                     i_shortname = CONV #( <compo>-name )
-*                                      i_new_node = l_key
-*                                      i_tree = go_tree_local ).
-      ENDLOOP.
-    ELSE.
-      IF go_tree_local->m_class_key IS NOT INITIAL.
-        go_tree_local->delete_node( go_tree_local->m_class_key ).
-        "DELETE go_tree_local->mt_vars WHERE leaf = go_tree_local->m_leaf.
-        "CLEAR go_tree_local->m_class_key.
-      ENDIF.
-    ENDIF.
-
-    lt_compo_tmp = lt_compo.
-    DELETE lt_compo_tmp WHERE  type NE 'D'.
-
-    go_tree_local->m_leaf = 'LDB'.
-    IF go_tree_local->m_ldb IS NOT INITIAL.
-      IF go_tree_local->m_ldb_key IS INITIAL.
-        go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_biw_report_view ) ).
-      ELSE.
-        go_tree_local->main_node_key = go_tree_local->m_ldb_key.
-      ENDIF.
-      LOOP AT mt_globals INTO DATA(ls_global).
-        READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
-        IF sy-subrc NE 0.
-          "transfer_variable( EXPORTING i_name = ls_global-name i_tree = go_tree_local ).
-        ENDIF.
-      ENDLOOP.
-    ELSE.
-      IF go_tree_local->m_ldb_key IS NOT INITIAL.
-        go_tree_local->delete_node( go_tree_local->m_ldb_key ).
-        "DELETE go_tree_local->mt_vars WHERE leaf = go_tree_local->m_leaf.
-        CLEAR go_tree_local->m_ldb_key.
-      ENDIF.
-    ENDIF.
-
-    go_tree_local->m_leaf = 'Globals'.
-    IF go_tree_local->m_globals IS NOT INITIAL.
-
-      IF go_tree_local->m_globals_key IS INITIAL.
-        go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_foreign_trade ) ).
-      ELSE.
-        go_tree_local->main_node_key = go_tree_local->m_globals_key.
-      ENDIF.
-
-      "transfer_variable( EXPORTING i_name = 'SYST' i_tree = go_tree_local ).
-      LOOP AT mt_globals INTO ls_global.
-        READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
-        IF sy-subrc = 0.
-          "transfer_variable( EXPORTING i_name = ls_global-name i_tree = go_tree_local ).
-        ENDIF.
-      ENDLOOP.
-    ELSE.
-      IF go_tree_local->m_globals_key IS NOT INITIAL.
-        go_tree_local->delete_node( go_tree_local->m_globals_key ).
-        "DELETE go_tree_local->mt_vars WHERE leaf = go_tree_local->m_leaf.
-
-        CLEAR go_tree_local->m_globals_key.
-      ENDIF.
-    ENDIF.
-
-    IF go_tree_local->m_no_refresh IS INITIAL.
-      "go_tree_local->mt_state = go_tree_local->mt_vars.
-    ENDIF.
-
-    go_tree_local->m_no_refresh = 'X'.
-    go_tree_exp->m_no_refresh = 'X'.
-    go_tree_imp->m_no_refresh = 'X'.
-    CLEAR mo_window->m_show_step.
-
-    IF lv_stack_changed = abap_true.
-*      go_tree_local->save_stack_vars( m_step ).
-*      go_tree_exp->save_stack_vars( m_step ).
-*      go_tree_imp->save_stack_vars( m_step ).
-    ENDIF.
-
-    IF mo_window->m_debug_button = 'F5'.
-      IF mo_window->m_visualization IS INITIAL.
-        show_step( ).
-      ENDIF.
-      me->break( ).
-
-    ELSEIF mo_window->m_debug_button = 'F6'.
-      "READ TABLE mo_window->mt_stack INDEX 1 INTO data(ls_stack).
-*      IF m_f6_level IS NOT INITIAL AND m_f6_level = ms_stack-stacklevel.
-*        CLEAR m_f6_level.
-*        IF mo_window->m_visualization IS INITIAL.
-*          show_step( ).
-*        ENDIF.
-*        me->break( ).
-*      ELSE.
-*        IF mo_window->m_history IS NOT INITIAL.
-*          f5( ).
-*        ENDIF.
-*      ENDIF.
-
-    ELSEIF mo_window->m_debug_button = 'F7END'.
-      IF m_prg-flag_eoev IS NOT INITIAL.
-        "IF m_visualization IS INITIAL.
-        show_step( ).
-        "ENDIF.
-        me->break( ).
-      ELSE.
-        f5( ).
-      ENDIF.
-    ELSEIF mo_window->m_debug_button = 'F7'.
-
-*      IF mv_f7_stop = abap_true.
-*        IF mo_window->m_visualization IS INITIAL.
-*          show_step( ).
-*        ENDIF.
-*        me->break( ).
-*        CLEAR mv_f7_stop.
-*      ELSE.
-*        IF mo_window->m_prg-flag_eoev IS NOT INITIAL.
-*          mv_f7_stop = abap_true.
-*        ENDIF.
-*        f5( ).
-*      ENDIF.
-
-    ELSEIF mo_window->m_debug_button IS NOT INITIAL.
-      READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = m_prg-include linesrc = m_prg-line INTO DATA(gs_break).
-      IF sy-subrc = 0.
-        IF mo_window->m_visualization IS INITIAL.
-          show_step( ).
-        ENDIF.
-        me->break( ).
-      ELSE.
-        IF mo_window->m_debug_button = 'F6BEG' AND lv_stack_changed IS NOT INITIAL.
-          IF mo_window->m_visualization IS INITIAL.
-            show_step( ).
-          ENDIF.
-          me->break( ).
-        ELSE.
-          IF mo_window->m_history IS NOT INITIAL.
-            f5( ).
-          ENDIF.
-        ENDIF.
-      ENDIF.
-    ELSE.
-      IF mo_window->m_visualization IS INITIAL.
-        show_step( ).
-      ENDIF.
-      me->break( ).
-    ENDIF.
-
-    IF mo_window->m_debug_button = 'F7END' AND m_prg-flag_eoev IS NOT INITIAL.
-      IF mo_window->m_visualization IS INITIAL.
-        show_step( ).
-      ENDIF.
-      me->break( ).
-    ENDIF.
-
-    IF mo_window->m_debug_button = 'F6BEG' AND lv_stack_changed IS NOT INITIAL.
-      IF mo_window->m_visualization IS INITIAL.
-        show_step( ).
-      ENDIF.
-      me->break( ).
-    ENDIF.
-
-    IF mo_window->m_history IS INITIAL AND mo_window->m_debug_button NE 'F7END' AND mo_window->m_debug_button NE 'F6BEG'.
-      IF mo_window->m_visualization IS INITIAL.
-        show_step( ).
-      ENDIF.
-      me->break( ).
-    ENDIF.
-  ENDMETHOD.                    "script
-
-*  METHOD run_script.
-*    DATA: l_name(40),
-*          lt_compo         TYPE TABLE OF scompo,
-*          lt_compo_tmp     TYPE TABLE OF scompo,
-*          lt_inc           TYPE TABLE OF  d010inc,
-*          l_class          TYPE seu_name,
-*          ls_prg           TYPE tpda_scr_prg_info,
-*          lv_stack_changed TYPE xfeld.
-*
-*    "Are we in class
-*    DATA: l_clref  TYPE REF TO cl_abap_classdescr.
-*    CALL METHOD cl_abap_classdescr=>describe_by_name
-*      EXPORTING
-*        p_name         = get_class_name( 'ME' )
-*      RECEIVING
-*        p_descr_ref    = DATA(l_dref)
-*      EXCEPTIONS
-*        type_not_found = 1.
-*    IF sy-subrc = 0.
-*      l_clref ?= l_dref.
-*      m_classname = l_clref->absolute_name.
-*    ELSE.
-*      CLEAR m_classname.
-*    ENDIF.
-*
-*    TRY.
-*        cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = ls_prg ).
-*        DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
-*
-*        READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack_prev.
-*        MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
-*        READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack.
-*
-*        IF is_step = abap_true.
-*
-*          ADD 1 TO m_step.
-*          "m_hist_step = m_step.
-*
-*          APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
-*          MOVE-CORRESPONDING ms_stack TO <step>.
-*          <step>-step = m_step.
-*          CLEAR is_step.
-*        ENDIF.
-*
-*        "CALL METHOD cl_tpda_script_bp_services=>get_all_bps RECEIVING p_bps_it = mo_window->mt_breaks.
-*        DATA(l_program) =  abap_source->program( ).
-*
-*        IF m_prg-event-eventname NE ls_prg-event-eventname.
-*          lv_stack_changed = abap_true.
-*
-*          DATA ls_stack_ TYPE lcl_types=>t_stack.
-*          DATA: lt_stack_var TYPE TABLE OF lcl_types=>t_var_stack.
-*
-*          READ TABLE lt_stack INDEX 1 INTO DATA(ls_stack).
-*          READ TABLE mt_stack WITH KEY stacklevel = ls_stack-stacklevel TRANSPORTING NO FIELDS.
-*
-*          IF sy-subrc NE 0.
-*            MOVE-CORRESPONDING ls_stack TO ls_stack_.
-*            INSERT ls_stack_ INTO mt_stack INDEX 1.
-*          ENDIF.
-*
-*          m_prg = ls_prg.
-*
-*          DATA: lv_step TYPE i.
-*          lv_step = m_step - 1.
-*
-*
-*          CLEAR: m_step_delta,
-*                 mt_ret_exp,
-*                 "mt_obj,
-*                 mt_ret_exp.
-*
-*        ELSE.
-*          CLEAR lv_stack_changed.
-*          m_step_delta = 1.
-*        ENDIF.
-*      CATCH cx_tpda_src_info.
-*    ENDTRY.
-*
-*    IF lv_stack_changed = abap_true.
-*      CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
-*      SORT mt_locals.
-*
-*      READ TABLE mt_locals WITH KEY name = 'ME' TRANSPORTING NO FIELDS.
-*      IF sy-subrc = 0.
-*        get_method_parameters( m_prg-event-eventname ).
-*      ENDIF.
-*
-*      IF m_prg-event-eventtype = 'FORM'.
-*        get_form_parameters( m_prg ).
-*      ENDIF.
-*
-*      IF m_prg-event-eventtype = 'FUNCTION'.
-*        get_func_parameters( m_prg-event-eventname ).
-*      ENDIF.
-*
-*      CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
-*      SORT mt_globals.
-*    ENDIF.
-*
-*    LOOP AT mt_locals INTO DATA(ls_local).
-*      CHECK NOT ls_local-name CA '[]'.
-*
-*      transfer_variable( ls_local-name ).
-*    ENDLOOP.
-*
-*    LOOP AT mt_ret_exp INTO ls_local.
-*      transfer_variable( ls_local-name  ).
-*    ENDLOOP.
-*
-*    lcl_appl=>open_int_table( iv_name = 'Steps' it_tab =  mt_steps ).
-*    lcl_appl=>open_int_table( iv_name = 'Locals' it_tab =  mt_vars ).
-*
-*    show_step( ).
-*    me->break( ).
-*
-*  ENDMETHOD.                    "script
-
-  METHOD end.
-  ENDMETHOD.
-
-
-  METHOD get_obj_index.
-    FIND FIRST OCCURRENCE OF '*' IN iv_name MATCH OFFSET DATA(lv_offset).
-    e_index =  iv_name+0(lv_offset).
-  ENDMETHOD.
-
-ENDCLASS.                    "lcl_debugger_script IMPLEMENTATION
-
-CLASS lcl_window IMPLEMENTATION.
-
-  METHOD constructor.
-    super->constructor( ).
-    mo_debugger = i_debugger.
-    m_history = '01'.
-    m_zcode = '01'.
-
-    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.2' i_width = 1200 i_hight = 400 ).
-    CREATE OBJECT mo_splitter ##FM_SUBRC_OK
-      EXPORTING
-        parent  = mo_box
-        rows    = 3
-        columns = 1
-      EXCEPTIONS
-        OTHERS  = 1.
-
-    mo_splitter->get_container(
-     EXPORTING
-       row       = 2
-       column    = 1
-     RECEIVING
-       container = mo_code_container ).
-
-    mo_splitter->get_container(
-      EXPORTING
-        row       = 1
-        column    = 1
-      RECEIVING
-        container = mo_toolbar_container ).
-
-    mo_splitter->set_row_height( id = 1  height = '3' ).
-
-    mo_splitter->set_row_sash( id    = 1
-                               type  = 0
-                               value = 0 ).
-
-    mo_splitter->get_container(
-      EXPORTING
-        row       = 3
-        column    = 1
-      RECEIVING
-        container = mo_variables_container ).
-
-    CREATE OBJECT mo_splitter_code ##FM_SUBRC_OK
-      EXPORTING
-        parent  = mo_code_container
-        rows    = 1
-        columns = 2
-      EXCEPTIONS
-        OTHERS  = 1.
-
-    mo_splitter_code->get_container(
-         EXPORTING
-           row       = 1
-           column    = 1
-         RECEIVING
-           container = mo_editor_container ).
-
-    mo_splitter_code->get_container(
-         EXPORTING
-           row       = 1
-           column    = 2
-         RECEIVING
-           container = mo_stack_container ).
-
-    mo_splitter_code->set_column_width( EXPORTING id = 1 width = '67' ).
-
-    CREATE OBJECT mo_splitter_var ##FM_SUBRC_OK
-      EXPORTING
-        parent  = mo_variables_container
-        rows    = 1
-        columns = 3
-      EXCEPTIONS
-        OTHERS  = 1.
-
-    mo_splitter_var->set_column_width( EXPORTING id = 1 width = '25' ).
-    mo_splitter_var->set_column_width( EXPORTING id = 2 width = '50' ).
-    mo_splitter_var->set_column_width( EXPORTING id = 3 width = '25' ).
-
-
-    mo_splitter_var->get_container(
-             EXPORTING
-               row       = 1
-               column    = 1
-             RECEIVING
-               container = mo_importing_container ).
-
-    mo_splitter_var->get_container(
-         EXPORTING
-           row       = 1
-           column    = 2
-         RECEIVING
-           container = mo_locals_container ).
-
-    mo_splitter_var->get_container(
-             EXPORTING
-               row       = 1
-               column    = 3
-             RECEIVING
-               container = mo_exporting_container ).
-
-    SET HANDLER on_box_close FOR mo_box.
-
-    CREATE OBJECT mo_toolbar EXPORTING parent = mo_toolbar_container.
-    add_toolbar_buttons( ).
-
-    mo_toolbar->set_visible( 'X' ).
-
-    create_code_viewer( ).
-
-  ENDMETHOD.
-
-  METHOD add_toolbar_buttons.
-    DATA: lt_button TYPE ttb_button,
-          ls_button LIKE LINE OF lt_button,
-          lt_events TYPE cntl_simple_events,
-          ls_events LIKE LINE OF lt_events.
-
-    CLEAR ls_button.
-    ls_button-function = 'HIST'.
-    ls_button-icon = CONV #( icon_graduate ).
-    ls_button-quickinfo = 'History On'.
-    ls_button-text = 'History On'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'VIS'.
-    ls_button-icon = CONV #( icon_flight ).
-    ls_button-quickinfo = 'Visualization Off'.
-    ls_button-text = 'Visualization Off'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'CODE'.
-    ls_button-icon = CONV #( icon_customer_warehouse ).
-    ls_button-quickinfo = 'Only Z'.
-    ls_button-text = 'Only Z'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-butn_type = 3.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'F5'.
-    ls_button-icon = CONV #( icon_debugger_step_into ).
-    ls_button-quickinfo = 'Step into'.
-    ls_button-text = 'Step into'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'F6BEG'.
-    ls_button-icon = CONV #( icon_release ).
-    ls_button-quickinfo = 'Start of block'.
-    ls_button-text = 'Start of block'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-
-    CLEAR ls_button.
-    ls_button-function = 'F7END'.
-    ls_button-icon = CONV #( icon_outgoing_org_unit ).
-    ls_button-quickinfo = 'End of block'.
-    ls_button-text = 'End of block '.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'F6'.
-    ls_button-icon = CONV #( icon_debugger_step_over ).
-    ls_button-quickinfo = 'Step over'.
-    ls_button-text = 'Step over'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-
-    CLEAR ls_button.
-    ls_button-function = 'F7'.
-    ls_button-icon = CONV #( icon_debugger_step_out ).
-    ls_button-quickinfo = 'Step out'.
-    ls_button-text = 'Step out'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'F8'.
-    ls_button-icon = CONV #( icon_debugger_continue ).
-    ls_button-quickinfo = 'Continue'.
-    ls_button-text = 'Continue'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-butn_type = 3.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'BACK'.
-    ls_button-icon = CONV #( icon_column_left ).
-    ls_button-quickinfo = 'Step Back'.
-    ls_button-text = 'Step Back'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'FORW'.
-    ls_button-icon = CONV #( icon_column_right ).
-    ls_button-quickinfo = 'Step forward'.
-    ls_button-text = 'Forward'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    mo_toolbar->add_button_group( lt_button ).
-
-* Register events
-    ls_events-eventid = cl_gui_toolbar=>m_id_function_selected.
-    ls_events-appl_event = space.
-    APPEND ls_events TO lt_events.
-
-    mo_toolbar->set_registered_events( events = lt_events ).
-
-    SET HANDLER me->hnd_toolbar FOR mo_toolbar.
-
-  ENDMETHOD.
-
-  METHOD set_program.
-    DATA gr_scan TYPE REF TO cl_ci_scan.
-    DATA(gr_source) = cl_ci_source_include=>create( p_name = iv_program ).
-
-    CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
-    mo_code_viewer->set_text( table = gr_source->lines  ).
-  ENDMETHOD.
-
-  METHOD set_program_line.
-    TYPES: lntab TYPE STANDARD TABLE OF i.
-    DATA lt_lines TYPE lntab.
-
-    APPEND INITIAL LINE TO lt_lines ASSIGNING FIELD-SYMBOL(<line>).
-    <line> = iv_line.
-    mo_code_viewer->set_marker( EXPORTING marker_number = 7  marker_lines = lt_lines ).
-
-    CLEAR lt_lines.
-
-    LOOP AT mt_breaks INTO DATA(ls_break) WHERE inclnamesrc = mo_debugger->m_prg-include.
-      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
-      <line> = ls_break-linesrc.
-    ENDLOOP.
-    mo_code_viewer->set_marker( EXPORTING marker_number = 9  marker_lines = lt_lines ).
-    mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
-  ENDMETHOD.
-
-  METHOD create_code_viewer.
-    CHECK mo_code_viewer IS INITIAL.
-
-    CREATE OBJECT mo_code_viewer
-      EXPORTING
-        parent           = mo_editor_container
-        max_number_chars = 100.
-
-    mo_code_viewer->init_completer( ).
-    mo_code_viewer->upload_properties(
-           EXCEPTIONS
-             dp_error_create  = 1
-             dp_error_general = 2
-             dp_error_send    = 3
-             OTHERS           = 4 ).
-
-    mo_code_viewer->set_statusbar_mode( statusbar_mode = cl_gui_abapedit=>true ).
-    mo_code_viewer->create_document( ).
-    mo_code_viewer->set_readonly_mode( 1 ).
-  ENDMETHOD.
-
-
-  METHOD show_stack.
-    IF mo_salv_stack IS INITIAL.
-      cl_salv_table=>factory(
-  EXPORTING
-    r_container = mo_stack_container
-  IMPORTING
-  r_salv_table = mo_salv_stack
-  CHANGING
-  t_table = mo_debugger->mt_stack ).
-
-      DATA:  lo_column  TYPE REF TO cl_salv_column.
-
-      DATA(lo_columns) = mo_salv_stack->get_columns( ).
-      lo_columns->set_optimize( 'X' ).
-
-      lo_column ?= lo_columns->get_column( 'STACKPOINTER' ).
-      lo_column->set_output_length( '5' ).
-
-      lo_column ?= lo_columns->get_column( 'STACKLEVEL' ).
-      lo_column->set_output_length( '5' ).
-      mo_salv_stack->display( ).
-    ELSE.
-      mo_salv_stack->refresh( ).
-    ENDIF.
-  ENDMETHOD.
-
-  METHOD hnd_toolbar.
-    CONSTANTS: c_mask TYPE x VALUE '01'.
-    m_debug_button = fcode.
-    CASE fcode.
-      WHEN 'VIS'.
-        m_visualization = m_visualization BIT-XOR c_mask.
-        IF m_visualization IS INITIAL.
-          mo_toolbar->set_button_info( EXPORTING fcode =  'VIS' icon = CONV #( icon_flight ) text = 'Visualization OFF' ).
-        ELSE.
-          mo_toolbar->set_button_info( EXPORTING fcode =  'VIS' icon = CONV #( icon_car ) text = 'Visualization ON' ).
-        ENDIF.
-
-      WHEN 'HIST'.
-        m_history = m_history BIT-XOR c_mask.
-        IF m_history IS INITIAL.
-          mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_red_xcircle ) text = 'History OFF' ).
-        ELSE.
-          mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_graduate ) text = 'History ON' ).
-        ENDIF.
-
-      WHEN 'CODE'.
-        m_zcode = m_zcode BIT-XOR c_mask.
-        IF m_zcode IS INITIAL.
-          mo_toolbar->set_button_info( EXPORTING fcode =  'CODE'  text = 'Z & Standard' ).
-        ELSE.
-          mo_toolbar->set_button_info( EXPORTING fcode =  'CODE'  text = 'Only Z code' ).
-        ENDIF.
-
-      WHEN 'F5' OR 'F7END' OR 'F6BEG'.
-        mo_debugger->f5( ).
-
-*      WHEN 'F6'.
-*        IF m_history IS INITIAL.
-*          mo_debugger->f6( ).
-*        ELSE.
-*          READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
-*          mo_debugger->m_f6_level = ls_stack-stacklevel.
-*          mo_debugger->f5( ).
-*        ENDIF.
-*
-*      WHEN 'F7'.
-*        IF m_history IS INITIAL.
-*          mo_debugger->f7( ).
-*        ELSE.
-*          mo_debugger->f5( ).
-*        ENDIF.
-*
-*      WHEN 'F8'.
-*        IF m_history IS INITIAL.
-*          mo_debugger->f8( ).
-*        ELSE.
-*          mo_debugger->f5( ).
-*        ENDIF.
-*      WHEN 'BACK' OR 'FORW'.
-*        mo_debugger->run_script_hist( ).
-    ENDCASE.
-  ENDMETHOD.
-
-ENDCLASS.
-
-CLASS lcl_rtti_tree IMPLEMENTATION.
-  METHOD constructor.
-
-    super->constructor( ).
-    mo_debugger = i_debugger.
-
-    IF i_type = 'L'.
-      "m_hide = '01'.
-
-      cl_salv_tree=>factory(
-           EXPORTING r_container = i_cont
-           IMPORTING r_salv_tree = tree
-           CHANGING t_table = tree_table ).
-    ELSEIF i_type = 'I'.
-      cl_salv_tree=>factory(
-       EXPORTING r_container = i_cont
-       IMPORTING r_salv_tree = tree
-       CHANGING t_table = tree_table ).
-    ELSEIF i_type = 'E'.
-      cl_salv_tree=>factory(
-           EXPORTING r_container = i_cont
-           IMPORTING r_salv_tree = tree
-           CHANGING t_table = tree_table ).
-    ENDIF.
-
-    DATA(lo_setting) =  tree->get_tree_settings( ).
-    lo_setting->set_hierarchy_header( i_header ).
-    lo_setting->set_hierarchy_size( 30 ).
-    lo_setting->set_hierarchy_icon( CONV #( icon_tree ) ).
-
-    DATA(lo_columns) = tree->get_columns( ).
-    "lo_columns->set_optimize( abap_true ).
-    lo_columns->get_column( 'VALUE' )->set_short_text( 'Value' ).
-    lo_columns->get_column( 'VALUE' )->set_output_length( 40 ).
-
-    lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full name' ).
-    lo_columns->get_column( 'FULLNAME' )->set_output_length( 40 ).
-
-    IF i_type NE 'L'.
-      lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
-    ENDIF.
-    lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
-    lo_columns->get_column( 'TYPENAME' )->set_output_length( 20 ).
-
-    add_buttons( ).
-
-    tree->get_nodes( )->expand_all( ).
-    DATA(lo_event) = tree->get_event( ) .
-    SET HANDLER hndl_double_click
-                hndl_user_command FOR lo_event.
-
-    tree->display( ).
-  ENDMETHOD.
-
-  METHOD add_buttons.
-    DATA(lo_functions) = tree->get_functions( ).
-    lo_functions->set_all( ).
-
-    CHECK mo_debugger IS NOT INITIAL.
-
-    lo_functions->add_function(
-       name     = 'INITIALS'
-       icon     = CONV #( icon_start_viewer )
-       text     = 'Initials'
-       tooltip  = 'Show/hide initial values'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'GLOBALS'
-       icon     = CONV #( icon_foreign_trade )
-       text     = 'Globals'
-       tooltip  = 'Show/hide global variables'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'CLASS_DATA'
-       icon     = CONV #( icon_oo_class_attribute )
-       text     = 'CLASS-DATA'
-       tooltip  = 'Show/hide Class-Data variables (global)'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-           name     = 'LDB'
-           icon     = CONV #( icon_biw_report_view )
-           text     = 'LDB'
-           tooltip  = 'Show/hide Local Data Base variables (global)'
-           position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'CHANGED'
-       icon     = CONV #( icon_interchange )
-       text     = ''
-       tooltip  = 'Show only changed values/all values'
-       position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-           name     = 'TEST'
-           icon     = CONV #( icon_test )
-           text     = 'Steps'
-           tooltip  = 'Steps'
-           position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-       name     = 'REFRESH'
-       icon     = CONV #( icon_refresh )
-       text     = ''
-       tooltip  = 'Refresh'
-       position = if_salv_c_function_position=>left_of_salv_functions ).
-  ENDMETHOD.
-
-  METHOD clear.
-
-    tree->get_nodes( )->delete_all( ).
-
-    CLEAR: m_globals_key,
-           m_locals_key,
-           m_ldb_key,
-           m_debug_key,
-           m_class_key,
-           "mt_vars,
-           mt_classes_leaf,
-           m_no_refresh.
-  ENDMETHOD.
-
-
-  METHOD add_node.
-
-    main_node_key =
-          tree->get_nodes( )->add_node(
-            related_node   = ''
-            collapsed_icon = iv_icon
-            expanded_icon = iv_icon
-            relationship   = if_salv_c_node_relation=>last_child
-            row_style = if_salv_c_tree_style=>emphasized_a
-            text           = CONV #( iv_name )
-            folder         = abap_true
-          )->get_key( ).
-
-    CASE iv_name.
-      WHEN 'Locals'.
-        m_locals_key = main_node_key.
-      WHEN 'Globals'.
-        m_globals_key = main_node_key.
-      WHEN 'LDB'.
-        m_ldb_key = main_node_key.
-      WHEN 'Class-data global variables'.
-        m_class_key = main_node_key.
-      WHEN 'Debug point'.
-        m_debug_key = main_node_key.
-    ENDCASE.
-  ENDMETHOD.
-
-  METHOD add_obj_nodes.
-    DATA l_new_node TYPE salv_de_node_key.
-    DATA lv_text TYPE lvc_value.
-    DATA lv_node_key TYPE salv_de_node_key.
-    DATA lv_icon TYPE salv_de_tree_image.
-    DATA ls_tree TYPE ts_table.
-
-    lv_icon = icon_oo_object.
-    lv_text = iv_name.
-
-    IF i_new_node IS SUPPLIED AND i_new_node IS NOT INITIAL.
-      l_new_node = i_new_node.
-    ELSE.
-      l_new_node =  main_node_key.
-    ENDIF.
-
-    IF iv_full IS SUPPLIED.
-      ls_tree-fullname = iv_full.
-    ENDIF.
-
-    DATA(lv_obj_index)  =  mo_debugger->get_obj_index( iv_full ).
-
-    READ TABLE mt_classes_leaf WITH KEY name = iv_full type = '' ASSIGNING FIELD-SYMBOL(<class>).
-    IF sy-subrc = 0.
-      e_root_key = <class>-key.
-    ELSE.
-
-      e_root_key =  tree->get_nodes( )->add_node(
-        related_node   = l_new_node
-        relationship   = iv_rel
-        collapsed_icon = lv_icon
-        expanded_icon  = lv_icon
-        data_row       = ls_tree
-        text           = lv_text
-        folder         = abap_false )->get_key( ).
-
-      APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
-      <class>-name = iv_full.
-      <class>-key = e_root_key.
-      <class>-type = ''.
-
-    ENDIF.
-
-    lv_icon = icon_led_green.
-    "READ TABLE mo_debugger->mt_classes_types WITH KEY full = lv_obj_index type = '1' TRANSPORTING NO FIELDS.
-
-    IF sy-subrc = 0.
-      READ TABLE mt_classes_leaf WITH KEY name = iv_full type = 1 ASSIGNING <class>.
-      IF sy-subrc NE 0.
-        lv_node_key =
-          tree->get_nodes( )->add_node(
-            related_node   = e_root_key
-            relationship   = if_salv_c_node_relation=>last_child
-            collapsed_icon = lv_icon
-            expanded_icon  = lv_icon
-            text           = 'Public'
-            folder         = abap_true
-          )->get_key( ).
-
-        APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
-        <class>-name = iv_full.
-        <class>-key = lv_node_key.
-        <class>-type = 1.
-      ENDIF.
-    ENDIF.
-
-    "READ TABLE mo_debugger->mt_classes_types WITH KEY full = lv_obj_index type = '3' TRANSPORTING NO FIELDS.
-
-    IF sy-subrc = 0.
-      lv_icon = icon_led_yellow.
-
-      READ TABLE mt_classes_leaf WITH KEY name = iv_full type = 3 ASSIGNING <class>.
-      IF sy-subrc NE 0.
-        lv_node_key =
-          tree->get_nodes( )->add_node(
-            related_node   = e_root_key
-            relationship   = if_salv_c_node_relation=>last_child
-            collapsed_icon = lv_icon
-            expanded_icon  = lv_icon
-            text           = 'Protected'
-            folder         = abap_true
-          )->get_key( ).
-
-        APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
-        <class>-name = iv_full.
-        <class>-key = lv_node_key.
-        <class>-type = 3.
-      ENDIF.
-    ENDIF.
-
-    "READ TABLE mo_debugger->mt_classes_types WITH KEY full = lv_obj_index type = '2' TRANSPORTING NO FIELDS.
-    IF sy-subrc = 0.
-      lv_icon = icon_led_red.
-      READ TABLE mt_classes_leaf WITH KEY name = iv_full type = 2 ASSIGNING <class>.
-      IF sy-subrc NE 0.
-        lv_node_key =
-          tree->get_nodes( )->add_node(
-            related_node   = e_root_key
-            relationship   = if_salv_c_node_relation=>last_child
-            collapsed_icon = lv_icon
-            expanded_icon  = lv_icon
-            text           = 'Private'
-            folder         = abap_true
-          )->get_key( ).
-
-        APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
-        <class>-name = iv_full.
-        <class>-key = lv_node_key.
-        <class>-type = 2.
-      ENDIF.
-    ENDIF.
-  ENDMETHOD.
-
-  METHOD add_obj_var.
-
-    DATA: lv_icon TYPE salv_de_tree_image,
-          ls_tree TYPE ts_table,
-          l_key   TYPE salv_de_node_key.
-
-    IF iv_icon IS NOT SUPPLIED.
-      lv_icon = icon_oo_class.
-    ELSE.
-      lv_icon = iv_icon.
-    ENDIF.
-
-    IF iv_full IS SUPPLIED.
-      ls_tree-fullname = iv_full.
-    ENDIF.
-
-    IF iv_value IS SUPPLIED.
-      ls_tree-value = iv_value.
-    ENDIF.
-
-    IF iv_key IS SUPPLIED.
-      l_key = iv_key.
-    ELSE.
-      l_key = main_node_key.
-    ENDIF.
-
-    IF l_key IS INITIAL.
-      l_key = main_node_key.
-    ENDIF.
-
-    er_key = tree->get_nodes( )->add_node(
-      related_node   = l_key
-      relationship   = if_salv_c_node_relation=>last_child
-      collapsed_icon = lv_icon
-      expanded_icon  = lv_icon
-      data_row       = ls_tree
-      text           = iv_name
-      folder         = abap_false
-    )->get_key( ).
-  ENDMETHOD.
-
-  METHOD delete_node.
-    DATA(lo_nodes) = tree->get_nodes( ).
-    DATA(l_node) =  lo_nodes->get_node( iv_key ).
-    IF sy-subrc = 0.
-      l_node->delete( ).
-    ENDIF.
-  ENDMETHOD.
-
-
-  METHOD display.
-
-    DATA(lo_columns) = tree->get_columns( ).
-    lo_columns->get_column( 'KIND' )->set_visible( abap_false ).
-    DATA(lo_nodes) = tree->get_nodes( ).
-    DATA(lt_nodes) =  lo_nodes->get_all_nodes( ).
-
-    "expanding only first level nodes.
-    DATA lt_sub TYPE salv_t_nodes.
-    LOOP AT lt_nodes INTO DATA(l_node).
-      READ TABLE lt_sub WITH KEY node = l_node-node TRANSPORTING NO FIELDS.
-      IF sy-subrc NE 0.
-        TRY.
-            l_node-node->expand( ).
-            lt_sub = l_node-node->get_subtree( ).
-          CATCH cx_root.
-        ENDTRY.
-      ENDIF.
-    ENDLOOP.
-
-    tree->display( ).
-  ENDMETHOD.
-
-  METHOD hndl_user_command.
-    CONSTANTS: c_mask TYPE x VALUE '01'.
-    CASE e_salv_function.
-      WHEN 'REFRESH'."
-        mo_debugger->run_script( ).
-      WHEN 'INITIALS'."Show/hide empty variables
-        m_hide = m_hide BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'GLOBALS'."Show/hide global variables
-        m_globals = m_globals BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
-        m_class_data = m_class_data BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'CHANGED'."Show only changed values/all values
-        m_changed = m_changed BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'LDB'."Show/hide LDB variables (globals)
-        m_ldb = m_ldb BIT-XOR c_mask.
-        mo_debugger->run_script( ).
-      WHEN 'TEST'.
-
-        "lcl_appl=>open_int_table( iv_name = 'Classes' it_tab =  mo_debugger->mt_classes_types ).
-        "lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
-        "lcl_appl=>open_int_table( iv_name = 'stack hist'   it_tab =  mo_debugger->mt_var_step ).
-
-        "DATA: lt_hist TYPE TABLE OF lcl_appl=>var_table_temp.
-        "MOVE-CORRESPONDING  mo_debugger->mt_vars_hist TO lt_hist.
-        "lcl_appl=>open_int_table( iv_name = 'History' it_tab =  lt_hist ).
-
-    ENDCASE.
-  ENDMETHOD.
-
-  METHOD hndl_double_click.
-    DATA(lo_nodes) = tree->get_nodes( ).
-    DATA(l_node) =  lo_nodes->get_node( node_key ).
-    DATA r_row TYPE REF TO data.
-    DATA r_ref TYPE REF TO data.
-
-    r_row = l_node->get_data_row( ).
-    ASSIGN r_row->* TO FIELD-SYMBOL(<row>).
-    ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
-    ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
-    ASSIGN COMPONENT 'FULLNAME' OF STRUCTURE <row> TO FIELD-SYMBOL(<fullname>).
-
-    CASE <kind>.
-      WHEN cl_abap_datadescr=>typekind_table.
-        lcl_appl=>open_int_table( iv_name = <fullname> it_ref = <ref> ).
-*        APPEND INITIAL LINE TO lcl_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
-*        <obj>-alv_viewer = NEW #(  i_additional_name = CONV #( <fullname> ) ir_tab = <ref> ).
-*        <obj>-alv_viewer->mo_sel->raise_selection_done( ).
-      WHEN cl_abap_datadescr=>typekind_string.
-        NEW lcl_text_viewer( <ref> ).
-    ENDCASE.
-  ENDMETHOD.
-
-  METHOD add_variable.
-    DATA: lr_new   TYPE REF TO data,
-          lr_struc TYPE REF TO data,
-          l_name   TYPE string,
-          l_key    TYPE salv_de_node_key,
-          l_rel    TYPE salv_de_node_relation.
-
-    FIELD-SYMBOLS: <new>      TYPE any,
-                   <tab_from> TYPE ANY TABLE,
-                   <tab_to>   TYPE STANDARD TABLE.
-
-    IF i_icon IS SUPPLIED.
-      m_icon = i_icon.
-    ELSE.
-      CLEAR m_icon.
-    ENDIF.
-
-    DATA l_full_name TYPE string.
-    IF iv_full_name IS SUPPLIED.
-      l_full_name = iv_full_name.
-    ELSE.
-      l_full_name = iv_root_name.
-    ENDIF.
-
-    l_name = iv_root_name.
-    DESCRIBE FIELD io_var TYPE DATA(lv_type).
-    IF lv_type NE cl_abap_typedescr=>typekind_table.
-      CREATE DATA lr_new LIKE io_var.
-      ASSIGN lr_new->*  TO <new>.
-      <new> = io_var.
-    ELSE.
-      ASSIGN io_var TO <tab_from>.
-      CREATE DATA lr_struc LIKE LINE OF <tab_from>.
-      ASSIGN lr_struc->* TO FIELD-SYMBOL(<ls_record>).
-      CREATE DATA lr_new LIKE STANDARD TABLE OF <ls_record>.
-      ASSIGN lr_new->* TO <tab_to>.
-      <tab_to> = <tab_from>.
-    ENDIF.
-    m_variable = lr_new.
-
-    DATA td TYPE sydes_desc.
-    DESCRIBE FIELD io_var INTO td.
-    IF td-types[ 1 ]-type = 'r'.
-      m_object = io_var.
-    ENDIF.
-
-    IF iv_key IS SUPPLIED AND iv_key IS NOT INITIAL.
-      l_key = iv_key.
-    ELSE.
-      l_key = main_node_key.
-    ENDIF.
-
-    l_rel = if_salv_c_node_relation=>last_child.
-
-    ASSIGN m_variable->* TO FIELD-SYMBOL(<new_value>).
-
-    "READ TABLE mt_vars WITH KEY name = l_full_name INTO DATA(l_var).
-    IF sy-subrc = 0.
-
-      DATA(lo_nodes) = tree->get_nodes( ).
-      "DATA(l_node) =  lo_nodes->get_node( l_var-key ).
-      DATA r_row TYPE REF TO data.
-      DATA r_ref TYPE REF TO data.
-
-      IF sy-subrc = 0.
-        TRY.
-            "r_row = l_node->get_data_row( ).
-            ASSIGN r_row->* TO FIELD-SYMBOL(<row>).
-            ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
-            ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
-            r_ref = <ref>.
-            ASSIGN r_ref->* TO FIELD-SYMBOL(<old_value>).
-            IF <old_value> NE <new_value>.
-              "l_key = l_var-key.
-              l_rel = if_salv_c_node_relation=>next_sibling.
-              IF <kind> NE 'v' AND <kind> NE 'u'.
-                "DELETE mt_vars WHERE name = l_full_name.
-              ENDIF.
-            ELSE.
-
-              IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
-                IF <kind> NE 'v' AND <kind> NE 'u'.
-                  "DELETE mt_vars WHERE name = l_full_name.
-                  "l_node->delete( ).
-                ENDIF.
-              ENDIF.
-
-*              READ TABLE mt_state
-*                WITH KEY name = l_full_name
-*                         stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
-*               ASSIGNING FIELD-SYMBOL(<state>) .
-
-              IF sy-subrc = 0.
-                "ASSIGN <state>-ref->* TO <old_value>.
-                IF <old_value> = <new_value>.
-                  IF <kind> NE 'v' AND <kind> NE 'u'.
-                    IF m_changed IS NOT INITIAL.
-                      "DELETE mt_vars WHERE name = l_full_name.
-                      "l_node->delete( ).
-                      RETURN.
-                    ELSE.
-                      RETURN.
-                    ENDIF.
-                  ENDIF.
-                ELSE.
-                  IF <kind> NE 'v' AND <kind> NE 'u'.
-                    "DELETE mt_vars WHERE name = l_full_name.
-                    "l_node->delete( ).
-                  ENDIF.
-                ENDIF.
-              ENDIF.
-            ENDIF.
-
-            IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
-              "DELETE mt_vars WHERE name = l_full_name.
-              "l_node->delete( ).
-              RETURN.
-            ENDIF.
-          CATCH cx_root.
-        ENDTRY.
-      ENDIF.
-    ELSE.
-
-      IF m_changed IS NOT INITIAL."check changed
-*        READ TABLE mt_state
-*          WITH KEY name = l_full_name
-*                   stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
-*           ASSIGNING <state>.
-
-        IF sy-subrc = 0.
-          "ASSIGN <state>-ref->* TO <old_value>.
-          IF <old_value> = <new_value>.
-            "DELETE mt_vars WHERE name = l_full_name.
-            "IF l_node IS NOT INITIAL.
-            "  l_node->delete( ).
-            "ENDIF.
-            RETURN.
-          ENDIF.
-        ENDIF.
-      ENDIF.
-
-      IF lv_type NE cl_abap_typedescr=>typekind_table.
-        IF <new> IS INITIAL AND m_hide IS NOT INITIAL.
-          RETURN.
-        ENDIF.
-      ELSE.
-        IF <tab_to> IS INITIAL AND m_hide IS NOT INITIAL.
-          RETURN.
-        ENDIF.
-      ENDIF.
-    ENDIF.
-
-    DATA(l_root_key) = traverse(
-     io_type_descr = cl_abap_typedescr=>describe_by_data_ref( m_variable )
-     iv_parent_key = l_key
-     iv_rel  = l_rel
-     iv_name = l_name
-     iv_fullname = l_full_name
-     ir_up = m_variable
-     iv_parent_name = l_name
-     i_cl_leaf = i_cl_leaf ).
-
-
-    IF l_rel = if_salv_c_node_relation=>next_sibling.
-      IF <kind> NE 'v' AND <kind> NE 'u'.
-        "IF l_node IS NOT INITIAL.
-        "l_node->delete( ).
-        "ENDIF.
-      ENDIF.
-    ENDIF.
-  ENDMETHOD.
-
-  METHOD traverse.
-    CASE io_type_descr->kind.
-      WHEN c_kind-struct.
-        e_root_key = traverse_struct( io_type_descr = io_type_descr
-                                      iv_parent_key = iv_parent_key
-                                      iv_rel  = iv_rel
-                                      iv_name = iv_name
-                                      iv_fullname = iv_fullname
-                                      i_cl_leaf = i_cl_leaf
-                                      ir_up = ir_up iv_parent_name = iv_parent_name ).
-
-      WHEN c_kind-table.
-        e_root_key = traverse_table( io_type_descr = io_type_descr
-                                     iv_parent_key = iv_parent_key
-                                     iv_rel  = iv_rel
-                                     iv_name = iv_name
-                                     iv_fullname = iv_fullname
-                                     ir_up = ir_up
-                                     i_cl_leaf = i_cl_leaf
-                                      iv_parent_name = iv_parent_name ).
-      WHEN c_kind-elem.
-        e_root_key = traverse_elem( io_type_descr = io_type_descr
-                                    iv_parent_key = iv_parent_key
-                                    iv_rel  = iv_rel
-                                    iv_name = iv_name
-                                    iv_fullname = iv_fullname
-                                    ir_up = ir_up
-                                    i_cl_leaf = i_cl_leaf
-                                    iv_parent_name = iv_parent_name ).
-    ENDCASE.
-  ENDMETHOD.
-
-  METHOD traverse_struct.
-    DATA: lt_component    TYPE abap_component_tab,
-          ls_component    LIKE LINE OF lt_component,
-          lo_struct_descr TYPE REF TO cl_abap_structdescr,
-          ls_tree         TYPE ts_table,
-          lv_text         TYPE lvc_value,
-          lv_node_key     TYPE salv_de_node_key,
-          lv_icon         TYPE salv_de_tree_image.
-
-    lo_struct_descr ?= io_type_descr.
-    ls_tree-ref =  ir_up.
-    ls_tree-typename = lo_struct_descr->absolute_name.
-    REPLACE FIRST OCCURRENCE OF '\TYPE=' IN ls_tree-typename+0(6) WITH ''.
-    IF ls_tree-typename+0(1) = '%'.
-      ls_tree-typename = |{ lo_struct_descr->type_kind }({ lo_struct_descr->length / 2 })|.
-    ENDIF.
-
-    ls_tree-kind = lo_struct_descr->type_kind.
-
-    IF m_icon IS INITIAL.
-      lv_icon = icon_structure.
-    ELSE.
-      lv_icon = m_icon.
-    ENDIF.
-
-    IF iv_name IS NOT INITIAL.
-      lv_text = iv_name.
-    ELSE.
-      lv_text = ls_tree-typename.
-    ENDIF.
-
-    ls_tree-fullname = iv_fullname.
-    IF lv_text IS NOT INITIAL.
-
-      "READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
-      IF sy-subrc NE 0.
-        e_root_key = m_new_node = lv_node_key =
-          tree->get_nodes( )->add_node(
-            related_node   = iv_parent_key
-            relationship   = iv_rel
-            collapsed_icon = lv_icon
-            expanded_icon  = lv_icon
-            data_row       = ls_tree
-            text           = lv_text
-            folder         = abap_true
-          )->get_key( ).
-      ELSE.
-        "lv_node_key = l_var-key.
-      ENDIF.
-    ENDIF.
-
-    lt_component = lo_struct_descr->get_components( ).
-    LOOP AT lt_component INTO ls_component. "WHERE name IS NOT INITIAL.
-      DATA: lr_new_struc TYPE REF TO data.
-      ASSIGN ir_up->* TO FIELD-SYMBOL(<up>).
-      IF ls_component-name IS INITIAL.
-        lr_new_struc = ir_up.
-      ELSE.
-        ASSIGN COMPONENT ls_component-name OF STRUCTURE <up> TO FIELD-SYMBOL(<new>).
-        GET REFERENCE OF <new> INTO lr_new_struc.
-      ENDIF.
-
-      traverse(
-        io_type_descr = ls_component-type
-        iv_parent_key = lv_node_key
-        iv_rel  = if_salv_c_node_relation=>last_child
-        iv_name = ls_component-name
-        iv_fullname = |{ iv_fullname }-{ ls_component-name }|
-        ir_up = lr_new_struc
-        iv_parent_name = |{ iv_parent_name }-{ ls_component-name }| ).
-    ENDLOOP.
-  ENDMETHOD.
-
-  METHOD traverse_elem.
-    DATA: lo_elem_descr TYPE REF TO cl_abap_elemdescr,
-          ls_tree       TYPE ts_table,
-          lv_text       TYPE lvc_value,
-          lv_icon       TYPE salv_de_tree_image,
-          lv_node_key   TYPE salv_de_node_key,
-          l_key         TYPE salv_de_node_key,
-          l_rel         TYPE salv_de_node_relation.
-
-    lo_elem_descr ?= io_type_descr.
-    ls_tree-ref = ir_up.
-
-    ls_tree-typename = lo_elem_descr->absolute_name.
-    REPLACE FIRST OCCURRENCE OF '\TYPE=' IN ls_tree-typename WITH ''.
-    IF ls_tree-typename+0(1) = '%'.
-      ls_tree-typename = |{ lo_elem_descr->type_kind }({ lo_elem_descr->length / 2 })|.
-    ENDIF.
-
-    ls_tree-kind = lo_elem_descr->type_kind.
-
-    ASSIGN ir_up->* TO FIELD-SYMBOL(<new_value>).
-    IF iv_value IS SUPPLIED.
-      ls_tree-value = iv_value.
-    ELSE.
-      IF <new_value> IS NOT INITIAL.
-        ls_tree-value = <new_value>.
-      ENDIF.
-    ENDIF.
-
-    CASE lo_elem_descr->type_kind.
-      WHEN 'D'.
-        lv_icon = icon_date.
-      WHEN 'T'.
-        lv_icon = icon_bw_time_sap.
-      WHEN 'C'.
-        lv_icon = icon_wd_input_field.
-      WHEN 'P'.
-        lv_icon = icon_increase_decimal.
-      WHEN 'g'.
-        lv_icon = icon_text_act.
-      WHEN 'N' OR 'I'.
-        lv_icon = icon_pm_order.
-
-      WHEN OTHERS.
-        lv_icon = icon_element.
-    ENDCASE.
-
-    lv_text = iv_name.
-
-    IF ls_tree-value IS INITIAL AND m_hide IS NOT INITIAL.
-      RETURN.
-    ENDIF.
-
-    ls_tree-fullname = iv_fullname.
-
-    IF iv_parent_key IS NOT INITIAL.
-      l_key = iv_parent_key.
-    ELSE.
-      l_key = main_node_key.
-    ENDIF.
-
-    l_rel = iv_rel.
-    "READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
-    IF sy-subrc = 0.
-
-      DATA(lo_nodes) = tree->get_nodes( ).
-      "DATA(l_node) =  lo_nodes->get_node( l_var-key ).
-      DATA r_row TYPE REF TO data.
-      DATA r_ref TYPE REF TO data.
-
-      TRY.
-          "r_row = l_node->get_data_row( ).
-          ASSIGN r_row->* TO FIELD-SYMBOL(<row>).
-          ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
-          ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
-          r_ref = <ref>.
-          ASSIGN r_ref->* TO FIELD-SYMBOL(<old_value>).
-          IF <old_value> NE <new_value>.
-            "l_key = l_var-key.
-            l_rel = if_salv_c_node_relation=>next_sibling.
-            IF <kind> NE 'v' AND <kind> NE 'u'.
-              "DELETE mt_vars WHERE name = iv_fullname.
-            ENDIF.
-          ELSE.
-            IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
-              IF <kind> NE 'v' AND <kind> NE 'u'.
-                "DELETE mt_vars WHERE name = iv_fullname.
-                "l_node->delete( ).
-              ENDIF.
-            ENDIF.
-*            READ TABLE mt_state
-*             WITH KEY name = iv_fullname
-*                      stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
-*             ASSIGNING FIELD-SYMBOL(<state>).
-
-            IF sy-subrc = 0.
-              "ASSIGN <state>-ref->* TO <old_value>.
-              IF <old_value> = <new_value>.
-                IF <kind> NE 'v' AND <kind> NE 'u' AND m_changed IS NOT INITIAL.
-                  "DELETE mt_vars WHERE name = iv_fullname.
-                  "l_node->delete( ).
-                ENDIF.
-                RETURN.
-              ELSE.
-                "<state>-ref = ir_up.
-                "mo_debugger->save_hist( CHANGING i_state = <state> ).
-              ENDIF.
-            ENDIF.
-          ENDIF.
-
-          IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
-            "DELETE mt_vars WHERE name = iv_fullname.
-            "l_node->delete( ).
-            RETURN.
-          ENDIF.
-        CATCH cx_root.
-      ENDTRY.
-    ELSE.
-
-*      READ TABLE mt_state
-*        WITH KEY name = iv_fullname
-*                 stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
-*        ASSIGNING <state>.
-
-      IF sy-subrc = 0.
-        "ASSIGN <state>-ref->* TO <old_value>.
-        IF <old_value> = <new_value>.
-          IF m_changed IS NOT INITIAL.
-            "DELETE mt_vars WHERE name = iv_fullname.
-            "IF l_node IS NOT INITIAL.
-            " l_node->delete( ).
-            "ENDIF.
-            RETURN.
-          ENDIF.
-        ELSE.
-          "<state>-ref = ir_up.
-          "mo_debugger->save_hist( CHANGING i_state = <state> ).
-        ENDIF.
-      ENDIF.
-
-      IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
-        RETURN.
-      ENDIF.
-    ENDIF.
-
-    e_root_key = tree->get_nodes( )->add_node(
-       related_node   = l_key
-       relationship   = l_rel
-       data_row       = ls_tree
-       collapsed_icon = lv_icon
-       expanded_icon  = lv_icon
-       text           = lv_text
-       folder         = abap_false )->get_key( ).
-
-
-*    READ TABLE mt_state
-*      WITH KEY name = iv_fullname
-*               stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
-*      ASSIGNING <state>.
-
-    IF sy-subrc <> 0.
-
-      "APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
-      "<state> = <vars>.
-      "mo_debugger->save_hist( CHANGING i_state = <state> ).
-    ENDIF.
-
-    "IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
-    "  l_node->delete( ).
-    "ENDIF.
-  ENDMETHOD.
-
-  METHOD check_change.
-  ENDMETHOD.
-
-  METHOD traverse_table.
-    DATA: lo_table_descr TYPE REF TO cl_abap_tabledescr,
-          ls_tree        TYPE ts_table,
-          lv_text        TYPE lvc_value,
-          lv_node_key    TYPE salv_de_node_key,
-          lv_icon        TYPE salv_de_tree_image,
-          l_key          TYPE salv_de_node_key,
-          l_rel          TYPE salv_de_node_relation.
-
-    FIELD-SYMBOLS: <tab> TYPE ANY TABLE.
-
-    ASSIGN ir_up->* TO <tab>.
-    DATA(lines) = lines( <tab> ).
-    ls_tree-ref = ir_up.
-
-    lo_table_descr ?= io_type_descr.
-
-    ls_tree-fullname = |{ iv_name } ({ lines })|.
-    ls_tree-kind = lo_table_descr->type_kind.
-    ls_tree-typename = replace(  val = lo_table_descr->absolute_name sub = '\TYPE=' with = ''   ).
-    lv_icon = icon_view_table.
-
-    IF iv_name IS NOT INITIAL.
-      lv_text = ls_tree-fullname.
-    ELSE.
-      lv_text = ls_tree-typename.
-    ENDIF.
-
-    "ASSIGN ir_up->* TO FIELD-SYMBOL(<var>).
-    l_rel = iv_rel.
-    ASSIGN ir_up->* TO FIELD-SYMBOL(<new_value>).
-    "READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
-    IF sy-subrc = 0.
-
-      DATA(lo_nodes) = tree->get_nodes( ).
-      " DATA(l_node) =  lo_nodes->get_node( l_var-key ).
-      DATA r_row TYPE REF TO data.
-      DATA r_ref TYPE REF TO data.
-
-      TRY.
-          " r_row = l_node->get_data_row( ).
-          ASSIGN r_row->* TO FIELD-SYMBOL(<row>).
-          ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
-          ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
-          r_ref = <ref>.
-          ASSIGN r_ref->* TO FIELD-SYMBOL(<old_value>).
-          IF <old_value> NE <new_value>.
-            "l_key = l_var-key.
-            l_rel = if_salv_c_node_relation=>next_sibling.
-            IF <kind> NE 'v' AND <kind> NE 'u'.
-              "DELETE mt_vars WHERE name = iv_fullname.
-            ENDIF.
-          ELSE.
-            IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
-              IF <kind> NE 'v' AND <kind> NE 'u'.
-                " DELETE mt_vars WHERE name = iv_fullname.
-                " l_node->delete( ).
-              ENDIF.
-            ENDIF.
-*            READ TABLE mt_state
-*              WITH KEY name = iv_fullname
-*                       stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
-*              ASSIGNING FIELD-SYMBOL(<state>).
-
-            IF sy-subrc = 0.
-              "ASSIGN <state>-ref->* TO <old_value>.
-              IF <old_value> = <new_value>.
-                IF <kind> NE 'v' AND <kind> NE 'u' AND m_changed IS NOT INITIAL." AND m_changed is not INITIAL.
-                  "DELETE mt_vars WHERE name = iv_fullname.
-                  "l_node->delete( ).
-                ENDIF.
-                RETURN.
-              ELSE.
-                "<state>-ref = ir_up.
-                "mo_debugger->save_hist( CHANGING i_state = <state> ).
-              ENDIF.
-            ENDIF.
-          ENDIF.
-
-          IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
-            "DELETE mt_vars WHERE name = iv_fullname.
-            "l_node->delete( ).
-            RETURN.
-          ENDIF.
-        CATCH cx_root.
-      ENDTRY.
-    ELSE.
-
-*      READ TABLE mt_state
-*        WITH KEY name = iv_fullname
-*                 stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
-*        ASSIGNING <state>.
-
-      IF sy-subrc = 0.
-        "ASSIGN <state>-ref->* TO <old_value>.
-        IF <old_value> = <new_value>.
-          IF m_changed IS NOT INITIAL.
-            "DELETE mt_vars WHERE name = iv_fullname.
-            "IF l_node IS NOT INITIAL.
-            "  l_node->delete( ).
-            " ENDIF.
-            RETURN.
-          ENDIF.
-        ELSE.
-          "<state>-ref = ir_up.
-          "mo_debugger->save_hist( CHANGING i_state = <state> ).
-        ENDIF.
-      ENDIF.
-
-      IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
-        RETURN.
-      ENDIF.
-    ENDIF.
-
-    IF lines > 0 OR  m_hide IS INITIAL.
-      "READ TABLE mt_vars WITH KEY name = iv_parent_name TRANSPORTING NO FIELDS.
-      IF sy-subrc NE 0.
-
-        ls_tree-fullname = iv_fullname.
-        e_root_key =
-          tree->get_nodes( )->add_node(
-            related_node   = iv_parent_key
-            relationship   = iv_rel
-            collapsed_icon = lv_icon
-            expanded_icon  = lv_icon
-            data_row       = ls_tree
-            text           = lv_text
-            folder         = abap_true
-          )->get_key( ).
-
-*        APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
-*        <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
-*        <vars>-leaf = m_leaf.
-*        <vars>-name = iv_fullname.
-*        <vars>-short = iv_name.
-*        <vars>-key = e_root_key.
-*        <vars>-ref = ir_up.
-*        <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
-*        <vars>-tree = me.
-*        <vars>-cl_leaf = i_cl_leaf.
-
-*        READ TABLE mt_state
-*          WITH KEY name = iv_fullname
-*                   stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
-*          ASSIGNING <state>.
-
-        IF sy-subrc <> 0.
-
-*          APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
-*          <state> = <vars>.
-*          mo_debugger->save_hist( CHANGING i_state = <state> ).
-        ENDIF.
-
-*        IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
-*          l_node->delete( ).
-*        ENDIF.
-
-      ENDIF.
-    ENDIF.
   ENDMETHOD.
 ENDCLASS.
