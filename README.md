@@ -10,5 +10,6 @@ Smart Debugger - SAP Script program for viewing all objects and data structures 
 - отображается содержимое ООП объектов
 
 Более подробное описание по ссылкам:
-- https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 - https://ysychov.wordpress.com/2020/09/08/sdde2/
+- https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
+
