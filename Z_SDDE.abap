@@ -1218,9 +1218,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       READ TABLE mt_obj WITH KEY name = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
       IF sy-subrc = 0.
         IF i_no_cl_twin IS INITIAL.
-**************          go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
-**************                                          iv_full = <ls_symobjref>-instancename
-**************                                            iv_key = i_new_node ).
+
+          go_tree_local->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
+                                          iv_full = <ls_symobjref>-instancename
+                                            iv_key = i_new_node ).
           RETURN.
         ENDIF.
       ENDIF.
@@ -1450,7 +1451,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         READ TABLE lt_hist
          WITH KEY program = step-program
                   eventtype = step-eventtype
-                  eventname = step-eventname TRANSPORTING NO FIELDS.
+                  eventname = step-eventname
+                  name      = step-name
+                   TRANSPORTING NO FIELDS.
 
         IF sy-subrc NE 0.
           APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
@@ -1472,7 +1475,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         READ TABLE lt_hist
          WITH KEY program = step-program
                   eventtype = step-eventtype
-                  eventname = step-eventname TRANSPORTING NO FIELDS.
+                  eventname = step-eventname
+                  name      = step-name
+                  TRANSPORTING NO FIELDS.
 
         IF sy-subrc NE 0.
           APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
@@ -1642,12 +1647,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         get_func_parameters( mo_window->m_prg-event-eventname ).
       ENDIF.
 
-      IF go_tree_local->m_globals IS NOT INITIAL.
+
+    ENDIF.
+
+    IF go_tree_local->m_globals IS NOT INITIAL.
         CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
         SORT mt_globals.
       ENDIF.
-
-    ENDIF.
 
     CLEAR is_history.
     go_tree_imp->m_prg_info = mo_window->m_prg.
@@ -1683,6 +1689,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       transfer_variable( EXPORTING i_name = 'SYST' i_tree = go_tree_local ).
 
       LOOP AT mt_globals INTO DATA(ls_global).
+
 
         "READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
         "IF sy-subrc = 0.
