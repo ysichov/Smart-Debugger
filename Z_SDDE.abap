@@ -25,86 +25,86 @@ CLASS lcl_rtti_tree DEFINITION DEFERRED.
 CLASS lcl_window DEFINITION DEFERRED.
 CLASS lcl_table_viewer DEFINITION DEFERRED.
 
-class lcl_source_parcer DEFINITION.
+CLASS lcl_source_parcer DEFINITION.
   PUBLIC SECTION.
-  class-METHODS: get_fs_var importing iv_program type string iv_type type string iv_name type string
-            RETURNING VALUE(rt_vars) type tpda_scr_locals_it.
-endclass.
+    CLASS-METHODS: get_fs_var IMPORTING iv_program TYPE string iv_type TYPE string iv_name TYPE string
+              RETURNING VALUE(rt_vars) TYPE tpda_scr_locals_it.
+ENDCLASS.
 
-class lcl_source_parcer IMPLEMENTATION.
-  method get_fs_var.
+CLASS lcl_source_parcer IMPLEMENTATION.
+  METHOD get_fs_var.
 
-  DATA gr_scan TYPE REF TO cl_ci_scan.
-  DATA gr_source TYPE REF TO cl_ci_source_include.
-  DATA gr_statement TYPE REF TO if_ci_kzn_statement_iterator.
-  DATA gr_procedure TYPE REF TO if_ci_kzn_statement_iterator.
+    DATA gr_scan TYPE REF TO cl_ci_scan.
+    DATA gr_source TYPE REF TO cl_ci_source_include.
+    DATA gr_statement TYPE REF TO if_ci_kzn_statement_iterator.
+    DATA gr_procedure TYPE REF TO if_ci_kzn_statement_iterator.
 
-  gr_source = cl_ci_source_include=>create( p_name = conv #( iv_program ) ).
-  gr_Scan = NEW cl_ci_scan( p_include = gr_source ).
+    gr_source = cl_ci_source_include=>create( p_name = CONV #( iv_program ) ).
+    gr_Scan = NEW cl_ci_scan( p_include = gr_source ).
 
-  gr_statement = cl_cikzn_scan_iterator_factory=>get_statement_iterator( ciscan = gr_scan ).
-  gr_procedure = cl_cikzn_scan_iterator_factory=>get_procedure_iterator( ciscan = gr_scan ).
+    gr_statement = cl_cikzn_scan_iterator_factory=>get_statement_iterator( ciscan = gr_scan ).
+    gr_procedure = cl_cikzn_scan_iterator_factory=>get_procedure_iterator( ciscan = gr_scan ).
 
-  do.
-    TRY.
-        gr_statement->next( ).
+    DO.
+      TRY.
+          gr_statement->next( ).
 
-      CATCH cx_scan_iterator_reached_end.
-        EXIT.
-    ENDTRY.
-    DATA(gt_kw) = gr_statement->get_keyword( ).
+        CATCH cx_scan_iterator_reached_end.
+          EXIT.
+      ENDTRY.
+      DATA(gt_kw) = gr_statement->get_keyword( ).
 
-    IF gt_kw = iv_type .
+      IF gt_kw = iv_type .
 
         DATA(token) = gr_statement->get_token( offset =  2 ).
-        IF token ne iv_name.
-          continue.
-        endif.
+        IF token NE iv_name.
+          CONTINUE.
+        ENDIF.
 
         "WRITE: / p_type, token.
         APPEND INITIAL LINE TO rt_vars ASSIGNING FIELD-SYMBOL(<ls_var>).
         <ls_var>-name = token.
 
-      gr_procedure->statement_index = gr_statement->statement_index.
-      gr_procedure->statement_type = gr_statement->statement_type.
+        gr_procedure->statement_index = gr_statement->statement_index.
+        gr_procedure->statement_type = gr_statement->statement_type.
 
-      do.
-        TRY.
-            gr_procedure->next( ).
+        DO.
+          TRY.
+              gr_procedure->next( ).
 
-          CATCH cx_scan_iterator_reached_end.
-            ULINE.
-            EXIT.
-        ENDTRY.
-
-        gt_kw = gr_procedure->get_keyword( ).
-        IF gt_kw = 'FIELD-SYMBOLS'.
-          token = gr_procedure->get_token( offset =  2 ).
-          "WRITE: / token.
-        ELSE.
-          WHILE 1 = 1.
-            token = gr_procedure->get_token( offset =  sy-index ).
-            IF strlen( token ) > 13.
-              IF token+0(13) =  'FIELD-SYMBOL('.
-                SHIFT token LEFT UP TO '<' .
-                REPLACE ALL OCCURRENCES OF ')' IN token WITH ''.
-                 APPEND INITIAL LINE TO rt_vars ASSIGNING <ls_var>.
-                <ls_var>-name = token.
-                "WRITE: / token.
-              ENDIF.
-            ENDIF.
-
-            IF token = ''.
+            CATCH cx_scan_iterator_reached_end.
+              ULINE.
               EXIT.
-            ENDIF.
+          ENDTRY.
 
-          ENDWHILE.
-        ENDIF.
+          gt_kw = gr_procedure->get_keyword( ).
+          IF gt_kw = 'FIELD-SYMBOLS'.
+            token = gr_procedure->get_token( offset =  2 ).
+            "WRITE: / token.
+          ELSE.
+            WHILE 1 = 1.
+              token = gr_procedure->get_token( offset =  sy-index ).
+              IF strlen( token ) > 13.
+                IF token+0(13) =  'FIELD-SYMBOL('.
+                  SHIFT token LEFT UP TO '<' .
+                  REPLACE ALL OCCURRENCES OF ')' IN token WITH ''.
+                  APPEND INITIAL LINE TO rt_vars ASSIGNING <ls_var>.
+                  <ls_var>-name = token.
+                  "WRITE: / token.
+                ENDIF.
+              ENDIF.
 
-      ENDDO.
+              IF token = ''.
+                EXIT.
+              ENDIF.
 
-    ENDIF.
-  ENDDO.
+            ENDWHILE.
+          ENDIF.
+
+        ENDDO.
+
+      ENDIF.
+    ENDDO.
   ENDMETHOD.
 ENDCLASS.
 
@@ -1703,9 +1703,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       APPEND INITIAL LINE TO mt_locals ASSIGNING FIELD-SYMBOL(<local>).
       SORT mt_locals.
 
-      mt_loc_fs = lcl_source_parcer=>get_fs_var( iv_program = conv #( mo_window->m_prg-program )
-                                                 iv_type = conv #( mo_window->m_prg-eventtype )
-                                                 iv_name = conv #( mo_window->m_prg-eventname ) ).
+      mt_loc_fs = lcl_source_parcer=>get_fs_var( iv_program = CONV #( mo_window->m_prg-program )
+                                                 iv_type = CONV #( mo_window->m_prg-eventtype )
+                                                 iv_name = CONV #( mo_window->m_prg-eventname ) ).
 
 
 
@@ -1767,7 +1767,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDLOOP.
 
     LOOP AT mt_loc_fs INTO ls_local.
-        transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_local i_no_cl_twin = 'X' ).
+      transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_local i_no_cl_twin = 'X' ).
     ENDLOOP.
 
     LOOP AT mt_ret_exp INTO ls_local.
