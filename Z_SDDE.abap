@@ -25,6 +25,89 @@ CLASS lcl_rtti_tree DEFINITION DEFERRED.
 CLASS lcl_window DEFINITION DEFERRED.
 CLASS lcl_table_viewer DEFINITION DEFERRED.
 
+class lcl_source_parcer DEFINITION.
+  PUBLIC SECTION.
+  class-METHODS: get_fs_var importing iv_program type string iv_type type string iv_name type string
+            RETURNING VALUE(rt_vars) type tpda_scr_locals_it.
+endclass.
+
+class lcl_source_parcer IMPLEMENTATION.
+  method get_fs_var.
+
+  DATA gr_scan TYPE REF TO cl_ci_scan.
+  DATA gr_source TYPE REF TO cl_ci_source_include.
+  DATA gr_statement TYPE REF TO if_ci_kzn_statement_iterator.
+  DATA gr_procedure TYPE REF TO if_ci_kzn_statement_iterator.
+
+  gr_source = cl_ci_source_include=>create( p_name = conv #( iv_program ) ).
+  gr_Scan = NEW cl_ci_scan( p_include = gr_source ).
+
+  gr_statement = cl_cikzn_scan_iterator_factory=>get_statement_iterator( ciscan = gr_scan ).
+  gr_procedure = cl_cikzn_scan_iterator_factory=>get_procedure_iterator( ciscan = gr_scan ).
+
+  do.
+    TRY.
+        gr_statement->next( ).
+
+      CATCH cx_scan_iterator_reached_end.
+        EXIT.
+    ENDTRY.
+    DATA(gt_kw) = gr_statement->get_keyword( ).
+
+    IF gt_kw = iv_type .
+
+        DATA(token) = gr_statement->get_token( offset =  2 ).
+        IF token ne iv_name.
+          continue.
+        endif.
+
+        "WRITE: / p_type, token.
+        APPEND INITIAL LINE TO rt_vars ASSIGNING FIELD-SYMBOL(<ls_var>).
+        <ls_var>-name = token.
+
+      gr_procedure->statement_index = gr_statement->statement_index.
+      gr_procedure->statement_type = gr_statement->statement_type.
+
+      do.
+        TRY.
+            gr_procedure->next( ).
+
+          CATCH cx_scan_iterator_reached_end.
+            ULINE.
+            EXIT.
+        ENDTRY.
+
+        gt_kw = gr_procedure->get_keyword( ).
+        IF gt_kw = 'FIELD-SYMBOLS'.
+          token = gr_procedure->get_token( offset =  2 ).
+          "WRITE: / token.
+        ELSE.
+          WHILE 1 = 1.
+            token = gr_procedure->get_token( offset =  sy-index ).
+            IF strlen( token ) > 13.
+              IF token+0(13) =  'FIELD-SYMBOL('.
+                SHIFT token LEFT UP TO '<' .
+                REPLACE ALL OCCURRENCES OF ')' IN token WITH ''.
+                 APPEND INITIAL LINE TO rt_vars ASSIGNING <ls_var>.
+                <ls_var>-name = token.
+                "WRITE: / token.
+              ENDIF.
+            ENDIF.
+
+            IF token = ''.
+              EXIT.
+            ENDIF.
+
+          ENDWHILE.
+        ENDIF.
+
+      ENDDO.
+
+    ENDIF.
+  ENDDO.
+  ENDMETHOD.
+ENDCLASS.
+
 CLASS lcl_box_handler DEFINITION."for memory clearing
   PUBLIC SECTION.
     METHODS: on_box_close FOR EVENT close OF cl_gui_dialogbox_container IMPORTING sender.
@@ -308,6 +391,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
 
     DATA: mt_obj           TYPE TABLE OF t_obj,
           mt_locals        TYPE tpda_scr_locals_it,
+          mt_loc_fs        TYPE tpda_scr_locals_it, "locals Field Symbols
           mt_globals       TYPE tpda_scr_globals_it,
           mt_ret_exp       TYPE tpda_scr_locals_it,
           mt_steps         TYPE  TABLE OF lcl_appl=>t_step_counter,
@@ -1612,7 +1696,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_src_info.
     ENDTRY.
 
+    CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
+
     IF lv_stack_changed = abap_true OR is_history = abap_true.
+
+      APPEND INITIAL LINE TO mt_locals ASSIGNING FIELD-SYMBOL(<local>).
+      SORT mt_locals.
+
+      mt_loc_fs = lcl_source_parcer=>get_fs_var( iv_program = conv #( mo_window->m_prg-program )
+                                                 iv_type = conv #( mo_window->m_prg-eventtype )
+                                                 iv_name = conv #( mo_window->m_prg-eventname ) ).
+
+
 
       "Are we in class
       DATA: l_clref  TYPE REF TO cl_abap_classdescr.
@@ -1631,9 +1726,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         CLEAR m_classname.
       ENDIF.
 
-      CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
-      SORT mt_locals.
-
       READ TABLE mt_locals WITH KEY name = 'ME' TRANSPORTING NO FIELDS.
       IF sy-subrc = 0.
         get_method_parameters( mo_window->m_prg-event-eventname ).
@@ -1647,13 +1739,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         get_func_parameters( mo_window->m_prg-event-eventname ).
       ENDIF.
 
-
     ENDIF.
 
     IF go_tree_local->m_globals IS NOT INITIAL.
-        CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
-        SORT mt_globals.
-      ENDIF.
+      CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
+      SORT mt_globals.
+    ENDIF.
 
     CLEAR is_history.
     go_tree_imp->m_prg_info = mo_window->m_prg.
@@ -1670,8 +1761,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     LOOP AT mt_locals INTO DATA(ls_local).
+
       CHECK NOT ls_local-name CA '[]'.
       transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_local i_no_cl_twin = 'X' ).
+    ENDLOOP.
+
+    LOOP AT mt_loc_fs INTO ls_local.
+        transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_local i_no_cl_twin = 'X' ).
     ENDLOOP.
 
     LOOP AT mt_ret_exp INTO ls_local.
