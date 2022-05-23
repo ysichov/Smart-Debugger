@@ -2,7 +2,7 @@
 *& Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
-*& version: beta 0.5.185.185
+*& version: beta 0.5.250.260
 *& Git https://github.com/ysichov/SDDE
 *& RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *& EN description - https://github.com/ysichov/SDDE/wiki
@@ -61,10 +61,6 @@ CLASS lcl_source_parcer IMPLEMENTATION.
           CONTINUE.
         ENDIF.
 
-        "WRITE: / p_type, token.
-        APPEND INITIAL LINE TO rt_vars ASSIGNING FIELD-SYMBOL(<ls_var>).
-        <ls_var>-name = token.
-
         gr_procedure->statement_index = gr_statement->statement_index.
         gr_procedure->statement_type = gr_statement->statement_type.
 
@@ -80,7 +76,8 @@ CLASS lcl_source_parcer IMPLEMENTATION.
           gt_kw = gr_procedure->get_keyword( ).
           IF gt_kw = 'FIELD-SYMBOLS'.
             token = gr_procedure->get_token( offset =  2 ).
-            "WRITE: / token.
+             APPEND INITIAL LINE TO rt_vars ASSIGNING FIELD-SYMBOL(<ls_var>).
+                  <ls_var>-name = token.
           ELSE.
             WHILE 1 = 1.
               token = gr_procedure->get_token( offset =  sy-index ).
@@ -1125,6 +1122,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           RECEIVING
             p_symb_quick = DATA(quick).
       CATCH cx_tpda_varname .
+
+        "delete node id exist
+        READ TABLE i_tree->mt_vars WITH KEY name = i_name INTO DATA(l_var).
+
+        IF sy-subrc = 0.
+          delete i_tree->mt_vars index sy-tabix.
+          DATA(lo_nodes) = i_tree->tree->get_nodes( ).
+          DATA(l_node) =  lo_nodes->get_node( l_var-key ).
+          l_node->delete( ).
+        ENDIF.
+
     ENDTRY.
 
     IF i_shortname IS NOT INITIAL.
@@ -1204,7 +1212,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           l_rel = if_salv_c_node_relation=>last_child.
           lv_node = i_new_node.
 
-          READ TABLE go_tree_local->mt_vars WITH KEY name = l_name INTO DATA(l_var).
+          READ TABLE go_tree_local->mt_vars WITH KEY name = l_name INTO l_var.
           IF sy-subrc = 0.
             l_rel = if_salv_c_node_relation=>next_sibling.
             lv_node = l_var-key.
@@ -1765,6 +1773,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CHECK NOT ls_local-name CA '[]'.
       transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_local i_no_cl_twin = 'X' ).
     ENDLOOP.
+
 
     LOOP AT mt_loc_fs INTO ls_local.
       transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_local i_no_cl_twin = 'X' ).
@@ -4434,7 +4443,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
         DATA: lt_hist TYPE TABLE OF lcl_appl=>var_table_temp.
         MOVE-CORRESPONDING  mo_debugger->mt_vars_hist TO lt_hist.
-        "lcl_appl=>open_int_table( iv_name = 'History' it_tab =  lt_hist ).
+        lcl_appl=>open_int_table( iv_name = 'History' it_tab =  lt_hist ).
 
         DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
         MOVE-CORRESPONDING  mo_debugger->mt_var_step TO lt_hist2.
