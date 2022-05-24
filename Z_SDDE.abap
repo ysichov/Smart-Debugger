@@ -1537,6 +1537,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       <hist> = ls_hist.
     ENDLOOP.
 
+
     IF mo_window->m_debug_button = 'FORW'.
 
       LOOP AT mt_var_step INTO DATA(step) WHERE step = m_hist_step.
@@ -1577,6 +1578,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDIF.
       ENDLOOP.
 
+
       IF sy-subrc NE 0.
         LOOP AT mt_vars_hist INTO ls_hist WHERE step = m_hist_step. "lv_prev_step.
 
@@ -1585,6 +1587,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
              WHERE step < ls_hist-step
                AND name = ls_hist-name
                AND short = ls_hist-short.
+
+
+           " endif.
             READ TABLE lt_hist ASSIGNING <hist> WITH KEY name = ls_var-name.
             IF sy-subrc NE 0.
               APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
@@ -1595,6 +1600,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDLOOP.
       ENDIF.
     ENDIF.
+
+
 
     LOOP AT lt_hist ASSIGNING <hist>.
       IF <hist>-cl_leaf IS NOT INITIAL.
@@ -2169,6 +2176,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
       CLEAR i_state-key.
       i_state-class = m_classname.
+
       INSERT i_state INTO mt_vars_hist INDEX 1.
     ENDIF.
 
@@ -4189,12 +4197,14 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
   METHOD save_stack_vars.
     "
+
     LOOP AT mt_state INTO DATA(vars). "WHERE step = lv_step.
+
       READ TABLE mo_debugger->mt_var_step WITH KEY name = vars-name step = iv_step TRANSPORTING NO FIELDS  .
       IF sy-subrc NE 0.
         APPEND INITIAL LINE TO mo_debugger->mt_var_step ASSIGNING FIELD-SYMBOL(<step>).
         MOVE-CORRESPONDING vars TO <step>.
-        <step>-step = iv_step.
+          <step>-step = iv_step.
       ENDIF.
     ENDLOOP.
   ENDMETHOD.
@@ -4648,6 +4658,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       <vars>-key = l_root_key.
       <vars>-ref = m_variable.
       <vars>-cl_leaf = i_cl_leaf.
+      <vars>-tree = me.
     ENDIF.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling.
@@ -4948,7 +4959,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ASSIGNING <state>.
 
     IF sy-subrc <> 0.
-
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
       <state> = <vars>.
       mo_debugger->save_hist( CHANGING i_state = <state> ).
