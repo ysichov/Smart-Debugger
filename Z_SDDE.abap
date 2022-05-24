@@ -76,8 +76,8 @@ CLASS lcl_source_parcer IMPLEMENTATION.
           gt_kw = gr_procedure->get_keyword( ).
           IF gt_kw = 'FIELD-SYMBOLS'.
             token = gr_procedure->get_token( offset =  2 ).
-             APPEND INITIAL LINE TO rt_vars ASSIGNING FIELD-SYMBOL(<ls_var>).
-                  <ls_var>-name = token.
+            APPEND INITIAL LINE TO rt_vars ASSIGNING FIELD-SYMBOL(<ls_var>).
+            <ls_var>-name = token.
           ELSE.
             WHILE 1 = 1.
               token = gr_procedure->get_token( offset =  sy-index ).
@@ -462,6 +462,8 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
 
       get_table  IMPORTING i_name TYPE string
                  CHANGING  c_obj  TYPE REF TO data,
+
+      add_hist_var CHANGING cs_var TYPE lcl_appl=>var_table,
 
       get_form_parameters IMPORTING i_prg TYPE tpda_scr_prg_info ,
       get_method_parameters IMPORTING i_name TYPE tpda_event,
@@ -1127,7 +1129,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         READ TABLE i_tree->mt_vars WITH KEY name = i_name INTO DATA(l_var).
 
         IF sy-subrc = 0.
-          delete i_tree->mt_vars index sy-tabix.
+          DELETE i_tree->mt_vars INDEX sy-tabix.
           DATA(lo_nodes) = i_tree->tree->get_nodes( ).
           DATA(l_node) =  lo_nodes->get_node( l_var-key ).
           l_node->delete( ).
@@ -1499,10 +1501,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     READ TABLE mo_window->mt_stack INTO DATA(ls_stack) INDEX 1.
     MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
 
+
+    LOOP AT mt_vars_hist INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X'.
+      APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
+      <hist> = ls_hist.
+    ENDLOOP.
+
     IF ls_stack-stacklevel NE ls_step-stacklevel.
-*      go_tree_local->save_stack_vars( lv_prev_step ).
-*      go_tree_exp->save_stack_vars( lv_prev_step ).
-*      go_tree_imp->save_stack_vars( lv_prev_step ).
 
       CLEAR: m_step_delta,
        mt_ret_exp,
@@ -1513,12 +1518,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       go_tree_exp->clear( ).
       go_tree_imp->clear( ).
 
-      go_tree_local->m_leaf = go_tree_imp->m_leaf = go_tree_exp->m_leaf =  'Locals'.
-      IF go_tree_local->m_no_refresh IS INITIAL.
-        go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_life_events ) ).
-      ELSE.
-        go_tree_local->main_node_key = go_tree_local->m_locals_key.
-      ENDIF.
 
       IF ls_stack-stacklevel < ls_step-stacklevel.
         MOVE-CORRESPONDING ls_step TO ls_stack.
@@ -1531,12 +1530,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
       mo_window->show_stack( ).
     ENDIF.
-
-    LOOP AT mt_vars_hist INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X'.
-      APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
-      <hist> = ls_hist.
-    ENDLOOP.
-
 
     IF mo_window->m_debug_button = 'FORW'.
 
@@ -1589,7 +1582,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                AND short = ls_hist-short.
 
 
-           " endif.
+            " endif.
             READ TABLE lt_hist ASSIGNING <hist> WITH KEY name = ls_var-name.
             IF sy-subrc NE 0.
               APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
@@ -1603,40 +1596,31 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
 
 
-    LOOP AT lt_hist ASSIGNING <hist>.
-      IF <hist>-cl_leaf IS NOT INITIAL.
+    go_tree_local->m_leaf = go_tree_imp->m_leaf = go_tree_exp->m_leaf =  'Locals'.
+    IF go_tree_local->m_no_refresh IS INITIAL.
+      go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_life_events ) ).
+    ELSE.
+      go_tree_local->main_node_key = go_tree_local->m_locals_key.
+    ENDIF.
 
-        DATA(l_obj_name) =  get_obj_index( <hist>-name ).
-        FIND FIRST OCCURRENCE OF '-' IN <hist>-name MATCH OFFSET DATA(lv_offset).
-        DATA(l_name) =  <hist>-name+0(lv_offset).
 
-        READ TABLE mt_classes_types WITH KEY full = l_obj_name INTO DATA(l_cl_type).
-        IF sy-subrc = 0.
-          <hist>-tree->add_obj_nodes( EXPORTING iv_name = CONV #( l_cl_type-name )
-                      iv_full = l_name
-                      iv_rel = if_salv_c_node_relation=>last_child ).
+    LOOP AT lt_hist ASSIGNING <hist> WHERE leaf = 'Locals'.
+      add_hist_var( CHANGING cs_var = <hist> ).
+    ENDLOOP.
 
-          READ TABLE <hist>-tree->mt_classes_leaf WITH KEY name = l_name type = <hist>-cl_leaf INTO DATA(ls_leaf).
-          IF sy-subrc = 0.
-            <hist>-key = ls_leaf-key.
-          ENDIF.
-        ENDIF.
-      ENDIF.
 
-      ASSIGN <hist>-ref->* TO FIELD-SYMBOL(<var>).
-      CHECK sy-subrc = 0.
-      IF <hist>-key IS INITIAL.
-        <hist>-tree->add_variable( EXPORTING iv_root_name = <hist>-short
-                                          iv_full_name = <hist>-name
-                                          i_cl_leaf   = <hist>-cl_leaf
-                                 CHANGING io_var =  <var>  ).
+    IF go_tree_local->m_globals IS NOT INITIAL.
+      go_tree_local->m_leaf = 'Globals'.
+      IF go_tree_local->m_globals_key IS INITIAL.
+        go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_foreign_trade ) ).
       ELSE.
-        <hist>-tree->add_variable( EXPORTING iv_root_name = <hist>-short
-                                              iv_key = <hist>-key
-                                              iv_full_name = <hist>-name
-                                              i_cl_leaf   = <hist>-cl_leaf
-                                       CHANGING io_var =  <var>  ).
+        go_tree_local->main_node_key = go_tree_local->m_globals_key.
       ENDIF.
+    ENDIF.
+
+
+    LOOP AT lt_hist ASSIGNING <hist> WHERE leaf = 'Globals'.
+      add_hist_var( CHANGING cs_var = <hist> ).
     ENDLOOP.
 
     go_tree_imp->display( ).
@@ -1651,6 +1635,42 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     go_tree_exp->m_no_refresh = 'X'.
     go_tree_imp->m_no_refresh = 'X'.
 
+  ENDMETHOD.
+
+  METHOD add_hist_var.
+    IF cs_var-cl_leaf IS NOT INITIAL.
+
+      DATA(l_obj_name) =  get_obj_index( cs_var-name ).
+      FIND FIRST OCCURRENCE OF '-' IN cs_var-name MATCH OFFSET DATA(lv_offset).
+      DATA(l_name) =  cs_var-name+0(lv_offset).
+
+      READ TABLE mt_classes_types WITH KEY full = l_obj_name INTO DATA(l_cl_type).
+      IF sy-subrc = 0.
+        cs_var-tree->add_obj_nodes( EXPORTING iv_name = CONV #( l_cl_type-name )
+                    iv_full = l_name
+                    iv_rel = if_salv_c_node_relation=>last_child ).
+
+        READ TABLE cs_var-tree->mt_classes_leaf WITH KEY name = l_name type = cs_var-cl_leaf INTO DATA(ls_leaf).
+        IF sy-subrc = 0.
+          cs_var-key = ls_leaf-key.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+    ASSIGN cs_var-ref->* TO FIELD-SYMBOL(<var>).
+    CHECK sy-subrc = 0.
+    IF cs_var-key IS INITIAL.
+      cs_var-tree->add_variable( EXPORTING iv_root_name = cs_var-short
+                                        iv_full_name = cs_var-name
+                                        i_cl_leaf   = cs_var-cl_leaf
+                               CHANGING io_var =  <var>  ).
+    ELSE.
+      cs_var-tree->add_variable( EXPORTING iv_root_name = cs_var-short
+                                            iv_key = cs_var-key
+                                            iv_full_name = cs_var-name
+                                            i_cl_leaf   = cs_var-cl_leaf
+                                     CHANGING io_var =  <var>  ).
+    ENDIF.
   ENDMETHOD.
 
   METHOD run_script.
@@ -1798,7 +1818,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         go_tree_local->main_node_key = go_tree_local->m_globals_key.
       ENDIF.
 
-      transfer_variable( EXPORTING i_name = 'SYST' i_tree = go_tree_local ).
+      """""""""""""""transfer_variable( EXPORTING i_name = 'SYST' i_tree = go_tree_local ).
 
       LOOP AT mt_globals INTO DATA(ls_global).
 
@@ -4197,14 +4217,14 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
   METHOD save_stack_vars.
     "
-
+    "BREAK-POINT.
     LOOP AT mt_state INTO DATA(vars). "WHERE step = lv_step.
 
       READ TABLE mo_debugger->mt_var_step WITH KEY name = vars-name step = iv_step TRANSPORTING NO FIELDS  .
       IF sy-subrc NE 0.
         APPEND INITIAL LINE TO mo_debugger->mt_var_step ASSIGNING FIELD-SYMBOL(<step>).
         MOVE-CORRESPONDING vars TO <step>.
-          <step>-step = iv_step.
+        <step>-step = iv_step.
       ENDIF.
     ENDLOOP.
   ENDMETHOD.
@@ -4658,7 +4678,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       <vars>-key = l_root_key.
       <vars>-ref = m_variable.
       <vars>-cl_leaf = i_cl_leaf.
+      "BREAK-POINT.
       <vars>-tree = me.
+      <vars>-program = mo_debugger->ms_stack-program.
+      <vars>-eventtype = mo_debugger->ms_stack-eventtype.
+      <vars>-eventname = mo_debugger->ms_stack-eventname.
     ENDIF.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling.
@@ -4752,6 +4776,43 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         lv_node_key = l_var-key.
       ENDIF.
     ENDIF.
+
+
+
+
+
+    APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+    <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
+    <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
+    "
+
+    <vars>-program = mo_debugger->mo_window->m_prg-program.
+    <vars>-eventtype = mo_debugger->mo_window->m_prg-eventtype.
+    <vars>-eventname = mo_debugger->mo_window->m_prg-eventname.
+
+    <vars>-leaf = m_leaf.
+    <vars>-name = iv_fullname.
+    <vars>-short = iv_name.
+    <vars>-key = e_root_key.
+    <vars>-ref = ir_up.
+    <vars>-tree = me.
+    <vars>-cl_leaf = i_cl_leaf.
+
+    READ TABLE mt_state
+      WITH KEY name = iv_fullname
+               stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+      ASSIGNING FIELD-SYMBOL(<state>).
+
+    IF sy-subrc <> 0.
+      APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
+      <state> = <vars>.
+      mo_debugger->save_hist( CHANGING i_state = <state> ).
+    ENDIF.
+
+
+
+
+
 
     lt_component = lo_struct_descr->get_components( ).
     LOOP AT lt_component INTO ls_component. "WHERE name IS NOT INITIAL.
