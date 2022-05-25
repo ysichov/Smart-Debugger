@@ -1501,7 +1501,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     READ TABLE mo_window->mt_stack INTO DATA(ls_stack) INDEX 1.
     MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
 
-
     LOOP AT mt_vars_hist INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X'.
       APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
       <hist> = ls_hist.
@@ -1517,7 +1516,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       go_tree_local->clear( ).
       go_tree_exp->clear( ).
       go_tree_imp->clear( ).
-
 
       IF ls_stack-stacklevel < ls_step-stacklevel.
         MOVE-CORRESPONDING ls_step TO ls_stack.
@@ -1556,7 +1554,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF mo_window->m_debug_button = 'BACK'.
 
-
       LOOP AT mt_var_step INTO step WHERE step = m_hist_step.
         READ TABLE lt_hist
          WITH KEY program = step-program
@@ -1571,7 +1568,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDIF.
       ENDLOOP.
 
-
       IF sy-subrc NE 0.
         LOOP AT mt_vars_hist INTO ls_hist WHERE step = m_hist_step. "lv_prev_step.
 
@@ -1581,8 +1577,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                AND name = ls_hist-name
                AND short = ls_hist-short.
 
-
-            " endif.
             READ TABLE lt_hist ASSIGNING <hist> WITH KEY name = ls_var-name.
             IF sy-subrc NE 0.
               APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
@@ -1638,8 +1632,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD add_hist_var.
-    IF cs_var-cl_leaf IS NOT INITIAL.
 
+      find '-' in cs_var-name.
+      IF sy-subrc = 0.
+        return.
+      ENDIF.
+
+    IF cs_var-cl_leaf IS NOT INITIAL.
       DATA(l_obj_name) =  get_obj_index( cs_var-name ).
       FIND FIRST OCCURRENCE OF '-' IN cs_var-name MATCH OFFSET DATA(lv_offset).
       DATA(l_name) =  cs_var-name+0(lv_offset).
@@ -1723,11 +1722,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           go_tree_exp->clear( ).
           go_tree_imp->clear( ).
 
-          go_tree_local->m_leaf = go_tree_imp->m_leaf = go_tree_exp->m_leaf =  'Locals'.
+
         ELSE.
           CLEAR lv_stack_changed.
           m_step_delta = 1.
         ENDIF.
+        go_tree_local->m_leaf = go_tree_imp->m_leaf = go_tree_exp->m_leaf =  'Locals'.
       CATCH cx_tpda_src_info.
     ENDTRY.
 
@@ -1801,8 +1801,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_local i_no_cl_twin = 'X' ).
     ENDLOOP.
 
-
     LOOP AT mt_loc_fs INTO ls_local.
+
       transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_local i_no_cl_twin = 'X' ).
     ENDLOOP.
 
@@ -4217,7 +4217,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
   METHOD save_stack_vars.
     "
-    "BREAK-POINT.
+    "
     LOOP AT mt_state INTO DATA(vars). "WHERE step = lv_step.
 
       READ TABLE mo_debugger->mt_var_step WITH KEY name = vars-name step = iv_step TRANSPORTING NO FIELDS  .
@@ -4678,7 +4678,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       <vars>-key = l_root_key.
       <vars>-ref = m_variable.
       <vars>-cl_leaf = i_cl_leaf.
-      "BREAK-POINT.
+      "
       <vars>-tree = me.
       <vars>-program = mo_debugger->ms_stack-program.
       <vars>-eventtype = mo_debugger->ms_stack-eventtype.
@@ -4777,14 +4777,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-
-
-
-
     APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
     <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
     <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
-    "
 
     <vars>-program = mo_debugger->mo_window->m_prg-program.
     <vars>-eventtype = mo_debugger->mo_window->m_prg-eventtype.
@@ -4808,10 +4803,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       <state> = <vars>.
       mo_debugger->save_hist( CHANGING i_state = <state> ).
     ENDIF.
-
-
-
-
 
 
     lt_component = lo_struct_descr->get_components( ).
