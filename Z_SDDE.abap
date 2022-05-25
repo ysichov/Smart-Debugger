@@ -496,6 +496,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
           m_object        TYPE REF TO object,
           m_hide          TYPE x,
           m_globals       TYPE x,
+          m_syst          TYPE x,
           m_class_data    TYPE x,
           m_ldb           TYPE x,
           m_changed       TYPE x,
@@ -1633,10 +1634,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD add_hist_var.
 
-      find '-' in cs_var-name.
-      IF sy-subrc = 0.
-        return.
-      ENDIF.
+    FIND '-' IN cs_var-name.
+    IF sy-subrc = 0.
+      RETURN.
+    ENDIF.
 
     IF cs_var-cl_leaf IS NOT INITIAL.
       DATA(l_obj_name) =  get_obj_index( cs_var-name ).
@@ -1818,7 +1819,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         go_tree_local->main_node_key = go_tree_local->m_globals_key.
       ENDIF.
 
-      """""""""""""""transfer_variable( EXPORTING i_name = 'SYST' i_tree = go_tree_local ).
+      
+      IF go_tree_local->m_syst IS NOT INITIAL.
+        transfer_variable( EXPORTING i_name = 'SYST' i_tree = go_tree_local ).
+      ENDIF.
 
       LOOP AT mt_globals INTO DATA(ls_global).
 
@@ -4166,6 +4170,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
        position = if_salv_c_function_position=>right_of_salv_functions ).
 
     lo_functions->add_function(
+       name     = 'SYST'
+       icon     = CONV #( icon_foreign_trade )
+       text     = 'SYST'
+       tooltip  = 'Show/hide SY sructure'
+       position = if_salv_c_function_position=>right_of_salv_functions ).
+
+    lo_functions->add_function(
        name     = 'CLASS_DATA'
        icon     = CONV #( icon_oo_class_attribute )
        text     = 'CLASS-DATA'
@@ -4456,6 +4467,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         mo_debugger->run_script( ).
       WHEN 'GLOBALS'."Show/hide global variables
         m_globals = m_globals BIT-XOR c_mask.
+        mo_debugger->run_script( ).
+      WHEN 'SYST'."Show/hide sy structure
+        m_syst = m_syst BIT-XOR c_mask.
         mo_debugger->run_script( ).
       WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
         m_class_data = m_class_data BIT-XOR c_mask.
