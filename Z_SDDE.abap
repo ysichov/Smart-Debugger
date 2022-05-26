@@ -1803,7 +1803,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDLOOP.
 
     LOOP AT mt_loc_fs INTO ls_local.
-
       transfer_variable( EXPORTING i_name =  ls_local-name i_tree = go_tree_local i_no_cl_twin = 'X' ).
     ENDLOOP.
 
@@ -1812,6 +1811,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDLOOP.
 
     IF go_tree_local->m_globals IS NOT INITIAL.
+
       go_tree_local->m_leaf = 'Globals'.
       IF go_tree_local->m_globals_key IS INITIAL.
         go_tree_local->add_node( iv_name = go_tree_local->m_leaf iv_icon = CONV #( icon_foreign_trade ) ).
@@ -1819,25 +1819,30 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         go_tree_local->main_node_key = go_tree_local->m_globals_key.
       ENDIF.
 
-      
-      IF go_tree_local->m_syst IS NOT INITIAL.
-        transfer_variable( EXPORTING i_name = 'SYST' i_tree = go_tree_local ).
-      ENDIF.
-
       LOOP AT mt_globals INTO DATA(ls_global).
-
-
         "READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
         "IF sy-subrc = 0.
         transfer_variable( EXPORTING i_name = ls_global-name i_tree = go_tree_local ).
         "ENDIF.
+
+        IF go_tree_local->m_syst IS NOT INITIAL.
+          go_tree_local->m_leaf = 'SYST'.
+
+          transfer_variable( EXPORTING i_name = 'SYST' i_tree = go_tree_local ).
+        ELSE.
+          READ TABLE go_tree_local->mt_vars WITH KEY name = 'SYST' INTO DATA(ls_var).
+          IF sy-subrc = 0.
+            go_tree_local->delete_node( ls_var-key ).
+            DELETE go_tree_local->mt_vars WHERE leaf =  'SYST'.
+          ENDIF.
+        ENDIF.
+
       ENDLOOP.
     ELSE.
       IF go_tree_local->m_globals_key IS NOT INITIAL.
         go_tree_local->delete_node( go_tree_local->m_globals_key ).
-        DELETE go_tree_local->mt_vars WHERE leaf = go_tree_local->m_leaf.
-
         CLEAR go_tree_local->m_globals_key.
+        DELETE go_tree_local->mt_vars WHERE leaf = 'Globals' OR leaf = 'SYST'.
       ENDIF.
     ENDIF.
 
@@ -4461,25 +4466,20 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     CONSTANTS: c_mask TYPE x VALUE '01'.
     CASE e_salv_function.
       WHEN 'REFRESH'."
-        mo_debugger->run_script( ).
+        "mo_debugger->run_script( ).
       WHEN 'INITIALS'."Show/hide empty variables
         m_hide = m_hide BIT-XOR c_mask.
-        mo_debugger->run_script( ).
       WHEN 'GLOBALS'."Show/hide global variables
         m_globals = m_globals BIT-XOR c_mask.
-        mo_debugger->run_script( ).
       WHEN 'SYST'."Show/hide sy structure
         m_syst = m_syst BIT-XOR c_mask.
-        mo_debugger->run_script( ).
       WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
         m_class_data = m_class_data BIT-XOR c_mask.
-        mo_debugger->run_script( ).
       WHEN 'CHANGED'."Show only changed values/all values
         m_changed = m_changed BIT-XOR c_mask.
-        mo_debugger->run_script( ).
       WHEN 'LDB'."Show/hide LDB variables (globals)
         m_ldb = m_ldb BIT-XOR c_mask.
-        mo_debugger->run_script( ).
+
       WHEN 'TEST'.
 
         "lcl_appl=>open_int_table( iv_name = 'Classes' it_tab =  mo_debugger->mt_classes_types ).
@@ -4494,6 +4494,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         lcl_appl=>open_int_table( iv_name = 'Steps' it_tab =  lt_hist2 ).
 
     ENDCASE.
+
+    IF e_salv_function NE 'TEST'.
+      mo_debugger->run_script( ).
+    ENDIF.
   ENDMETHOD.
 
   METHOD hndl_double_click.
