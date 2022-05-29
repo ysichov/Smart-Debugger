@@ -137,16 +137,16 @@ CLASS lcl_appl DEFINITION.
            END OF var_table,
 
            BEGIN OF var_table_temp,
-             step  TYPE i,
-             stack TYPE i,
+             step          TYPE i,
+             stack         TYPE i,
              program(40)   TYPE c,
              eventtype(30) TYPE c,
              eventname(61) TYPE c,
-             first TYPE xfeld,
-             leaf  TYPE string,
-             name  TYPE string,
-             short TYPE string,
-             class TYPE string, "?
+             first         TYPE xfeld,
+             leaf          TYPE string,
+             name          TYPE string,
+             short         TYPE string,
+             class         TYPE string, "?
            END OF var_table_temp,
 
            BEGIN OF var_table_h,
@@ -304,10 +304,10 @@ ENDCLASS.
 CLASS lcl_alv_common DEFINITION.
   PUBLIC SECTION.
     CONSTANTS: c_white(4) TYPE x VALUE '00000001'. "white background
-               "c_grey(4)  TYPE x VALUE '00000003', "gray background
-               "c_green(4) TYPE x VALUE '00000216', "green +underline
-               "c_blue(4)  TYPE x VALUE '00000209', " blue font +underline
-               "c_bold(4)  TYPE x VALUE '00000020'.
+    "c_grey(4)  TYPE x VALUE '00000003', "gray background
+    "c_green(4) TYPE x VALUE '00000216', "green +underline
+    "c_blue(4)  TYPE x VALUE '00000209', " blue font +underline
+    "c_bold(4)  TYPE x VALUE '00000020'.
 
     CLASS-METHODS:
       refresh IMPORTING i_obj TYPE REF TO cl_gui_alv_grid i_layout TYPE lvc_s_layo OPTIONAL i_soft TYPE char01 OPTIONAL,
@@ -1317,7 +1317,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ASSIGN i_quick-quickdata->* TO <ls_symobjref>.
     IF <ls_symobjref>-instancename <> '{O:initial}'.
 
-
       READ TABLE mt_obj WITH KEY name = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
       IF sy-subrc = 0.
         IF i_no_cl_twin IS INITIAL.
@@ -1855,6 +1854,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
+    read_class_globals( ).
+
     IF mo_tree_local->m_no_refresh IS INITIAL.
       mo_tree_local->mt_state = mo_tree_local->mt_vars.
     ENDIF.
@@ -2086,49 +2087,57 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       LOOP AT lt_compo_tmp ASSIGNING <compo> WHERE type = '+'.
         IF l_class NE <compo>-class.
           l_class = <compo>-class.
-          mo_tree_local->add_obj_var( EXPORTING iv_name = CONV #( <compo>-class ) RECEIVING er_key = DATA(l_key) ).
+
+          READ TABLE mt_obj WITH KEY name = l_class TRANSPORTING NO FIELDS.
+          IF sy-subrc ne 0.
+            mo_tree_local->add_obj_var( EXPORTING iv_name = CONV #( <compo>-class ) RECEIVING er_key = DATA(l_key) ).
+            APPEND INITIAL LINE TO mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
+            <obj>-name = l_class.
+          ENDIF.
         ENDIF.
         transfer_variable( EXPORTING i_name = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
                                      i_shortname = CONV #( <compo>-name )
                                       i_new_node = l_key
                                       i_tree = mo_tree_local ).
       ENDLOOP.
-****
-****CALL METHOD CL_TPDA_SCRIPT_ABAPDESCR=>GET_LOADED_PROGRAMS
-****  IMPORTING
-****    p_progs_it = data(lt_progs).
-****
-****delete lt_progs where sys = abap_true.
-****
-****loop at lt_progs into data(ls_prog) where name+30(2) = 'CP' and ( name+0(1) = 'Z' OR name+0(1) = 'Y' ) .
-****
-**** clear ls_prog-name+30(2).
-**** replace all OCCURRENCES OF '=' in ls_prog-name WITH ''.
-****
-****data refc type ref to CL_ABAP_OBJECTDESCR.
-****CALL METHOD cl_abap_classdescr=>describe_by_name
-****  EXPORTING
-****    p_name         = ls_prog-name
-****  receiving
-****    p_descr_ref    = data(ref)
-*****  EXCEPTIONS
-*****    type_not_found = 1
-*****    others         = 2
-****        .
-**** refc ?= ref.
-****
-****        mo_tree_local->add_obj_var( EXPORTING iv_name = CONV #( ls_prog-name ) RECEIVING er_key = l_key ).
-****
-****loop at REFc->ATTRIBUTES into data(ls_atr).
-****  transfer_variable( EXPORTING i_name = CONV #( |{ ls_prog-name }=>{ ls_Atr-name }| )
-****                                     i_shortname = CONV #( ls_Atr-name )
-****                                      i_new_node = l_key
-****                                      i_tree = mo_tree_local ).
-****  endloop.
-****
-****
 
-****ENDLOOP.
+
+      "global classes
+      CALL METHOD cl_tpda_script_abapdescr=>get_loaded_programs
+        IMPORTING
+          p_progs_it = DATA(lt_progs).
+
+      DELETE lt_progs WHERE sys = abap_true.
+
+      LOOP AT lt_progs INTO DATA(ls_prog) WHERE name+30(2) = 'CP' AND ( name+0(1) = 'Z' OR name+0(1) = 'Y' ) .
+
+        CLEAR ls_prog-name+30(2).
+        REPLACE ALL OCCURRENCES OF '=' IN ls_prog-name WITH ''.
+
+        DATA refc TYPE REF TO cl_abap_objectdescr.
+        CALL METHOD cl_abap_classdescr=>describe_by_name
+          EXPORTING
+            p_name         = ls_prog-name
+          RECEIVING
+            p_descr_ref    = DATA(ref)
+          EXCEPTIONS
+            type_not_found = 1
+            OTHERS         = 2.
+
+        refc ?= ref.
+
+        mo_tree_local->add_obj_var( EXPORTING iv_name = CONV #( ls_prog-name ) RECEIVING er_key = l_key ).
+
+        LOOP AT REFc->attributes INTO DATA(ls_atr).
+          transfer_variable( EXPORTING i_name = CONV #( |{ ls_prog-name }=>{ ls_Atr-name }| )
+                                             i_shortname = CONV #( ls_Atr-name )
+                                              i_new_node = l_key
+                                              i_tree = mo_tree_local ).
+        ENDLOOP.
+
+
+
+      ENDLOOP.
 
     ELSE.
       IF mo_tree_local->m_class_key IS NOT INITIAL.
