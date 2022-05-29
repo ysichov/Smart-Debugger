@@ -127,7 +127,7 @@ CLASS lcl_appl DEFINITION.
              eventname(61) TYPE c,
              first         TYPE xfeld,
              leaf          TYPE string,
-             name          TYPE string,
+             name(60)      ,
              short         TYPE string,
              key           TYPE salv_de_node_key,
              cl_leaf       TYPE int4,
@@ -1649,12 +1649,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF cs_var-cl_leaf IS NOT INITIAL.
       DATA(l_obj_name) =  get_obj_index( cs_var-name ).
       FIND FIRST OCCURRENCE OF '-' IN cs_var-name MATCH OFFSET DATA(lv_offset).
-      DATA(l_name) =  cs_var-name+0(lv_offset).
+      data: l_name(60).
+      l_name =  cs_var-name+0(lv_offset).
 
       READ TABLE mt_classes_types WITH KEY full = l_obj_name INTO DATA(l_cl_type).
       IF sy-subrc = 0.
         cs_var-tree->add_obj_nodes( EXPORTING iv_name = CONV #( l_cl_type-name )
-                    iv_full = l_name
+                    iv_full = conv #( l_name )
                     iv_rel = if_salv_c_node_relation=>last_child ).
 
         READ TABLE cs_var-tree->mt_classes_leaf WITH KEY name = l_name type = cs_var-cl_leaf INTO DATA(ls_leaf).
@@ -1668,13 +1669,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     CHECK sy-subrc = 0.
     IF cs_var-key IS INITIAL.
       cs_var-tree->add_variable( EXPORTING iv_root_name = cs_var-short
-                                        iv_full_name = cs_var-name
+                                        iv_full_name = conv #( cs_var-name )
                                         i_cl_leaf   = cs_var-cl_leaf
                                CHANGING io_var =  <var>  ).
     ELSE.
       cs_var-tree->add_variable( EXPORTING iv_root_name = cs_var-short
                                             iv_key = cs_var-key
-                                            iv_full_name = cs_var-name
+                                            iv_full_name = conv #( cs_var-name )
                                             i_cl_leaf   = cs_var-cl_leaf
                                      CHANGING io_var =  <var>  ).
     ENDIF.
@@ -1751,8 +1752,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                                  iv_type = CONV #( mo_window->m_prg-eventtype )
                                                  iv_name = CONV #( mo_window->m_prg-eventname ) ).
 
-
-
       "Are we in class
       DATA: l_clref  TYPE REF TO cl_abap_classdescr.
       CALL METHOD cl_abap_classdescr=>describe_by_name
@@ -1803,6 +1802,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSE.
       mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
     ENDIF.
+
 
     LOOP AT mt_locals INTO DATA(ls_local).
 
@@ -4660,6 +4660,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
 
               DELETE mt_vars WHERE name = l_full_name.
+              l_name = l_full_name && '-'.
+              data lv_len type i.
+              lv_len = strlen( l_name ).
+              DELETE mt_vars WHERE name CS l_name.
               l_node->delete( ).
               RETURN.
             ENDIF.
