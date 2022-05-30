@@ -392,6 +392,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
 
     DATA: mt_obj           TYPE TABLE OF t_obj,
           mt_locals        TYPE tpda_scr_locals_it,
+          mt_loc_fs        TYPE tpda_scr_locals_it, "locals Field Symbols
           mt_globals       TYPE tpda_scr_globals_it,
 
           mt_ret_exp       TYPE tpda_scr_locals_it,
@@ -1649,13 +1650,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF cs_var-cl_leaf IS NOT INITIAL.
       DATA(l_obj_name) =  get_obj_index( cs_var-name ).
       FIND FIRST OCCURRENCE OF '-' IN cs_var-name MATCH OFFSET DATA(lv_offset).
-      data: l_name(60).
+      DATA: l_name(60).
       l_name =  cs_var-name+0(lv_offset).
 
       READ TABLE mt_classes_types WITH KEY full = l_obj_name INTO DATA(l_cl_type).
       IF sy-subrc = 0.
         cs_var-tree->add_obj_nodes( EXPORTING iv_name = CONV #( l_cl_type-name )
-                    iv_full = conv #( l_name )
+                    iv_full = CONV #( l_name )
                     iv_rel = if_salv_c_node_relation=>last_child ).
 
         READ TABLE cs_var-tree->mt_classes_leaf WITH KEY name = l_name type = cs_var-cl_leaf INTO DATA(ls_leaf).
@@ -1669,21 +1670,20 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     CHECK sy-subrc = 0.
     IF cs_var-key IS INITIAL.
       cs_var-tree->add_variable( EXPORTING iv_root_name = cs_var-short
-                                        iv_full_name = conv #( cs_var-name )
+                                        iv_full_name = CONV #( cs_var-name )
                                         i_cl_leaf   = cs_var-cl_leaf
                                CHANGING io_var =  <var>  ).
     ELSE.
       cs_var-tree->add_variable( EXPORTING iv_root_name = cs_var-short
                                             iv_key = cs_var-key
-                                            iv_full_name = conv #( cs_var-name )
+                                            iv_full_name = CONV #( cs_var-name )
                                             i_cl_leaf   = cs_var-cl_leaf
                                      CHANGING io_var =  <var>  ).
     ENDIF.
   ENDMETHOD.
 
   METHOD run_script.
-    DATA:lv_stack_changed TYPE xfeld,
-         mt_loc_fs        TYPE tpda_scr_locals_it. "locals Field Symbols .
+    DATA:lv_stack_changed TYPE xfeld.
 
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = mo_window->m_prg ).
@@ -1731,12 +1731,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           mo_tree_local->clear( ).
           mo_tree_exp->clear( ).
           mo_tree_imp->clear( ).
-
-
         ELSE.
           CLEAR lv_stack_changed.
           m_step_delta = 1.
         ENDIF.
+
         mo_tree_local->m_leaf = mo_tree_imp->m_leaf = mo_tree_exp->m_leaf =  'Locals'.
       CATCH cx_tpda_src_info.
     ENDTRY.
@@ -1809,6 +1808,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CHECK NOT ls_local-name CA '[]'.
       transfer_variable( EXPORTING i_name =  ls_local-name i_tree = mo_tree_local i_no_cl_twin = 'X' ).
     ENDLOOP.
+
 
     LOOP AT mt_loc_fs INTO ls_local.
       transfer_variable( EXPORTING i_name =  ls_local-name i_tree = mo_tree_local i_no_cl_twin = 'X' ).
@@ -2089,7 +2089,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           l_class = <compo>-class.
 
           READ TABLE mt_obj WITH KEY name = l_class TRANSPORTING NO FIELDS.
-          IF sy-subrc ne 0.
+          IF sy-subrc NE 0.
             mo_tree_local->add_obj_var( EXPORTING iv_name = CONV #( <compo>-class ) RECEIVING er_key = DATA(l_key) ).
             APPEND INITIAL LINE TO mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
             <obj>-name = l_class.
@@ -4251,8 +4251,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD save_stack_vars.
-    "
-    "
+
     LOOP AT mt_state INTO DATA(vars). "WHERE step = lv_step.
 
       READ TABLE mo_debugger->mt_var_step WITH KEY name = vars-name step = iv_step TRANSPORTING NO FIELDS  .
@@ -4544,7 +4543,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           lr_struc TYPE REF TO data,
           l_name   TYPE string,
           l_key    TYPE salv_de_node_key,
-          l_rel    TYPE salv_de_node_relation.
+          l_rel    TYPE salv_de_node_relation,
+          lv_len   TYPE i..
 
     FIELD-SYMBOLS: <new>      TYPE any,
                    <tab_from> TYPE ANY TABLE,
@@ -4601,29 +4601,35 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
       DATA(lo_nodes) = tree->get_nodes( ).
       DATA(l_node) =  lo_nodes->get_node( l_var-key ).
-      DATA r_row TYPE REF TO data.
+     DATA r_row TYPE REF TO data.
       DATA r_ref TYPE REF TO data.
 
       IF sy-subrc = 0.
         TRY.
             r_row = l_node->get_data_row( ).
             ASSIGN r_row->* TO FIELD-SYMBOL(<row>).
-            ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
+            "ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
             ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
-            r_ref = <ref>.
-            ASSIGN r_ref->* TO FIELD-SYMBOL(<old_value>).
+            "r_ref = <ref>.
+            ASSIGN l_var-ref->* TO FIELD-SYMBOL(<old_value>).
+
             IF <old_value> NE <new_value>.
               l_key = l_var-key.
               l_rel = if_salv_c_node_relation=>next_sibling.
               IF <kind> NE 'v' AND <kind> NE 'u'.
                 DELETE mt_vars WHERE name = l_full_name.
+                l_name = l_full_name && '-'.
+                lv_len = strlen( l_name ).
+                DELETE mt_vars WHERE name CS l_name.
               ENDIF.
             ELSE.
 
               IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
                 IF <kind> NE 'v' AND <kind> NE 'u'.
-
                   DELETE mt_vars WHERE name = l_full_name.
+                  l_name = l_full_name && '-'.
+                  lv_len = strlen( l_name ).
+                  DELETE mt_vars WHERE name CS l_name.
                   l_node->delete( ).
                 ENDIF.
               ENDIF.
@@ -4639,18 +4645,28 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
               IF sy-subrc = 0.
                 ASSIGN <state>-ref->* TO <old_value>.
                 IF <old_value> = <new_value>.
+                  """""""
                   IF <kind> NE 'v' AND <kind> NE 'u'.
-                    IF m_changed IS NOT INITIAL.
-                      DELETE mt_vars WHERE name = l_full_name.
-                      l_node->delete( ).
-                      RETURN.
-                    ELSE.
-                      RETURN.
-                    ENDIF.
+                  IF m_changed IS NOT INITIAL.
+                    DELETE mt_vars WHERE name = l_full_name.
+                    l_name = l_full_name && '-'.
+                    lv_len = strlen( l_name ).
+                    DELETE mt_vars WHERE name CS l_name.
+                    l_node->delete( ).
+                    RETURN.
+                  ELSE.
+                    RETURN.
+                  ENDIF.
                   ENDIF.
                 ELSE.
+
+                  "<old_value> = <new_value>.
+
                   IF <kind> NE 'v' AND <kind> NE 'u'.
                     DELETE mt_vars WHERE name = l_full_name.
+                    l_name = l_full_name && '-'.
+                    lv_len = strlen( l_name ).
+                    DELETE mt_vars WHERE name CS l_name.
                     l_node->delete( ).
                   ENDIF.
                 ENDIF.
@@ -4661,7 +4677,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
               DELETE mt_vars WHERE name = l_full_name.
               l_name = l_full_name && '-'.
-              data lv_len type i.
               lv_len = strlen( l_name ).
               DELETE mt_vars WHERE name CS l_name.
               l_node->delete( ).
@@ -4673,19 +4688,30 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ELSE.
 
       IF m_changed IS NOT INITIAL."check changed
+
         READ TABLE mt_state
           WITH KEY name = l_full_name
                    stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+                    program = mo_debugger->mo_window->mt_stack[ 1 ]-program
+                    eventtype = mo_debugger->mo_window->mt_stack[ 1 ]-eventtype
+                    eventname = mo_debugger->mo_window->mt_stack[ 1 ]-eventname
            ASSIGNING <state>.
 
         IF sy-subrc = 0.
           ASSIGN <state>-ref->* TO <old_value>.
           IF <old_value> = <new_value>.
             DELETE mt_vars WHERE name = l_full_name.
+            l_name = l_full_name && '-'.
+            lv_len = strlen( l_name ).
+            DELETE mt_vars WHERE name CS l_name.
             IF l_node IS NOT INITIAL.
               l_node->delete( ).
             ENDIF.
             RETURN.
+          ELSE.
+
+            "<old_value> = <new_value>.
+
           ENDIF.
         ENDIF.
       ENDIF.
@@ -4711,20 +4737,22 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
      iv_parent_name = l_name
      i_cl_leaf = i_cl_leaf ).
 
-    READ TABLE mt_vars WITH KEY name = l_full_name TRANSPORTING NO FIELDS.
+
+    READ TABLE mt_vars WITH KEY name = l_full_name ASSIGNING FIELD-SYMBOL(<vars>).
     IF sy-subrc NE 0.
-      APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+      APPEND INITIAL LINE TO mt_vars ASSIGNING <vars>.
+      <vars>-key = l_root_key.
+    ENDIF.
       <vars>-leaf = m_leaf.
       <vars>-name = l_full_name.
-      <vars>-key = l_root_key.
+
       <vars>-ref = m_variable.
       <vars>-cl_leaf = i_cl_leaf.
-      "
       <vars>-tree = me.
       <vars>-program = mo_debugger->ms_stack-program.
       <vars>-eventtype = mo_debugger->ms_stack-eventtype.
       <vars>-eventname = mo_debugger->ms_stack-eventname.
-    ENDIF.
+
 
     IF l_rel = if_salv_c_node_relation=>next_sibling.
       IF <kind> NE 'v' AND <kind> NE 'u'.
@@ -4801,7 +4829,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ls_tree-fullname = iv_fullname.
     IF lv_text IS NOT INITIAL.
 
-      READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
+      "READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
+
+      READ table mt_vars with key name = iv_fullname ASSIGNING FIELD-SYMBOL(<vars>).
       IF sy-subrc NE 0.
         e_root_key = m_new_node = lv_node_key =
           tree->get_nodes( )->add_node(
@@ -4813,12 +4843,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             text           = lv_text
             folder         = abap_true
           )->get_key( ).
-      ELSE.
-        lv_node_key = l_var-key.
+           APPEND INITIAL LINE TO mt_vars ASSIGNING <vars>.
+           <vars>-key = e_root_key.
+          ELSE.
+        lv_node_key = <vars>-key.
       ENDIF.
     ENDIF.
 
-    APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
     <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
     <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
 
@@ -4829,22 +4860,28 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     <vars>-leaf = m_leaf.
     <vars>-name = iv_fullname.
     <vars>-short = iv_name.
-    <vars>-key = e_root_key.
+
     <vars>-ref = ir_up.
     <vars>-tree = me.
     <vars>-cl_leaf = i_cl_leaf.
 
+
     READ TABLE mt_state
       WITH KEY name = iv_fullname
+               program = mo_debugger->mo_window->mt_stack[ 1 ]-program
+                      eventtype = mo_debugger->mo_window->mt_stack[ 1 ]-eventtype
+                      eventname = mo_debugger->mo_window->mt_stack[ 1 ]-eventname
                stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
       ASSIGNING FIELD-SYMBOL(<state>).
 
     IF sy-subrc <> 0.
+
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
       <state> = <vars>.
       mo_debugger->save_hist( CHANGING i_state = <state> ).
+    else.
+      <state> = <vars>.
     ENDIF.
-
 
     lt_component = lo_struct_descr->get_components( ).
     LOOP AT lt_component INTO ls_component. "WHERE name IS NOT INITIAL.
@@ -4944,6 +4981,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
           r_ref = <ref>.
           ASSIGN r_ref->* TO FIELD-SYMBOL(<old_value>).
+
           IF <old_value> NE <new_value>.
             l_key = l_var-key.
             l_rel = if_salv_c_node_relation=>next_sibling.
@@ -4957,6 +4995,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 l_node->delete( ).
               ENDIF.
             ENDIF.
+
             READ TABLE mt_state
              WITH KEY name = iv_fullname
                       program = mo_debugger->mo_window->mt_stack[ 1 ]-program
@@ -4974,6 +5013,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 ENDIF.
                 RETURN.
               ELSE.
+
                 <state>-ref = ir_up.
                 mo_debugger->save_hist( CHANGING i_state = <state> ).
               ENDIF.
@@ -5009,6 +5049,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             RETURN.
           ENDIF.
         ELSE.
+
           <state>-ref = ir_up.
           mo_debugger->save_hist( CHANGING i_state = <state> ).
         ENDIF.
@@ -5045,15 +5086,23 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     <vars>-tree = me.
     <vars>-cl_leaf = i_cl_leaf.
 
+
     READ TABLE mt_state
       WITH KEY name = iv_fullname
                stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+                program = mo_debugger->mo_window->mt_stack[ 1 ]-program
+                eventtype = mo_debugger->mo_window->mt_stack[ 1 ]-eventtype
+                eventname = mo_debugger->mo_window->mt_stack[ 1 ]-eventname
+
       ASSIGNING <state>.
 
     IF sy-subrc <> 0.
+
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
       <state> = <vars>.
       mo_debugger->save_hist( CHANGING i_state = <state> ).
+    else.
+      <state> = <vars>.
     ENDIF.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
@@ -5108,6 +5157,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
           r_ref = <ref>.
           ASSIGN r_ref->* TO FIELD-SYMBOL(<old_value>).
+
           IF <old_value> NE <new_value>.
             l_key = l_var-key.
             l_rel = if_salv_c_node_relation=>next_sibling.
@@ -5121,9 +5171,14 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 l_node->delete( ).
               ENDIF.
             ENDIF.
+
             READ TABLE mt_state
               WITH KEY name = iv_fullname
                        stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+                        program = mo_debugger->mo_window->mt_stack[ 1 ]-program
+                      eventtype = mo_debugger->mo_window->mt_stack[ 1 ]-eventtype
+                      eventname = mo_debugger->mo_window->mt_stack[ 1 ]-eventname
+
               ASSIGNING FIELD-SYMBOL(<state>).
 
             IF sy-subrc = 0.
@@ -5135,6 +5190,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 ENDIF.
                 RETURN.
               ELSE.
+
                 <state>-ref = ir_up.
                 mo_debugger->save_hist( CHANGING i_state = <state> ).
               ENDIF.
@@ -5153,6 +5209,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       READ TABLE mt_state
         WITH KEY name = iv_fullname
                  stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+                 program = mo_debugger->mo_window->mt_stack[ 1 ]-program
+                 eventtype = mo_debugger->mo_window->mt_stack[ 1 ]-eventtype
+                 eventname = mo_debugger->mo_window->mt_stack[ 1 ]-eventname
+
         ASSIGNING <state>.
 
       IF sy-subrc = 0.
@@ -5166,6 +5226,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             RETURN.
           ENDIF.
         ELSE.
+
           <state>-ref = ir_up.
           mo_debugger->save_hist( CHANGING i_state = <state> ).
         ENDIF.
@@ -5206,6 +5267,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         READ TABLE mt_state
           WITH KEY name = iv_fullname
                    stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+                   program = mo_debugger->mo_window->mt_stack[ 1 ]-program
+                   eventtype = mo_debugger->mo_window->mt_stack[ 1 ]-eventtype
+                   eventname = mo_debugger->mo_window->mt_stack[ 1 ]-eventname
           ASSIGNING <state>.
 
         IF sy-subrc <> 0.
