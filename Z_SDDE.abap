@@ -4841,8 +4841,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
       <state> = <vars>.
       mo_debugger->save_hist( CHANGING i_state = <state> ).
-*    ELSE.
-*      <state> = <vars>.
+    ELSE.
+      <state> = <vars>.
     ENDIF.
 
     lt_component = lo_struct_descr->get_components( ).
@@ -4927,6 +4927,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDIF.
 
     l_rel = iv_rel.
+
     READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
     IF sy-subrc = 0.
 
@@ -4938,10 +4939,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       TRY.
           r_row = l_node->get_data_row( ).
           ASSIGN r_row->* TO FIELD-SYMBOL(<row>).
-          ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
+          "ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
+          ASSIGN l_var-ref->* TO FIELD-SYMBOL(<old_value>).
           ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
-          r_ref = <ref>.
-          ASSIGN r_ref->* TO FIELD-SYMBOL(<old_value>).
+          "r_ref = <ref>.
+          "ASSIGN r_ref->* TO FIELD-SYMBOL(<old_value>).
 
           IF <old_value> NE <new_value>.
             l_key = l_var-key.
@@ -5055,8 +5057,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
       <state> = <vars>.
       mo_debugger->save_hist( CHANGING i_state = <state> ).
-***    ELSE.
-***      <state> = <vars>.
+    ELSE.
+      <state> = <vars>.
     ENDIF.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
