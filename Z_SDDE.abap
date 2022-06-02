@@ -413,7 +413,6 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mt_classes_types TYPE TABLE OF lcl_appl=>t_classes_types,
           m_classname      TYPE string,
 
-
           mo_window        TYPE REF TO lcl_window,
           mv_f7_stop       TYPE xfeld,
           m_f6_level       TYPE i,
@@ -4489,6 +4488,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDCASE.
 
     IF e_salv_function NE 'TEST'.
+
       mo_debugger->run_script( ).
     ENDIF.
   ENDMETHOD.
@@ -4841,8 +4841,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
       <state> = <vars>.
       mo_debugger->save_hist( CHANGING i_state = <state> ).
-    ELSE.
-      <state> = <vars>.
+*    ELSE.
+*      <state> = <vars>.
     ENDIF.
 
     lt_component = lo_struct_descr->get_components( ).
@@ -4974,7 +4974,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 ENDIF.
                 RETURN.
               ELSE.
-
                 <state>-ref = ir_up.
                 mo_debugger->save_hist( CHANGING i_state = <state> ).
               ENDIF.
@@ -5009,7 +5008,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             RETURN.
           ENDIF.
         ELSE.
-
           <state>-ref = ir_up.
           mo_debugger->save_hist( CHANGING i_state = <state> ).
         ENDIF.
@@ -5057,8 +5055,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
       <state> = <vars>.
       mo_debugger->save_hist( CHANGING i_state = <state> ).
-    ELSE.
-      <state> = <vars>.
+***    ELSE.
+***      <state> = <vars>.
     ENDIF.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
@@ -5142,7 +5140,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 ENDIF.
                 RETURN.
               ELSE.
-
                 <state>-ref = ir_up.
                 mo_debugger->save_hist( CHANGING i_state = <state> ).
               ENDIF.
@@ -5177,7 +5174,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             RETURN.
           ENDIF.
         ELSE.
-
           <state>-ref = ir_up.
           mo_debugger->save_hist( CHANGING i_state = <state> ).
         ENDIF.
@@ -5224,7 +5220,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ASSIGNING <state>.
 
         IF sy-subrc <> 0.
-
           APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
           <state> = <vars>.
           mo_debugger->save_hist( CHANGING i_state = <state> ).
