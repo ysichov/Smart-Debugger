@@ -532,7 +532,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
           tree            TYPE REF TO cl_salv_tree.
 
     METHODS constructor IMPORTING i_header   TYPE clike DEFAULT 'View'
-                                  i_type     TYPE string OPTIONAL
+                                  i_type     TYPE xfeld OPTIONAL
                                   i_cont     TYPE REF TO cl_gui_container OPTIONAL
                                   i_debugger TYPE REF TO lcl_debugger_script OPTIONAL.
 
@@ -549,7 +549,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
     METHODS clear.
     METHODS save_stack_vars IMPORTING iv_step TYPE i.
 
-    METHODS add_buttons.
+    METHODS add_buttons IMPORTING iv_type TYPE xfeld.
     METHODS add_node
       IMPORTING
         iv_name TYPE string
@@ -705,6 +705,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     mo_tree_local = NEW lcl_rtti_tree( i_header =  'Variables' i_type = 'L'
                      i_cont = mo_window->mo_locals_container
                      i_debugger = me ).
+
     mo_tree_exp = NEW lcl_rtti_tree( i_header = 'Exporting parameters' i_type = 'E' i_cont = mo_window->mo_exporting_container
                                      i_debugger = me ).
   ENDMETHOD.                    "init
@@ -1531,7 +1532,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
       mo_window->show_stack( ).
     ENDIF.
-    
+
     IF mo_window->m_debug_button = 'FORW'.
 
       LOOP AT mt_var_step INTO DATA(step) WHERE step = m_hist_step.
@@ -4102,22 +4103,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     super->constructor( ).
     mo_debugger = i_debugger.
 
-    IF i_type = 'L'.
-      cl_salv_tree=>factory(
-        EXPORTING r_container = i_cont
-        IMPORTING r_salv_tree = tree
-        CHANGING t_table = tree_table ).
-    ELSEIF i_type = 'I'.
-      cl_salv_tree=>factory(
-       EXPORTING r_container = i_cont
-       IMPORTING r_salv_tree = tree
-       CHANGING t_table = tree_table ).
-    ELSEIF i_type = 'E'.
-      cl_salv_tree=>factory(
-           EXPORTING r_container = i_cont
-           IMPORTING r_salv_tree = tree
-           CHANGING t_table = tree_table ).
-    ENDIF.
+    cl_salv_tree=>factory(
+      EXPORTING r_container = i_cont
+      IMPORTING r_salv_tree = tree
+      CHANGING t_table = tree_table ).
 
     DATA(lo_setting) =  tree->get_tree_settings( ).
     lo_setting->set_hierarchy_header( i_header ).
@@ -4138,7 +4127,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
     lo_columns->get_column( 'TYPENAME' )->set_output_length( 20 ).
 
-    add_buttons( ).
+    add_buttons( i_type ).
 
     tree->get_nodes( )->expand_all( ).
     DATA(lo_event) = tree->get_event( ) .
@@ -4149,10 +4138,15 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD add_buttons.
+
     DATA(lo_functions) = tree->get_functions( ).
     lo_functions->set_all( ).
 
-    CHECK mo_debugger IS NOT INITIAL.
+    lo_functions->set_group_layout( abap_false ).
+    lo_functions->set_group_aggregation( abap_false ).
+    lo_functions->set_group_print( abap_false ).
+
+    CHECK mo_debugger IS NOT INITIAL AND iv_type = 'L'.
 
     lo_functions->add_function(
        name     = 'INITIALS'
@@ -4182,12 +4176,12 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
        tooltip  = 'Show/hide Class-Data variables (global)'
        position = if_salv_c_function_position=>right_of_salv_functions ).
 
-    lo_functions->add_function(
-           name     = 'LDB'
-           icon     = CONV #( icon_biw_report_view )
-           text     = 'LDB'
-           tooltip  = 'Show/hide Local Data Base variables (global)'
-           position = if_salv_c_function_position=>right_of_salv_functions ).
+*    lo_functions->add_function(
+*           name     = 'LDB'
+*           icon     = CONV #( icon_biw_report_view )
+*           text     = 'LDB'
+*           tooltip  = 'Show/hide Local Data Base variables (global)'
+*           position = if_salv_c_function_position=>right_of_salv_functions ).
 
     lo_functions->add_function(
        name     = 'CHANGED'
@@ -5059,8 +5053,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
       <state> = <vars>.
     ENDIF.
-       <state> = <vars>.
-     mo_debugger->save_hist( CHANGING i_state = <state> ).
+    <state> = <vars>.
+    mo_debugger->save_hist( CHANGING i_state = <state> ).
 
     IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
       l_node->delete( ).
