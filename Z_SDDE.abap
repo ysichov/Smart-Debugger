@@ -1531,7 +1531,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
       mo_window->show_stack( ).
     ENDIF.
-
+    
     IF mo_window->m_debug_button = 'FORW'.
 
       LOOP AT mt_var_step INTO DATA(step) WHERE step = m_hist_step.
@@ -1631,10 +1631,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD add_hist_var.
 
-    FIND '-' IN cs_var-name.
-    IF sy-subrc = 0.
-      RETURN.
-    ENDIF.
+******    FIND '-' IN cs_var-name.
+******    IF sy-subrc = 0.
+******      RETURN.
+******    ENDIF.
 
     IF cs_var-cl_leaf IS NOT INITIAL.
       DATA(l_obj_name) =  get_obj_index( cs_var-name ).
@@ -2163,6 +2163,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ASSIGN i_state-ref->* TO FIELD-SYMBOL(<state>).
     lv_name = i_state-name.
     IF lv_name+0(2) NE '{O'.
+
       READ TABLE mt_vars_hist
        WITH KEY stack = i_state-stack
                 name = i_state-name
@@ -4928,6 +4929,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     l_rel = iv_rel.
 
+
     READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
     IF sy-subrc = 0.
 
@@ -5056,10 +5058,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     IF sy-subrc <> 0.
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
       <state> = <vars>.
-      mo_debugger->save_hist( CHANGING i_state = <state> ).
-    ELSE.
-      <state> = <vars>.
     ENDIF.
+       <state> = <vars>.
+     mo_debugger->save_hist( CHANGING i_state = <state> ).
 
     IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
       l_node->delete( ).
