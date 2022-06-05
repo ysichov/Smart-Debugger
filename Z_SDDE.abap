@@ -948,8 +948,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
 
-LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
-      READ TABLE mt_locals with key name = ls_param-name ASSIGNING FIELD-SYMBOL(<loc>).
+    LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
+      READ TABLE mt_locals WITH KEY name = ls_param-name ASSIGNING FIELD-SYMBOL(<loc>).
       IF sy-subrc = 0.
         IF ls_param-type = 'I'.
           <loc>-parkind = '1'.
@@ -957,7 +957,7 @@ LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
           <loc>-parkind = '2'.
         ENDIF.
       ENDIF.
-   ENDLOOP.
+    ENDLOOP.
 
   ENDMETHOD.
 
@@ -1437,7 +1437,7 @@ LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
       MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
       mo_window->show_stack( ).
     ENDIF.
-
+    BREAK-POINT.
     IF mo_window->m_debug_button = 'FORW'.
 
       LOOP AT mt_var_step INTO DATA(step) WHERE step = m_hist_step.
@@ -1504,15 +1504,7 @@ LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
       mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
     ENDIF.
 
-    LOOP AT lt_hist ASSIGNING <hist> WHERE leaf = 'Locals'.
-      add_hist_var( CHANGING cs_var = <hist> ).
-    ENDLOOP.
-
-    LOOP AT lt_hist ASSIGNING <hist> WHERE leaf = 'IMP'.
-      add_hist_var( CHANGING cs_var = <hist> ).
-    ENDLOOP.
-
-    LOOP AT lt_hist ASSIGNING <hist> WHERE leaf = 'EXP'.
+    LOOP AT lt_hist ASSIGNING <hist>.
       add_hist_var( CHANGING cs_var = <hist> ).
     ENDLOOP.
 
@@ -1563,10 +1555,10 @@ LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
 
   METHOD add_hist_var.
 
-******    FIND '-' IN cs_var-name.
-******    IF sy-subrc = 0.
-******      RETURN.
-******    ENDIF.
+    FIND '-' IN cs_var-name.
+    IF sy-subrc = 0.
+      RETURN.
+    ENDIF.
 
     IF cs_var-cl_leaf IS NOT INITIAL.
       DATA(l_obj_name) =  get_obj_index( cs_var-name ).
@@ -4729,13 +4721,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     IF sy-subrc <> 0.
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
       <state> = <vars>.
-      mo_debugger->save_hist( CHANGING i_state = <state> ).
     ELSE.
       <state> = <vars>.
     ENDIF.
+    mo_debugger->save_hist( CHANGING i_state = <state> ).
 
     lt_component = lo_struct_descr->get_components( ).
-    LOOP AT lt_component INTO ls_component. "WHERE name IS NOT INITIAL.
+    LOOP AT lt_component INTO ls_component.
       DATA: lr_new_struc TYPE REF TO data.
       ASSIGN ir_up->* TO FIELD-SYMBOL(<up>).
       IF ls_component-name IS INITIAL.
@@ -4802,11 +4794,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDCASE.
 
     lv_text = iv_name.
-
-    IF ls_tree-value IS INITIAL AND m_hide IS NOT INITIAL.
-      RETURN.
-    ENDIF.
-
     ls_tree-fullname = iv_fullname.
 
     IF iv_parent_key IS NOT INITIAL.
