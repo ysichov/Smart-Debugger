@@ -1437,7 +1437,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
       mo_window->show_stack( ).
     ENDIF.
-    
+
     IF mo_window->m_debug_button = 'FORW'.
 
       LOOP AT mt_var_step INTO DATA(step) WHERE step = m_hist_step.
@@ -1504,7 +1504,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
     ENDIF.
 
-    LOOP AT lt_hist ASSIGNING <hist>.
+    LOOP AT lt_hist ASSIGNING <hist> where leaf NE 'Globals'.
       add_hist_var( CHANGING cs_var = <hist> ).
     ENDLOOP.
 
