@@ -1437,7 +1437,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
       mo_window->show_stack( ).
     ENDIF.
-    BREAK-POINT.
+    
     IF mo_window->m_debug_button = 'FORW'.
 
       LOOP AT mt_var_step INTO DATA(step) WHERE step = m_hist_step.
