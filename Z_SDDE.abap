@@ -1504,7 +1504,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
     ENDIF.
 
-    LOOP AT lt_hist ASSIGNING <hist> where leaf NE 'Globals'.
+    LOOP AT lt_hist ASSIGNING <hist> where leaf NE 'Globals' AND leaf NE 'SYST'.
       add_hist_var( CHANGING cs_var = <hist> ).
     ENDLOOP.
 
