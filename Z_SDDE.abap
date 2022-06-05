@@ -133,7 +133,6 @@ CLASS lcl_appl DEFINITION.
              cl_leaf       TYPE int4,
              ref           TYPE REF TO data,
              tree          TYPE REF TO lcl_rtti_tree,
-             class         TYPE string, "?
            END OF var_table,
 
            BEGIN OF var_table_temp,
@@ -146,7 +145,7 @@ CLASS lcl_appl DEFINITION.
              leaf          TYPE string,
              name          TYPE string,
              short         TYPE string,
-             class         TYPE string, "?
+
            END OF var_table_temp,
 
            BEGIN OF var_table_h,
@@ -1665,22 +1664,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                                  iv_type = CONV #( mo_window->m_prg-eventtype )
                                                  iv_name = CONV #( mo_window->m_prg-eventname ) ).
 
-      "Are we in class
-      DATA: l_clref  TYPE REF TO cl_abap_classdescr.
-      CALL METHOD cl_abap_classdescr=>describe_by_name
-        EXPORTING
-          p_name         = get_class_name( 'ME' )
-        RECEIVING
-          p_descr_ref    = DATA(l_dref)
-        EXCEPTIONS
-          type_not_found = 1.
-
-      IF sy-subrc = 0.
-        l_clref ?= l_dref.
-        m_classname = l_clref->absolute_name.
-      ELSE.
-        CLEAR m_classname.
-      ENDIF.
 
       IF mo_window->m_prg-event-eventtype = 'FORM'.
         get_form_parameters( mo_window->m_prg ).
@@ -2122,9 +2105,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
        ms_stack-stacklevel > ms_stack_prev-stacklevel.
         i_state-first = 'X'.
       ENDIF.
-      CLEAR i_state-key.
-      i_state-class = m_classname.
 
+      CLEAR i_state-key.
       INSERT i_state INTO mt_vars_hist INDEX 1.
     ENDIF.
 
@@ -4394,6 +4376,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
         MOVE-CORRESPONDING  mo_debugger->mt_var_step TO lt_hist2.
         lcl_appl=>open_int_table( iv_name = 'Steps' it_tab =  lt_hist2 ).
+
+        lcl_appl=>open_int_table( iv_name = 'classes' it_tab =  mt_classes_leaf ).
 
     ENDCASE.
 
