@@ -481,9 +481,8 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
       add_hist_var CHANGING cs_var TYPE lcl_appl=>var_table,
       read_class_globals,
 
-      get_form_parameters IMPORTING i_prg TYPE tpda_scr_prg_info ,
-      get_method_parameters IMPORTING i_name TYPE tpda_event,
-      get_func_parameters IMPORTING i_name TYPE tpda_event.
+      get_form_parameters IMPORTING i_prg TYPE tpda_scr_prg_info.
+
 ENDCLASS.
 
 CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
@@ -948,104 +947,30 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       APPEND ls_param TO lt_param.
     ENDIF.
 
-    LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
-      IF ls_param-type = 'I'.
-        transfer_variable( EXPORTING i_name = CONV #( ls_param-name ) i_tree = mo_tree_imp ).
-        DELETE mt_locals WHERE name = ls_param-name.
-      ENDIF.
 
-      IF ls_param-type = 'E'.
-        APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
-        <ret_exp>-name = ls_param-name.
-        DELETE mt_locals WHERE name = ls_param-name.
-      ENDIF.
-    ENDLOOP.
-    IF mo_window->m_visualization IS NOT INITIAL.
-      mo_tree_imp->display( ).
-    ENDIF.
-  ENDMETHOD.
-
-  METHOD get_method_parameters.
-    DATA: l_clref  TYPE REF TO cl_abap_classdescr.
-    CALL METHOD cl_abap_classdescr=>describe_by_name
-      EXPORTING
-        p_name      = get_class_name( 'ME' )
-      RECEIVING
-        p_descr_ref = DATA(l_dref).
-    IF sy-subrc <> 0.
-      EXIT.
-    ENDIF.
-
-    l_clref ?= l_dref.
-    READ TABLE l_clref->methods INTO DATA(x_methods) WITH KEY name = i_name.
-
-    IF sy-subrc = 0.
-      LOOP AT x_methods-parameters INTO DATA(x_parameters).
-        IF x_parameters-parm_kind = 'I'. "importing
-          transfer_variable( EXPORTING i_name = CONV #( x_parameters-name ) i_tree = mo_tree_imp ).
-          DELETE mt_locals WHERE name = x_parameters-name.
+LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
+      READ TABLE mt_locals with key name = ls_param-name ASSIGNING FIELD-SYMBOL(<loc>).
+      IF sy-subrc = 0.
+        IF ls_param-type = 'I'.
+          <loc>-parkind = '1'.
+        ELSEIF ls_param-type = 'E'.
+          <loc>-parkind = '2'.
         ENDIF.
-        IF x_parameters-parm_kind = 'E' OR x_parameters-parm_kind = 'R'. "exporting or returning
-          APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
-          <ret_exp>-name = x_parameters-name.
-          DELETE mt_locals WHERE name = x_parameters-name.
-        ENDIF.
-      ENDLOOP.
-      IF mo_window->m_visualization IS NOT INITIAL.
-        mo_tree_imp->display(  ).
       ENDIF.
-    ENDIF.
-  ENDMETHOD.
+   ENDLOOP.
 
-  METHOD get_func_parameters.
-
-    DATA: lt_imp    TYPE TABLE OF rsimp,
-          lt_chng   TYPE TABLE OF   rscha,
-          lt_exp    TYPE TABLE OF rsexp,
-          lt_tables TYPE TABLE OF rstbl,
-          lt_exc    TYPE TABLE OF rsexc,
-          lt_doc    TYPE TABLE OF rsfdo,
-          lt_source TYPE TABLE OF rssource.
-
-    CALL FUNCTION 'RPY_FUNCTIONMODULE_READ'
-      EXPORTING
-        functionname       = CONV rs38l_fnam( i_name )
-      TABLES
-        import_parameter   = lt_imp
-        changing_parameter = lt_chng
-        export_parameter   = lt_exp
-        tables_parameter   = lt_tables
-        exception_list     = lt_exc
-        documentation      = lt_doc
-        source             = lt_source
-      EXCEPTIONS
-        error_message      = 1
-        function_not_found = 2
-        invalid_name       = 3
-        OTHERS             = 4.
-
-    LOOP AT lt_imp INTO DATA(ls_imp).
-      transfer_variable( EXPORTING i_name = CONV #( ls_imp-parameter ) i_tree = mo_tree_imp ).
-      DELETE mt_locals WHERE name = ls_imp-parameter.
-    ENDLOOP.
-
-    LOOP AT lt_exp INTO DATA(ls_exp). "exporting
-      APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
-      <ret_exp>-name = ls_exp-parameter.
-      DELETE mt_locals WHERE name = ls_exp-parameter.
-    ENDLOOP.
-
-    LOOP AT lt_chng INTO DATA(ls_chng). "exporting
-      APPEND INITIAL LINE TO mt_ret_exp ASSIGNING <ret_exp>.
-      <ret_exp>-name = ls_chng-parameter.
-      DELETE mt_locals WHERE name = ls_chng-parameter.
-    ENDLOOP.
-
-    LOOP AT lt_tables INTO DATA(ls_tables). "exporting
-      APPEND INITIAL LINE TO mt_ret_exp ASSIGNING <ret_exp>.
-      <ret_exp>-name = ls_tables-parameter.
-      DELETE mt_locals WHERE name = ls_tables-parameter.
-    ENDLOOP.
+***    LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
+***      IF ls_param-type = 'I'.
+***        transfer_variable( EXPORTING i_name = CONV #( ls_param-name ) i_tree = mo_tree_imp ).
+***        DELETE mt_locals WHERE name = ls_param-name.
+***      ENDIF.
+***
+***      IF ls_param-type = 'E'.
+***        APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
+***        <ret_exp>-name = ls_param-name.
+***        DELETE mt_locals WHERE name = ls_param-name.
+***      ENDIF.
+***    ENDLOOP.
 
     IF mo_window->m_visualization IS NOT INITIAL.
       mo_tree_imp->display( ).
@@ -1494,8 +1419,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ADD 1  TO m_hist_step.
     ENDIF.
 
-    "CHECK lv_prev_step NE m_hist_step.
-
     READ TABLE mt_steps INTO DATA(ls_step) INDEX m_hist_step.
     mo_window->set_program( CONV #( ls_step-include ) ).
     mo_window->set_program_line( ls_step-line ).
@@ -1601,6 +1524,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       add_hist_var( CHANGING cs_var = <hist> ).
     ENDLOOP.
 
+    LOOP AT lt_hist ASSIGNING <hist> WHERE leaf = 'IMP'.
+      add_hist_var( CHANGING cs_var = <hist> ).
+    ENDLOOP.
+
+    LOOP AT lt_hist ASSIGNING <hist> WHERE leaf = 'EXP'.
+      add_hist_var( CHANGING cs_var = <hist> ).
+    ENDLOOP.
 
     IF mo_tree_local->m_globals IS NOT INITIAL.
       mo_tree_local->m_leaf = 'Globals'.
@@ -1715,6 +1645,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         CALL METHOD cl_tpda_script_bp_services=>get_all_bps RECEIVING p_bps_it = mo_window->mt_breaks.
 
         IF mo_window->m_prg-event-eventname NE mo_tree_local->m_prg_info-event-eventname.
+
+          CLEAR: m_step_delta,
+                 mt_ret_exp,
+                 mt_obj,
+                 mt_ret_exp.
+
           lv_stack_changed = abap_true.
 
           mo_tree_local->m_prg_info-event-eventname = mo_window->m_prg-event-eventname.
@@ -1730,11 +1666,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           DELETE mo_tree_exp->mt_state WHERE stack > ms_stack-stacklevel.
           DELETE mo_tree_imp->mt_state WHERE stack > ms_stack-stacklevel.
 
-          CLEAR: m_step_delta,
-                 mt_ret_exp,
-                 mt_obj,
-                 mt_ret_exp.
-
           mo_tree_local->clear( ).
           mo_tree_exp->clear( ).
           mo_tree_imp->clear( ).
@@ -1743,15 +1674,15 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           m_step_delta = 1.
         ENDIF.
 
-        mo_tree_local->m_leaf = mo_tree_imp->m_leaf = mo_tree_exp->m_leaf =  'Locals'.
+        mo_tree_local->m_leaf =  'Locals'.
+        mo_tree_imp->m_leaf   =  'IMP'.
+        mo_tree_exp->m_leaf =  'EXP'.
       CATCH cx_tpda_src_info.
     ENDTRY.
 
-    CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
-
     IF lv_stack_changed = abap_true OR is_history = abap_true.
 
-      APPEND INITIAL LINE TO mt_locals ASSIGNING FIELD-SYMBOL(<local>).
+      CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
       SORT mt_locals.
 
       mt_loc_fs = lcl_source_parcer=>get_fs_var( iv_program = CONV #( mo_window->m_prg-program )
@@ -1775,17 +1706,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         CLEAR m_classname.
       ENDIF.
 
-      READ TABLE mt_locals WITH KEY name = 'ME' TRANSPORTING NO FIELDS.
-      IF sy-subrc = 0.
-        get_method_parameters( mo_window->m_prg-event-eventname ).
-      ENDIF.
-
       IF mo_window->m_prg-event-eventtype = 'FORM'.
         get_form_parameters( mo_window->m_prg ).
-      ENDIF.
-
-      IF mo_window->m_prg-event-eventtype = 'FUNCTION'.
-        get_func_parameters( mo_window->m_prg-event-eventname ).
       ENDIF.
 
     ENDIF.
@@ -1794,6 +1716,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
       SORT mt_globals.
     ENDIF.
+
     "CLEAR is_history.
     mo_tree_imp->m_prg_info = mo_window->m_prg.
     IF mo_window->m_visualization IS NOT INITIAL.
@@ -1810,15 +1733,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     LOOP AT mt_locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
-      transfer_variable( EXPORTING i_name =  ls_local-name i_tree = mo_tree_local i_no_cl_twin = 'X' ).
+      CASE ls_local-parkind.
+        WHEN 0.
+          transfer_variable( EXPORTING i_name =  ls_local-name i_tree = mo_tree_local i_no_cl_twin = 'X' ).
+        WHEN 1.
+          transfer_variable( EXPORTING i_name =  ls_local-name i_tree = mo_tree_imp i_no_cl_twin = 'X' ).
+        WHEN OTHERS.
+          transfer_variable( EXPORTING i_name =  ls_local-name i_tree = mo_tree_exp i_no_cl_twin = 'X' ).
+      ENDCASE.
     ENDLOOP.
 
     LOOP AT mt_loc_fs INTO ls_local.
       transfer_variable( EXPORTING i_name =  ls_local-name i_tree = mo_tree_local i_no_cl_twin = 'X' ).
-    ENDLOOP.
-
-    LOOP AT mt_ret_exp INTO ls_local.
-      transfer_variable( EXPORTING i_name =  ls_local-name i_tree = mo_tree_exp  i_no_cl_twin = 'X' ).
     ENDLOOP.
 
     IF mo_tree_local->m_globals IS NOT INITIAL.
@@ -5103,7 +5029,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             IF sy-subrc = 0.
               ASSIGN <state>-ref->* TO <old_value>.
               IF <old_value> = <new_value>.
-               RETURN.
+                RETURN.
               ELSE.
                 <state>-ref = ir_up.
                 mo_debugger->save_hist( CHANGING i_state = <state> ).
