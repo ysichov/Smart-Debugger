@@ -959,22 +959,6 @@ LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
       ENDIF.
    ENDLOOP.
 
-***    LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
-***      IF ls_param-type = 'I'.
-***        transfer_variable( EXPORTING i_name = CONV #( ls_param-name ) i_tree = mo_tree_imp ).
-***        DELETE mt_locals WHERE name = ls_param-name.
-***      ENDIF.
-***
-***      IF ls_param-type = 'E'.
-***        APPEND INITIAL LINE TO mt_ret_exp ASSIGNING FIELD-SYMBOL(<ret_exp>).
-***        <ret_exp>-name = ls_param-name.
-***        DELETE mt_locals WHERE name = ls_param-name.
-***      ENDIF.
-***    ENDLOOP.
-
-    IF mo_window->m_visualization IS NOT INITIAL.
-      mo_tree_imp->display( ).
-    ENDIF.
   ENDMETHOD.
 
   METHOD get_table. "construct deep tables
