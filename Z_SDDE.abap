@@ -1555,7 +1555,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD add_hist_var.
 
     FIND '-' IN cs_var-name.
-    IF sy-subrc = 0.
+    IF sy-subrc = 0 AND cs_var-cl_leaf is INITIAL.
       RETURN.
     ENDIF.
 
@@ -4313,6 +4313,23 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       text           = iv_name
       folder         = abap_false
     )->get_key( ).
+
+    READ TABLE mt_vars WITH KEY name = iv_full ASSIGNING FIELD-SYMBOL(<vars>).
+    BREAK-POINT.
+    IF sy-subrc NE 0.
+      APPEND INITIAL LINE TO mt_vars ASSIGNING <vars>.
+      <vars>-key = er_key.
+    ENDIF.
+    <vars>-leaf = m_leaf.
+    <vars>-name = iv_full.
+
+    "<vars>-ref = m_variable.
+    "<vars>-cl_leaf = i_cl_leaf.
+    <vars>-tree = me.
+    <vars>-program = mo_debugger->ms_stack-program.
+    <vars>-eventtype = mo_debugger->ms_stack-eventtype.
+    <vars>-eventname = mo_debugger->ms_stack-eventname.
+
   ENDMETHOD.
 
   METHOD delete_node.
@@ -4570,20 +4587,20 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
      iv_parent_name = l_name
      i_cl_leaf = i_cl_leaf ).
 
-    READ TABLE mt_vars WITH KEY name = l_full_name ASSIGNING FIELD-SYMBOL(<vars>).
-    IF sy-subrc NE 0.
-      APPEND INITIAL LINE TO mt_vars ASSIGNING <vars>.
-      <vars>-key = l_root_key.
-    ENDIF.
-    <vars>-leaf = m_leaf.
-    <vars>-name = l_full_name.
-
-    <vars>-ref = m_variable.
-    <vars>-cl_leaf = i_cl_leaf.
-    <vars>-tree = me.
-    <vars>-program = mo_debugger->ms_stack-program.
-    <vars>-eventtype = mo_debugger->ms_stack-eventtype.
-    <vars>-eventname = mo_debugger->ms_stack-eventname.
+*    READ TABLE mt_vars WITH KEY name = l_full_name ASSIGNING FIELD-SYMBOL(<vars>).
+*    IF sy-subrc NE 0.
+*      APPEND INITIAL LINE TO mt_vars ASSIGNING <vars>.
+*      <vars>-key = l_root_key.
+*    ENDIF.
+*    <vars>-leaf = m_leaf.
+*    <vars>-name = l_full_name.
+*
+*    <vars>-ref = m_variable.
+*    <vars>-cl_leaf = i_cl_leaf.
+*    <vars>-tree = me.
+*    <vars>-program = mo_debugger->ms_stack-program.
+*    <vars>-eventtype = mo_debugger->ms_stack-eventtype.
+*    <vars>-eventname = mo_debugger->ms_stack-eventname.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling.
       IF <kind> NE 'v' AND <kind> NE 'u'.
