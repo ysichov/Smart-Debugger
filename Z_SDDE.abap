@@ -1503,7 +1503,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
     ENDIF.
 
-    LOOP AT lt_hist ASSIGNING <hist> where leaf NE 'Globals' AND leaf NE 'SYST'.
+    LOOP AT lt_hist ASSIGNING <hist> WHERE leaf NE 'Globals' AND leaf NE 'SYST'.
       add_hist_var( CHANGING cs_var = <hist> ).
     ENDLOOP.
 
@@ -1555,7 +1555,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD add_hist_var.
 
     FIND '-' IN cs_var-name.
-    IF sy-subrc = 0 AND cs_var-cl_leaf is INITIAL.
+    IF sy-subrc = 0 AND cs_var-cl_leaf IS INITIAL.
       RETURN.
     ENDIF.
 
@@ -4313,22 +4313,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       text           = iv_name
       folder         = abap_false
     )->get_key( ).
-
-    READ TABLE mt_vars WITH KEY name = iv_full ASSIGNING FIELD-SYMBOL(<vars>).
-    BREAK-POINT.
-    IF sy-subrc NE 0.
-      APPEND INITIAL LINE TO mt_vars ASSIGNING <vars>.
-      <vars>-key = er_key.
-    ENDIF.
-    <vars>-leaf = m_leaf.
-    <vars>-name = iv_full.
-
-    "<vars>-ref = m_variable.
-    "<vars>-cl_leaf = i_cl_leaf.
-    <vars>-tree = me.
-    <vars>-program = mo_debugger->ms_stack-program.
-    <vars>-eventtype = mo_debugger->ms_stack-eventtype.
-    <vars>-eventname = mo_debugger->ms_stack-eventname.
 
   ENDMETHOD.
 
