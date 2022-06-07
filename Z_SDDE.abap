@@ -126,8 +126,9 @@ CLASS lcl_appl DEFINITION.
              eventtype(30) TYPE c,
              eventname(61) TYPE c,
              first         TYPE xfeld,
+             is_appear     TYPE xfeld,
              leaf          TYPE string,
-             name(60)      ,
+             name(60)       ,
              short         TYPE string,
              key           TYPE salv_de_node_key,
              cl_leaf       TYPE int4,
@@ -142,6 +143,7 @@ CLASS lcl_appl DEFINITION.
              eventtype(30) TYPE c,
              eventname(61) TYPE c,
              first         TYPE xfeld,
+             is_appear     TYPE xfeld,
              leaf          TYPE string,
              name          TYPE string,
              short         TYPE string,
@@ -542,6 +544,16 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
         i_cl_leaf    TYPE int4 OPTIONAL
       CHANGING
         io_var       TYPE any  .
+
+    METHODS del_variable
+      IMPORTING
+        "iv_root_name TYPE string
+        iv_full_name TYPE string OPTIONAL.
+    "iv_key       TYPE salv_de_node_key OPTIONAL
+    "i_icon       TYPE salv_de_tree_image OPTIONAL
+    "i_cl_leaf    TYPE int4 OPTIONAL
+    "CHANGING
+    "io_var       TYPE any  .
 
     METHODS clear.
     METHODS save_stack_vars IMPORTING iv_step TYPE i.
@@ -1389,7 +1401,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD run_script_hist.
 
     DATA: lv_prev_step TYPE i,
-          lt_hist      LIKE mt_vars_hist.
+          lt_hist      LIKE mt_vars_hist,
+          lt_del       LIKE mt_vars_hist..
 
     is_history = abap_true.
     lv_prev_step = m_hist_step.
@@ -1411,6 +1424,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     LOOP AT mt_vars_hist INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X'.
       APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
+      <hist> = ls_hist.
+    ENDLOOP.
+
+    LOOP AT mt_vars_hist INTO ls_hist WHERE step =  m_hist_step AND first = abap_false AND is_appear = abap_true.
+      APPEND INITIAL LINE TO lt_del ASSIGNING <hist>.
       <hist> = ls_hist.
     ENDLOOP.
 
@@ -1505,6 +1523,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     LOOP AT lt_hist ASSIGNING <hist> WHERE leaf NE 'Globals' AND leaf NE 'SYST'.
       add_hist_var( CHANGING cs_var = <hist> ).
+    ENDLOOP.
+
+    LOOP AT lt_del ASSIGNING <hist>.
+      <hist>-tree->del_variable( conv #( <hist>-name ) ).
     ENDLOOP.
 
     IF mo_tree_local->m_globals IS NOT INITIAL.
@@ -1663,7 +1685,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       mt_loc_fs = lcl_source_parcer=>get_fs_var( iv_program = CONV #( mo_window->m_prg-program )
                                                  iv_type = CONV #( mo_window->m_prg-eventtype )
                                                  iv_name = CONV #( mo_window->m_prg-eventname ) ).
-
 
       IF mo_window->m_prg-event-eventtype = 'FORM'.
         get_form_parameters( mo_window->m_prg ).
@@ -4372,11 +4393,12 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
         DATA: lt_hist TYPE TABLE OF lcl_appl=>var_table_temp.
         MOVE-CORRESPONDING  mo_debugger->mt_vars_hist TO lt_hist.
-        lcl_appl=>open_int_table( iv_name = 'History' it_tab =  lt_hist ).
+        lcl_appl=>open_int_table( iv_name = 'mt_vars_hist -  History' it_tab =  lt_hist ).
 
-        DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
-        MOVE-CORRESPONDING  mo_debugger->mt_var_step TO lt_hist2.
-        lcl_appl=>open_int_table( iv_name = 'Steps' it_tab =  lt_hist2 ).
+
+*        DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
+*        MOVE-CORRESPONDING  mo_debugger->mt_var_step TO lt_hist2.
+*        lcl_appl=>open_int_table( iv_name = 'Steps' it_tab =  lt_hist2 ).
 
         lcl_appl=>open_int_table( iv_name = 'classes' it_tab =  mt_classes_leaf ).
 
@@ -4412,13 +4434,28 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDCASE.
   ENDMETHOD.
 
+  METHOD del_variable.
+    DATA lv_len   TYPE i.
+
+    READ TABLE mt_vars WITH KEY name = iv_full_name INTO DATA(l_var).
+
+    DATA(lo_nodes) = tree->get_nodes( ).
+    DATA(l_node) =  lo_nodes->get_node( l_var-key ).
+    DELETE mt_vars WHERE name = iv_full_name.
+    DATA(l_nam) = iv_full_name && '-'.
+    lv_len = strlen( l_nam ).
+    DELETE mt_vars WHERE name CS l_nam.
+    l_node->delete( ).
+
+  ENDMETHOD.
+
   METHOD add_variable.
     DATA: lr_new   TYPE REF TO data,
           lr_struc TYPE REF TO data,
           l_name   TYPE string,
           l_key    TYPE salv_de_node_key,
           l_rel    TYPE salv_de_node_relation,
-          lv_len   TYPE i..
+          lv_len   TYPE i.
 
     FIELD-SYMBOLS: <new>      TYPE any,
                    <tab_from> TYPE ANY TABLE,
@@ -4708,6 +4745,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       <state> = <vars>.
     ELSE.
       <state> = <vars>.
+      <state>-is_appear = abap_true.
     ENDIF.
     mo_debugger->save_hist( CHANGING i_state = <state> ).
 
@@ -4830,6 +4868,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
              ASSIGNING FIELD-SYMBOL(<state>).
 
             IF sy-subrc = 0.
+              CLEAR <state>-is_appear.
               ASSIGN <state>-ref->* TO <old_value>.
               IF <old_value> = <new_value>.
                 RETURN.
@@ -4858,6 +4897,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         ASSIGNING <state>.
 
       IF sy-subrc = 0.
+        CLEAR <state>-is_appear.
         ASSIGN <state>-ref->* TO <old_value>.
         IF <old_value> NE <new_value>.
           <state>-ref = ir_up.
@@ -4905,8 +4945,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     IF sy-subrc <> 0.
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
-      <state> = <vars>.
+      <vars>-is_appear = abap_true.
+    ELSE.
+      CLEAR <vars>-is_appear.
     ENDIF.
+
     <state> = <vars>.
     mo_debugger->save_hist( CHANGING i_state = <state> ).
 
@@ -5049,6 +5092,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
         <vars>-tree = me.
         <vars>-cl_leaf = i_cl_leaf.
+        "<vars>-first = abap_true.
 
         READ TABLE mt_state
           WITH KEY name = iv_fullname
@@ -5061,6 +5105,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         IF sy-subrc <> 0.
           APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
           <state> = <vars>.
+          <state>-is_appear = abap_true.
           mo_debugger->save_hist( CHANGING i_state = <state> ).
         ENDIF.
 
