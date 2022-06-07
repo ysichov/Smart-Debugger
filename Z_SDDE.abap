@@ -2,7 +2,7 @@
 *& Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
-*& version: beta 0.5.250.260
+*& version: beta 0.6.277.280
 *& Git https://github.com/ysichov/SDDE
 *& RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *& EN description - https://github.com/ysichov/SDDE/wiki
@@ -305,10 +305,6 @@ ENDCLASS.
 CLASS lcl_alv_common DEFINITION.
   PUBLIC SECTION.
     CONSTANTS: c_white(4) TYPE x VALUE '00000001'. "white background
-    "c_grey(4)  TYPE x VALUE '00000003', "gray background
-    "c_green(4) TYPE x VALUE '00000216', "green +underline
-    "c_blue(4)  TYPE x VALUE '00000209', " blue font +underline
-    "c_bold(4)  TYPE x VALUE '00000020'.
 
     CLASS-METHODS:
       refresh IMPORTING i_obj TYPE REF TO cl_gui_alv_grid i_layout TYPE lvc_s_layo OPTIONAL i_soft TYPE char01 OPTIONAL,
@@ -545,15 +541,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
       CHANGING
         io_var       TYPE any  .
 
-    METHODS del_variable
-      IMPORTING
-        "iv_root_name TYPE string
-        iv_full_name TYPE string OPTIONAL.
-    "iv_key       TYPE salv_de_node_key OPTIONAL
-    "i_icon       TYPE salv_de_tree_image OPTIONAL
-    "i_cl_leaf    TYPE int4 OPTIONAL
-    "CHANGING
-    "io_var       TYPE any  .
+    METHODS del_variable IMPORTING iv_full_name TYPE string OPTIONAL.
 
     METHODS clear.
     METHODS save_stack_vars IMPORTING iv_step TYPE i.
@@ -563,7 +551,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
       IMPORTING
         iv_name TYPE string
         iv_icon TYPE salv_de_tree_image OPTIONAL.
-
 
     METHODS add_obj_nodes
       IMPORTING
@@ -716,7 +703,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     mo_tree_exp = NEW lcl_rtti_tree( i_header = 'Exporting parameters' i_type = 'E' i_cont = mo_window->mo_exporting_container
                                      i_debugger = me ).
-  ENDMETHOD.                    "init
+  ENDMETHOD.                    
 
   METHOD create_simple_var.
     DATA: lr_symbsimple TYPE REF TO tpda_sys_symbsimple,
@@ -1053,15 +1040,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           RECEIVING
             p_symb_quick = m_quick.
       CATCH cx_tpda_varname .
-
-        "delete node id exist
-        READ TABLE i_tree->mt_vars WITH KEY name = i_name INTO DATA(l_var).
-        IF sy-subrc = 0.
-          DELETE i_tree->mt_vars INDEX sy-tabix.
-          DATA(lo_nodes) = i_tree->tree->get_nodes( ).
-          DATA(l_node) =  lo_nodes->get_node( l_var-key ).
-          l_node->delete( ).
-        ENDIF.
+        i_tree->del_variable( CONV #( i_name ) ).
     ENDTRY.
 
     IF i_shortname IS NOT INITIAL.
@@ -1128,19 +1107,22 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ls_info = cl_tpda_script_data_descr=>get_quick_info( i_name ).
           ASSIGN ls_info-quickdata->* TO <ls_symobjref>.
 
-          "IF <ls_symobjref>-instancename <> '{A:initial}'.
+          IF <ls_symobjref>-instancename <> '{A:initial}'.
           transfer_variable( EXPORTING i_name = CONV #( <ls_symobjref>-instancename )
                                            i_shortname = i_name
                                            i_tree = i_tree ).
+          else.
+            i_tree->del_variable( i_name ).
+          ENDIF.
 
         ELSEIF m_quick-typid = 'r'. "reference
           DATA: l_rel   TYPE salv_de_node_relation,
                 lv_node TYPE salv_de_node_key.
-          "
+          
           l_rel = if_salv_c_node_relation=>last_child.
           lv_node = i_new_node.
 
-          READ TABLE mo_tree_local->mt_vars WITH KEY name = l_name INTO l_var.
+          READ TABLE mo_tree_local->mt_vars WITH KEY name = l_name INTO DATA(l_var).
           IF sy-subrc = 0.
             l_rel = if_salv_c_node_relation=>next_sibling.
             lv_node = l_var-key.
@@ -1232,6 +1214,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
 
     ASSIGN i_quick-quickdata->* TO <ls_symobjref>.
+    BREAK-POINT.
     IF <ls_symobjref>-instancename <> '{O:initial}'.
 
       READ TABLE mt_obj WITH KEY name = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
@@ -1347,6 +1330,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                           iv_key = i_new_node ).
         RETURN.
       ENDIF.
+
     ENDIF.
 
   ENDMETHOD.
@@ -1501,7 +1485,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
              INTO DATA(ls_var)
              WHERE step < ls_hist-step
                AND name = ls_hist-name.
-            "AND short = ls_hist-short.
 
             READ TABLE lt_hist ASSIGNING <hist> WITH KEY name = ls_var-name.
             IF sy-subrc NE 0.
@@ -1526,7 +1509,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDLOOP.
 
     LOOP AT lt_del ASSIGNING <hist>.
-      <hist>-tree->del_variable( conv #( <hist>-name ) ).
+      <hist>-tree->del_variable( CONV #( <hist>-name ) ).
     ENDLOOP.
 
     IF mo_tree_local->m_globals IS NOT INITIAL.
@@ -1697,7 +1680,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       SORT mt_globals.
     ENDIF.
 
-    "CLEAR is_history.
     mo_tree_imp->m_prg_info = mo_window->m_prg.
     IF mo_window->m_visualization IS NOT INITIAL.
       mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
@@ -4382,8 +4364,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         m_syst = m_syst BIT-XOR c_mask.
       WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
         m_class_data = m_class_data BIT-XOR c_mask.
-*      WHEN 'CHANGED'."Show only changed values/all values
-*        m_changed = m_changed BIT-XOR c_mask.
       WHEN 'LDB'."Show/hide LDB variables (globals)
         m_ldb = m_ldb BIT-XOR c_mask.
       WHEN 'TEST'.
@@ -4395,13 +4375,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         MOVE-CORRESPONDING  mo_debugger->mt_vars_hist TO lt_hist.
         lcl_appl=>open_int_table( iv_name = 'mt_vars_hist -  History' it_tab =  lt_hist ).
 
-
 *        DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
 *        MOVE-CORRESPONDING  mo_debugger->mt_var_step TO lt_hist2.
 *        lcl_appl=>open_int_table( iv_name = 'Steps' it_tab =  lt_hist2 ).
 
         lcl_appl=>open_int_table( iv_name = 'classes' it_tab =  mt_classes_leaf ).
-
     ENDCASE.
 
     CLEAR mo_debugger->mo_window->m_debug_button.
@@ -4438,14 +4416,18 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     DATA lv_len   TYPE i.
 
     READ TABLE mt_vars WITH KEY name = iv_full_name INTO DATA(l_var).
+    IF sy-subrc = 0.
+      DATA(lo_nodes) = tree->get_nodes( ).
+      DATA(l_node) =  lo_nodes->get_node( l_var-key ).
+      DELETE mt_vars WHERE name = iv_full_name.
+      DELETE mt_state WHERE name = iv_full_name.
+      DATA(l_nam) = iv_full_name && '-'.
+      lv_len = strlen( l_nam ).
+      DELETE mt_vars WHERE name CS l_nam.
+      DELETE mt_state WHERE name CS l_nam.
 
-    DATA(lo_nodes) = tree->get_nodes( ).
-    DATA(l_node) =  lo_nodes->get_node( l_var-key ).
-    DELETE mt_vars WHERE name = iv_full_name.
-    DATA(l_nam) = iv_full_name && '-'.
-    lv_len = strlen( l_nam ).
-    DELETE mt_vars WHERE name CS l_nam.
-    l_node->delete( ).
+      l_node->delete( ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -4537,11 +4519,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
               IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
                 IF <kind> NE 'v' AND <kind> NE 'u'.
-                  DELETE mt_vars WHERE name = l_full_name.
-                  l_nam = l_full_name && '-'.
-                  lv_len = strlen( l_nam ).
-                  DELETE mt_vars WHERE name CS l_nam.
-                  l_node->delete( ).
+                  me->del_variable( l_full_name ).
                 ENDIF.
               ENDIF.
 
@@ -4556,30 +4534,20 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
               IF sy-subrc = 0.
                 ASSIGN <state>-ref->* TO <old_value>.
                 IF <old_value> = <new_value>.
-                  """""""
                   IF <kind> NE 'v' AND <kind> NE 'u'.
                     RETURN.
                   ENDIF.
                 ELSE.
 
                   IF <kind> NE 'v' AND <kind> NE 'u'.
-                    DELETE mt_vars WHERE name = l_full_name.
-                    l_nam = l_full_name && '-'.
-                    lv_len = strlen( l_nam ).
-                    DELETE mt_vars WHERE name CS l_nam.
-                    l_node->delete( ).
+                    me->del_variable( l_full_name ).
                   ENDIF.
                 ENDIF.
               ENDIF.
             ENDIF.
 
             IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
-
-              DELETE mt_vars WHERE name = l_full_name.
-              l_nam = l_full_name && '-'.
-              lv_len = strlen( l_nam ).
-              DELETE mt_vars WHERE name CS l_nam.
-              l_node->delete( ).
+              me->del_variable( l_full_name ).
               RETURN.
             ENDIF.
           CATCH cx_root.
@@ -4607,21 +4575,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
      ir_up = m_variable
      iv_parent_name = l_name
      i_cl_leaf = i_cl_leaf ).
-
-*    READ TABLE mt_vars WITH KEY name = l_full_name ASSIGNING FIELD-SYMBOL(<vars>).
-*    IF sy-subrc NE 0.
-*      APPEND INITIAL LINE TO mt_vars ASSIGNING <vars>.
-*      <vars>-key = l_root_key.
-*    ENDIF.
-*    <vars>-leaf = m_leaf.
-*    <vars>-name = l_full_name.
-*
-*    <vars>-ref = m_variable.
-*    <vars>-cl_leaf = i_cl_leaf.
-*    <vars>-tree = me.
-*    <vars>-program = mo_debugger->ms_stack-program.
-*    <vars>-eventtype = mo_debugger->ms_stack-eventtype.
-*    <vars>-eventname = mo_debugger->ms_stack-eventname.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling.
       IF <kind> NE 'v' AND <kind> NE 'u'.
@@ -4827,7 +4780,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     l_rel = iv_rel.
 
-
     READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
     IF sy-subrc = 0.
 
@@ -4854,8 +4806,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ELSE.
             IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
               IF <kind> NE 'v' AND <kind> NE 'u'.
-                DELETE mt_vars WHERE name = iv_fullname.
-                l_node->delete( ).
+                me->del_variable( iv_fullname ).
               ENDIF.
             ENDIF.
 
@@ -4880,8 +4831,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ENDIF.
 
           IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
-            DELETE mt_vars WHERE name = iv_fullname.
-            l_node->delete( ).
+            me->del_variable( iv_fullname ).
             RETURN.
           ENDIF.
         CATCH cx_root.
@@ -5012,8 +4962,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ELSE.
             IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
               IF <kind> NE 'v' AND <kind> NE 'u'.
-                DELETE mt_vars WHERE name = iv_fullname.
-                l_node->delete( ).
+                me->del_variable( iv_fullname ).
+*                DELETE mt_vars WHERE name = iv_fullname.
+*                l_node->delete( ).
               ENDIF.
             ENDIF.
 
@@ -5037,8 +4988,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ENDIF.
 
           IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
-            DELETE mt_vars WHERE name = iv_fullname.
-            l_node->delete( ).
+            me->del_variable( iv_fullname ).
             RETURN.
           ENDIF.
         CATCH cx_root.
