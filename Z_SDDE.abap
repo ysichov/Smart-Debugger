@@ -542,7 +542,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
       CHANGING
         io_var       TYPE any  .
 
-    METHODS del_variable IMPORTING iv_full_name TYPE string OPTIONAL.
+    METHODS del_variable IMPORTING  iv_full_name TYPE string iv_del_in_tree TYPE xfeld OPTIONAL.
 
     METHODS clear.
     METHODS save_stack_vars IMPORTING iv_step TYPE i.
@@ -1467,7 +1467,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDLOOP.
       ENDIF.
     ENDIF.
-
+  .
     IF mo_window->m_debug_button = 'BACK'.
 
       LOOP AT mt_var_step INTO step WHERE step = m_hist_step.
@@ -1515,6 +1515,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
           ENDIF.
           <hist> = ls_var.
+          clear <hist>-key.
           EXIT.
         ENDLOOP.
       ENDLOOP.
@@ -2138,7 +2139,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         i_state-first = 'X'.
       ENDIF.
 
-      CLEAR i_state-key.
+      "CLEAR i_state-key.
       INSERT i_state INTO mt_vars_hist INDEX 1.
     ENDIF.
 
@@ -4444,22 +4445,30 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   METHOD del_variable.
     DATA lv_len   TYPE i.
 
-    READ TABLE mt_vars WITH KEY name = iv_full_name INTO DATA(l_var).
+    READ TABLE mt_state WITH KEY name = iv_full_name ASSIGNING FIELD-SYMBOL(<state>).
     IF sy-subrc = 0.
-      DATA(lo_nodes) = tree->get_nodes( ).
-      DATA(l_node) =  lo_nodes->get_node( l_var-key ).
-      DELETE mt_vars WHERE name = iv_full_name.
-      READ TABLE mt_state WITH KEY name = iv_full_name INTO DATA(ls_state).
-      IF sy-subrc = 0.
 
-        ls_state-step = mo_debugger->m_step.
-        APPEND ls_State TO mo_debugger->mt_del_vars.
-      ENDIF.
-      DELETE mt_state WHERE name = iv_full_name.
+      DATA(lo_nodes) = tree->get_nodes( ).
+      DATA(l_node) =  lo_nodes->get_node( <state>-key ).
+            clear <state>-key.
+
+      "READ TABLE mt_state WITH KEY name = iv_full_name INTO DATA(ls_state).
+      "IF sy-subrc = 0.
+        <state>-step = mo_debugger->m_step.
+        APPEND <state> TO mo_debugger->mt_del_vars.
+      "ENDIF.
+
+      "IF iv_del_in_tree = abap_false.
+        DELETE mt_state WHERE name = iv_full_name.
+      "ENDIF.
+      DELETE mt_vars WHERE name = iv_full_name.
+
       DATA(l_nam) = iv_full_name && '-'.
       lv_len = strlen( l_nam ).
       DELETE mt_vars WHERE name CS l_nam.
-      DELETE mt_state WHERE name CS l_nam.
+      "IF iv_del_in_tree = abap_false.
+        DELETE mt_state WHERE name CS l_nam.
+      "ENDIF.
 
       l_node->delete( ).
     ENDIF.
@@ -4554,7 +4563,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
               IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
                 IF <kind> NE 'v' AND <kind> NE 'u'.
-                  me->del_variable( l_full_name ).
+                  me->del_variable( iv_full_name = l_full_name iv_del_in_tree = abap_true ).
                 ENDIF.
               ENDIF.
 
@@ -4582,7 +4591,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             ENDIF.
 
             IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
-              me->del_variable( l_full_name ).
+              me->del_variable( iv_full_name = l_full_name iv_del_in_tree = abap_true ).
               RETURN.
             ENDIF.
           CATCH cx_root.
@@ -4816,6 +4825,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     l_rel = iv_rel.
 
     READ TABLE mt_vars WITH KEY name = iv_fullname INTO DATA(l_var).
+    .
     IF sy-subrc = 0.
 
       DATA(lo_nodes) = tree->get_nodes( ).
@@ -4841,7 +4851,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ELSE.
             IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
               IF <kind> NE 'v' AND <kind> NE 'u'.
-                me->del_variable( iv_fullname ).
+                me->del_variable( iv_full_name = iv_fullname iv_del_in_tree = abap_true ).
               ENDIF.
             ENDIF.
 
@@ -4866,7 +4876,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ENDIF.
 
           IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
-            me->del_variable( iv_fullname ).
+            me->del_variable( iv_full_name = iv_fullname iv_del_in_tree = abap_true ).
             RETURN.
           ENDIF.
         CATCH cx_root.
@@ -4929,6 +4939,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ASSIGNING <state>.
 
     IF sy-subrc <> 0.
+
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
       <vars>-is_appear = abap_true.
     ELSE.
@@ -4997,9 +5008,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ELSE.
             IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
               IF <kind> NE 'v' AND <kind> NE 'u'.
-                me->del_variable( iv_fullname ).
-*                DELETE mt_vars WHERE name = iv_fullname.
-*                l_node->delete( ).
+                me->del_variable( iv_full_name = iv_fullname iv_del_in_tree = abap_true ).
               ENDIF.
             ENDIF.
 
@@ -5023,7 +5032,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ENDIF.
 
           IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
-            me->del_variable( iv_fullname ).
+            me->del_variable( iv_full_name = iv_fullname iv_del_in_tree = abap_true ).
             RETURN.
           ENDIF.
         CATCH cx_root.
@@ -5088,6 +5097,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ASSIGNING <state>.
 
         IF sy-subrc <> 0.
+
           APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
           <state> = <vars>.
           <state>-is_appear = abap_true.
