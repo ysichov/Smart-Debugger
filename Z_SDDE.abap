@@ -396,6 +396,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
 
           mt_steps         TYPE  TABLE OF lcl_appl=>t_step_counter, "source code steps
           mt_var_step      TYPE  TABLE OF lcl_appl=>var_table_h,
+          mt_del_vars      TYPE STANDARD TABLE OF lcl_appl=>var_table,
           m_step           TYPE i,
           is_step          TYPE xfeld,
 
@@ -703,7 +704,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     mo_tree_exp = NEW lcl_rtti_tree( i_header = 'Exporting parameters' i_type = 'E' i_cont = mo_window->mo_exporting_container
                                      i_debugger = me ).
-  ENDMETHOD.                    
+  ENDMETHOD.
 
   METHOD create_simple_var.
     DATA: lr_symbsimple TYPE REF TO tpda_sys_symbsimple,
@@ -1108,17 +1109,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ASSIGN ls_info-quickdata->* TO <ls_symobjref>.
 
           IF <ls_symobjref>-instancename <> '{A:initial}'.
-          transfer_variable( EXPORTING i_name = CONV #( <ls_symobjref>-instancename )
-                                           i_shortname = i_name
-                                           i_tree = i_tree ).
-          else.
+            transfer_variable( EXPORTING i_name = CONV #( <ls_symobjref>-instancename )
+                                             i_shortname = i_name
+                                             i_tree = i_tree ).
+          ELSE.
             i_tree->del_variable( i_name ).
           ENDIF.
 
         ELSEIF m_quick-typid = 'r'. "reference
           DATA: l_rel   TYPE salv_de_node_relation,
                 lv_node TYPE salv_de_node_key.
-          
+
           l_rel = if_salv_c_node_relation=>last_child.
           lv_node = i_new_node.
 
@@ -1214,7 +1215,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
 
     ASSIGN i_quick-quickdata->* TO <ls_symobjref>.
-    BREAK-POINT.
+
     IF <ls_symobjref>-instancename <> '{O:initial}'.
 
       READ TABLE mt_obj WITH KEY name = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
@@ -1416,6 +1417,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       <hist> = ls_hist.
     ENDLOOP.
 
+    LOOP AT mt_del_vars INTO ls_hist WHERE step = m_hist_step.
+      APPEND INITIAL LINE TO lt_del ASSIGNING <hist>.
+      <hist> = ls_hist.
+    ENDLOOP.
+
     IF ls_stack-stacklevel NE ls_step-stacklevel.
 
       CLEAR: m_step_delta,
@@ -1495,6 +1501,24 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDLOOP.
         ENDLOOP.
       ENDIF.
+
+      "find deleted variables
+      LOOP AT mt_del_vars INTO ls_hist. "WHERE step = m_hist_step. "lv_prev_step.
+
+        LOOP AT mt_vars_hist
+           INTO ls_var
+           WHERE step < ls_hist-step
+             AND name = ls_hist-name.
+
+          READ TABLE lt_hist ASSIGNING <hist> WITH KEY name = ls_var-name.
+          IF sy-subrc NE 0.
+            APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+          ENDIF.
+          <hist> = ls_var.
+          EXIT.
+        ENDLOOP.
+      ENDLOOP.
+
     ENDIF.
 
     mo_tree_local->m_leaf = mo_tree_imp->m_leaf = mo_tree_exp->m_leaf =  'Locals'.
@@ -2016,7 +2040,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
         refc ?= ref.
 
-        mo_tree_local->add_obj_var( EXPORTING iv_name = CONV #( ls_prog-name ) RECEIVING er_key = l_key ).
+        READ TABLE mt_obj WITH KEY name = l_class TRANSPORTING NO FIELDS.
+        IF sy-subrc NE 0.
+          mo_tree_local->add_obj_var( EXPORTING iv_name = CONV #( ls_prog-name ) RECEIVING er_key = l_key ).
+          APPEND INITIAL LINE TO mt_obj ASSIGNING <obj>.
+          <obj>-name = l_class.
+        ENDIF.
 
         LOOP AT REFc->attributes INTO DATA(ls_atr).
           transfer_variable( EXPORTING i_name = CONV #( |{ ls_prog-name }=>{ ls_Atr-name }| )
@@ -4420,6 +4449,12 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       DATA(lo_nodes) = tree->get_nodes( ).
       DATA(l_node) =  lo_nodes->get_node( l_var-key ).
       DELETE mt_vars WHERE name = iv_full_name.
+      READ TABLE mt_state WITH KEY name = iv_full_name INTO DATA(ls_state).
+      IF sy-subrc = 0.
+
+        ls_state-step = mo_debugger->m_step.
+        APPEND ls_State TO mo_debugger->mt_del_vars.
+      ENDIF.
       DELETE mt_state WHERE name = iv_full_name.
       DATA(l_nam) = iv_full_name && '-'.
       lv_len = strlen( l_nam ).
