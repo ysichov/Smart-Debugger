@@ -1467,7 +1467,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDLOOP.
       ENDIF.
     ENDIF.
-  .
+    .
     IF mo_window->m_debug_button = 'BACK'.
 
       LOOP AT mt_var_step INTO step WHERE step = m_hist_step.
@@ -1515,7 +1515,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
           ENDIF.
           <hist> = ls_var.
-          clear <hist>-key.
+          CLEAR <hist>-key.
           EXIT.
         ENDLOOP.
       ENDLOOP.
@@ -1610,18 +1610,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     ASSIGN cs_var-ref->* TO FIELD-SYMBOL(<var>).
     CHECK sy-subrc = 0.
-    IF cs_var-key IS INITIAL.
+
       cs_var-tree->add_variable( EXPORTING iv_root_name = cs_var-short
                                         iv_full_name = CONV #( cs_var-name )
                                         i_cl_leaf   = cs_var-cl_leaf
                                CHANGING io_var =  <var>  ).
-    ELSE.
-      cs_var-tree->add_variable( EXPORTING iv_root_name = cs_var-short
-                                            iv_key = cs_var-key
-                                            iv_full_name = CONV #( cs_var-name )
-                                            i_cl_leaf   = cs_var-cl_leaf
-                                     CHANGING io_var =  <var>  ).
-    ENDIF.
+
   ENDMETHOD.
 
   METHOD run_script.
@@ -4450,25 +4444,26 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
       DATA(lo_nodes) = tree->get_nodes( ).
       DATA(l_node) =  lo_nodes->get_node( <state>-key ).
-            clear <state>-key.
+      CLEAR <state>-key.
 
-      "READ TABLE mt_state WITH KEY name = iv_full_name INTO DATA(ls_state).
-      "IF sy-subrc = 0.
+      READ TABLE mo_debugger->mt_vars_hist WITH KEY name = iv_full_name first = abap_true TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
         <state>-step = mo_debugger->m_step.
         APPEND <state> TO mo_debugger->mt_del_vars.
-      "ENDIF.
+      ENDIF.
 
-      "IF iv_del_in_tree = abap_false.
+
+      IF iv_del_in_tree = abap_false.
         DELETE mt_state WHERE name = iv_full_name.
-      "ENDIF.
+      ENDIF.
       DELETE mt_vars WHERE name = iv_full_name.
 
       DATA(l_nam) = iv_full_name && '-'.
       lv_len = strlen( l_nam ).
       DELETE mt_vars WHERE name CS l_nam.
-      "IF iv_del_in_tree = abap_false.
+      IF iv_del_in_tree = abap_false.
         DELETE mt_state WHERE name CS l_nam.
-      "ENDIF.
+      ENDIF.
 
       l_node->delete( ).
     ENDIF.
