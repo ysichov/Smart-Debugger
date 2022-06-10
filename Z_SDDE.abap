@@ -2307,101 +2307,21 @@ CLASS lcl_window IMPLEMENTATION.
           lt_events TYPE cntl_simple_events,
           ls_events LIKE LINE OF lt_events.
 
-    CLEAR ls_button.
-    ls_button-function = 'HIST'.
-    ls_button-icon = CONV #( icon_graduate ).
-    ls_button-quickinfo = 'History On'.
-    ls_button-text = 'History On'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'VIS'.
-    ls_button-icon = CONV #( icon_flight ).
-    ls_button-quickinfo = 'Visualization Off'.
-    ls_button-text = 'Visualization Off'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'CODE'.
-    ls_button-icon = CONV #( icon_customer_warehouse ).
-    ls_button-quickinfo = 'Only Z'.
-    ls_button-text = 'Only Z'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-butn_type = 3.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'F5'.
-    ls_button-icon = CONV #( icon_debugger_step_into ).
-    ls_button-quickinfo = 'Step into'.
-    ls_button-text = 'Step into'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'F6BEG'.
-    ls_button-icon = CONV #( icon_release ).
-    ls_button-quickinfo = 'Start of block'.
-    ls_button-text = 'Start of block'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'F7END'.
-    ls_button-icon = CONV #( icon_outgoing_org_unit ).
-    ls_button-quickinfo = 'End of block'.
-    ls_button-text = 'End of block '.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'F6'.
-    ls_button-icon = CONV #( icon_debugger_step_over ).
-    ls_button-quickinfo = 'Step over'.
-    ls_button-text = 'Step over'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'F7'.
-    ls_button-icon = CONV #( icon_debugger_step_out ).
-    ls_button-quickinfo = 'Step out'.
-    ls_button-text = 'Step out'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'F8'.
-    ls_button-icon = CONV #( icon_debugger_continue ).
-    ls_button-quickinfo = 'Continue'.
-    ls_button-text = 'Continue'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-butn_type = 3.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'BACK'.
-    ls_button-icon = CONV #( icon_column_left ).
-    ls_button-quickinfo = 'Step Back'.
-    ls_button-text = 'Step Back'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
-
-    CLEAR ls_button.
-    ls_button-function = 'FORW'.
-    ls_button-icon = CONV #( icon_column_right ).
-    ls_button-quickinfo = 'Step forward'.
-    ls_button-text = 'Forward'.
-    ls_button-butn_type = 0.
-    APPEND ls_button TO lt_button.
+    lt_button  = value #(
+     ( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'History On' text = 'History On' )
+     ( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization Off' text = 'Visualization Off' )
+     ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
+     ( butn_type = 3  )
+     ( function = 'F5' icon = CONV #( icon_debugger_step_into ) quickinfo = 'Step into' text = 'Step into' )
+     ( function = 'F6BEG' icon = CONV #( icon_release ) quickinfo = 'Start of block' text = 'Start of block' )
+     ( function = 'F7END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
+     ( function = 'F6' icon = CONV #( icon_debugger_step_over ) quickinfo = 'Step over' text = 'Step over' )
+     ( function = 'F7' icon = CONV #( icon_debugger_step_out ) quickinfo = 'Step out' text = 'Step out' )
+     ( function = 'F8' icon = CONV #( icon_debugger_continue ) quickinfo = 'Continue' text = 'Continue' )
+     ( butn_type = 3  )
+     ( function = 'BACK' icon = CONV #( icon_column_left ) quickinfo = 'Step Back' text = 'Back' )
+     ( function = 'FORW' icon = CONV #( icon_column_right ) quickinfo = 'Step forward' text = 'Forward' )
+                        ).
 
     mo_toolbar->add_button_group( lt_button ).
 
@@ -2411,7 +2331,6 @@ CLASS lcl_window IMPLEMENTATION.
     APPEND ls_events TO lt_events.
 
     mo_toolbar->set_registered_events( events = lt_events ).
-
     SET HANDLER me->hnd_toolbar FOR mo_toolbar.
 
   ENDMETHOD.
