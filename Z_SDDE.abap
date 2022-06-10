@@ -1405,6 +1405,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     mo_window->set_program_line( ls_step-line ).
 
     READ TABLE mo_window->mt_stack INTO DATA(ls_stack) INDEX 1.
+
     MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
 
     LOOP AT mt_vars_hist INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X'.
@@ -1435,6 +1436,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       IF ls_stack-stacklevel < ls_step-stacklevel.
         MOVE-CORRESPONDING ls_step TO ls_stack.
+
         CLEAR mo_window->mt_stack[ 1 ]-stackpointer.
         INSERT ls_stack INTO mo_window->mt_stack INDEX 1.
       ELSE.
@@ -1627,6 +1629,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
 
         READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack_prev.
+
         MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
         READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack.
 
@@ -4455,6 +4458,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         APPEND <state> TO mo_debugger->mt_del_vars.
       ENDIF.
 
+
       IF iv_del_in_tree = abap_false.
         DELETE mt_state WHERE name = iv_full_name.
       ENDIF.
@@ -5061,7 +5065,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-    IF lines > 0 OR  m_hide IS INITIAL.
+    IF "lines > 0 OR
+        m_hide IS INITIAL.
       READ TABLE mt_vars WITH KEY name = iv_parent_name TRANSPORTING NO FIELDS.
       IF sy-subrc NE 0.
 
@@ -5081,6 +5086,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
         <vars>-leaf = m_leaf.
         <vars>-name = iv_fullname.
+
+        <vars>-program = mo_debugger->mo_window->m_prg-program.
+        <vars>-eventtype = mo_debugger->mo_window->m_prg-eventtype.
+        <vars>-eventname = mo_debugger->mo_window->m_prg-eventname.
+
         <vars>-short = iv_name.
         <vars>-key = e_root_key.
         <vars>-ref = ir_up.
