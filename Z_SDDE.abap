@@ -1611,10 +1611,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ASSIGN cs_var-ref->* TO FIELD-SYMBOL(<var>).
     CHECK sy-subrc = 0.
 
-      cs_var-tree->add_variable( EXPORTING iv_root_name = cs_var-short
-                                        iv_full_name = CONV #( cs_var-name )
-                                        i_cl_leaf   = cs_var-cl_leaf
-                               CHANGING io_var =  <var>  ).
+    cs_var-tree->add_variable( EXPORTING iv_root_name = cs_var-short
+                                      iv_full_name = CONV #( cs_var-name )
+                                      i_cl_leaf   = cs_var-cl_leaf
+                             CHANGING io_var =  <var>  ).
 
   ENDMETHOD.
 
@@ -4443,7 +4443,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     IF sy-subrc = 0.
 
       DATA(lo_nodes) = tree->get_nodes( ).
-      DATA(l_node) =  lo_nodes->get_node( <state>-key ).
+      TRY.
+          DATA(l_node) =  lo_nodes->get_node( <state>-key ).
+        CATCH cx_salv_msg.
+      ENDTRY.
       CLEAR <state>-key.
 
       READ TABLE mo_debugger->mt_vars_hist WITH KEY name = iv_full_name first = abap_true TRANSPORTING NO FIELDS.
@@ -4451,7 +4454,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         <state>-step = mo_debugger->m_step.
         APPEND <state> TO mo_debugger->mt_del_vars.
       ENDIF.
-
 
       IF iv_del_in_tree = abap_false.
         DELETE mt_state WHERE name = iv_full_name.
@@ -4464,8 +4466,12 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       IF iv_del_in_tree = abap_false.
         DELETE mt_state WHERE name CS l_nam.
       ENDIF.
-
-      l_node->delete( ).
+      TRY.
+          IF l_node IS NOT INITIAL.
+            l_node->delete( ).
+          ENDIF.
+        CATCH cx_salv_msg.
+      ENDTRY.
     ENDIF.
 
   ENDMETHOD.
