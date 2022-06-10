@@ -1408,15 +1408,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
 
-    LOOP AT mt_vars_hist INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X'.
+    LOOP AT mt_vars_hist INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X' OR is_appear = 'X'.
       APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
       <hist> = ls_hist.
     ENDLOOP.
 
-    LOOP AT mt_vars_hist INTO ls_hist WHERE step =  m_hist_step AND first = abap_false AND is_appear = abap_true.
-      APPEND INITIAL LINE TO lt_del ASSIGNING <hist>.
-      <hist> = ls_hist.
-    ENDLOOP.
+    IF  mo_window->m_debug_button = 'BACK'.
+      LOOP AT mt_vars_hist INTO ls_hist WHERE step =  m_hist_step AND first = abap_false AND is_appear = abap_true.
+        APPEND INITIAL LINE TO lt_del ASSIGNING <hist>.
+        <hist> = ls_hist.
+      ENDLOOP.
+    ENDIF.
 
     LOOP AT mt_del_vars INTO ls_hist WHERE step = m_hist_step.
       APPEND INITIAL LINE TO lt_del ASSIGNING <hist>.
@@ -4452,10 +4454,12 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDTRY.
       CLEAR <state>-key.
 
-      READ TABLE mo_debugger->mt_vars_hist WITH KEY name = iv_full_name first = abap_true TRANSPORTING NO FIELDS.
-      IF sy-subrc NE 0.
-        <state>-step = mo_debugger->m_step.
-        APPEND <state> TO mo_debugger->mt_del_vars.
+      IF mo_debugger->mo_window->m_debug_button NE 'BACK' AND mo_debugger->mo_window->m_debug_button NE 'FORW'.
+        READ TABLE mo_debugger->mt_vars_hist WITH KEY name = iv_full_name first = abap_true TRANSPORTING NO FIELDS.
+        IF sy-subrc NE 0.
+          <state>-step = mo_debugger->m_step.
+          APPEND <state> TO mo_debugger->mt_del_vars.
+        ENDIF.
       ENDIF.
 
 
@@ -4745,9 +4749,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     IF sy-subrc <> 0.
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
       <state> = <vars>.
+      <state>-is_appear = abap_true.
     ELSE.
       <state> = <vars>.
-      <state>-is_appear = abap_true.
+
     ENDIF.
     mo_debugger->save_hist( CHANGING i_state = <state> ).
 
