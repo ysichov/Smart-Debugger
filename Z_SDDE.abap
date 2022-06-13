@@ -434,7 +434,13 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
       f8,
 
       get_obj_index IMPORTING iv_name TYPE any RETURNING VALUE(e_index) TYPE string,
-
+      create_reference         IMPORTING i_name            TYPE string
+                                         i_shortname       TYPE string OPTIONAL
+                                         i_new_node        TYPE salv_de_node_key OPTIONAL
+                                         iv_rel            TYPE salv_de_node_relation
+                                         i_quick           TYPE tpda_scr_quick_info
+                                         i_no_cl_twin      TYPE xfeld OPTIONAL
+                               RETURNING VALUE(e_root_key) TYPE salv_de_node_key,
       show_step.
 
   PRIVATE SECTION.
@@ -458,13 +464,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                                       i_shortname TYPE string OPTIONAL
                                       i_new_node  TYPE salv_de_node_key OPTIONAL,
 
-      create_reference         IMPORTING i_name            TYPE string
-                                         i_shortname       TYPE string OPTIONAL
-                                         i_new_node        TYPE salv_de_node_key OPTIONAL
-                                         iv_rel            TYPE salv_de_node_relation
-                                         i_quick           TYPE tpda_scr_quick_info
-                                         i_no_cl_twin      TYPE xfeld OPTIONAL
-                               RETURNING VALUE(e_root_key) TYPE salv_de_node_key,
+
       get_class_name   IMPORTING i_name        TYPE string
                        RETURNING VALUE(e_name) TYPE string,
 
@@ -1216,7 +1216,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
 
-    ASSIGN i_quick-quickdata->* TO <ls_symobjref>.
+    ASSIGN I_quick-quickdata->* TO <ls_symobjref>.
 
     IF <ls_symobjref>-instancename <> '{O:initial}'.
 
@@ -1728,7 +1728,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           transfer_variable( EXPORTING i_name =  ls_local-name i_tree = mo_tree_exp i_no_cl_twin = 'X' ).
       ENDCASE.
     ENDLOOP.
- 
+
     LOOP AT mt_loc_fs INTO ls_local.
       transfer_variable( EXPORTING i_name =  ls_local-name i_tree = mo_tree_local i_no_cl_twin = 'X' ).
     ENDLOOP.
@@ -4101,7 +4101,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             collapsed_icon = iv_icon
             expanded_icon = iv_icon
             relationship   = if_salv_c_node_relation=>last_child
-            row_style = if_salv_c_tree_style=>EMPHASIZED_POSITIVE
+            row_style = if_salv_c_tree_style=>intensified
             text           = CONV #( iv_name )
             folder         = abap_true
           )->get_key( ).
@@ -4568,6 +4568,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD traverse.
+
     CASE io_type_descr->kind.
       WHEN c_kind-struct.
         IF iv_struc_name is SUPPLIED.
@@ -4607,6 +4608,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                                     ir_up = ir_up
                                     i_cl_leaf = i_cl_leaf
                                     iv_parent_name = iv_parent_name ).
+
+
     ENDCASE.
   ENDMETHOD.
 
@@ -4720,6 +4723,26 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         lv_string = iv_fullname.
       ENDIF.
 
+      TRY.
+       CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+          EXPORTING
+            p_var_name   = lv_string
+          RECEIVING
+            p_symb_quick = data(l_quick).
+      CATCH cx_tpda_varname .
+        "i_tree->del_variable( CONV #( i_name ) ).
+    ENDTRY.
+
+    IF l_quick-typid = 'r'.
+       mo_debugger->create_reference( EXPORTING i_name = lv_string
+                                     i_shortname = ls_component-name
+                                     i_new_node = lv_node_key
+                                     iv_rel = if_salv_c_node_relation=>last_child
+                                     i_quick = l_quick
+                                     i_no_cl_twin = abap_true
+                                     ).
+    else.
+
       traverse(
         io_type_descr = ls_component-type
         iv_parent_key = lv_node_key
@@ -4729,6 +4752,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         ir_up = lr_new_struc
         iv_parent_name = |{ iv_parent_name }-{ ls_component-name }|
         iv_struc_name = ls_component-name ).
+      endif.
     ENDLOOP.
   ENDMETHOD.
 
