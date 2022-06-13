@@ -1728,7 +1728,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           transfer_variable( EXPORTING i_name =  ls_local-name i_tree = mo_tree_exp i_no_cl_twin = 'X' ).
       ENDCASE.
     ENDLOOP.
-
+ 
     LOOP AT mt_loc_fs INTO ls_local.
       transfer_variable( EXPORTING i_name =  ls_local-name i_tree = mo_tree_local i_no_cl_twin = 'X' ).
     ENDLOOP.
@@ -1750,7 +1750,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         "ENDIF.
 
         IF mo_tree_local->m_syst IS NOT INITIAL.
-          
+
           mo_tree_local->m_leaf = 'SYST'.
           transfer_variable( EXPORTING i_name = 'SYST' i_tree = mo_tree_local ).
         ELSE.
@@ -4644,7 +4644,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     ls_tree-fullname = iv_fullname.
 
-    IF NOT ( iv_struc_name IS SUPPLIED and iv_struc_name is INITIAL ).
+    IF  ( iv_struc_name IS SUPPLIED and iv_struc_name is not INITIAL ) OR iv_struc_name IS NOT SUPPLIED.
       IF lv_text IS NOT INITIAL.
 
         READ TABLE mt_vars WITH KEY name = iv_fullname ASSIGNING FIELD-SYMBOL(<vars>).
