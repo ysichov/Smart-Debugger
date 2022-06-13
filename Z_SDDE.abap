@@ -476,7 +476,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
 
       add_hist_var CHANGING cs_var TYPE lcl_appl=>var_table,
       read_class_globals,
-      hndl_script_buttons importing iv_stack_changed type xfeld,
+      hndl_script_buttons IMPORTING iv_stack_changed TYPE xfeld,
       get_form_parameters IMPORTING i_prg TYPE tpda_scr_prg_info.
 
 ENDCLASS.
@@ -593,6 +593,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                 ir_up             TYPE REF TO data OPTIONAL
                 iv_parent_name    TYPE string OPTIONAL
                 i_cl_leaf         TYPE int4 OPTIONAL
+                iv_struc_name     TYPE string OPTIONAL
       RETURNING VALUE(e_root_key) TYPE salv_de_node_key.
 
     METHODS traverse_struct
@@ -605,6 +606,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                 ir_up             TYPE REF TO data OPTIONAL
                 iv_parent_name    TYPE string OPTIONAL
                 i_cl_leaf         TYPE int4 OPTIONAL
+                iv_struc_name     TYPE string
       RETURNING VALUE(e_root_key) TYPE salv_de_node_key.
 
     METHODS traverse_elem
@@ -634,7 +636,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
 
     METHODS: hndl_double_click FOR EVENT double_click OF cl_salv_events_tree IMPORTING node_key,
 
-             hndl_user_command FOR EVENT added_function OF cl_salv_events IMPORTING e_salv_function.
+      hndl_user_command FOR EVENT added_function OF cl_salv_events IMPORTING e_salv_function.
 
 ENDCLASS.
 
@@ -1526,7 +1528,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     mo_tree_local->m_leaf = mo_tree_imp->m_leaf = mo_tree_exp->m_leaf =  'Locals'.
     IF mo_tree_local->m_no_refresh IS INITIAL.
-      mo_tree_local->add_node( iv_name = mo_tree_local->m_leaf iv_icon = CONV #( icon_life_events ) ).
+      mo_tree_local->add_node( iv_name = mo_tree_local->m_leaf iv_icon = CONV #( icon_life_events )  ).
     ELSE.
       mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
     ENDIF.
@@ -1783,12 +1785,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       mo_tree_imp->save_stack_vars( m_step ).
     ENDIF.
 
-   hndl_script_buttons( lv_stack_changed ).
+    hndl_script_buttons( lv_stack_changed ).
 
   ENDMETHOD.                    "script
 
   METHOD hndl_script_buttons.
-        IF mo_window->m_debug_button = 'F5'.
+    IF mo_window->m_debug_button = 'F5'.
       IF mo_window->m_visualization IS INITIAL.
         show_step( ).
       ENDIF.
@@ -2307,7 +2309,7 @@ CLASS lcl_window IMPLEMENTATION.
           lt_events TYPE cntl_simple_events,
           ls_events LIKE LINE OF lt_events.
 
-    lt_button  = value #(
+    lt_button  = VALUE #(
      ( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'History On' text = 'History On' )
      ( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization Off' text = 'Visualization Off' )
      ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
@@ -3978,6 +3980,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lo_columns->get_column( 'VALUE' )->set_short_text( 'Value' ).
     lo_columns->get_column( 'VALUE' )->set_output_length( 40 ).
 
+
     lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full name' ).
     lo_columns->get_column( 'FULLNAME' )->set_output_length( 40 ).
 
@@ -3985,6 +3988,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
     ENDIF.
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
+    lo_columns->get_column( 'TYPENAME' )->set_medium_text( 'Absolute Type' ).
     lo_columns->get_column( 'TYPENAME' )->set_output_length( 20 ).
 
     add_buttons( i_type ).
@@ -4095,7 +4099,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             collapsed_icon = iv_icon
             expanded_icon = iv_icon
             relationship   = if_salv_c_node_relation=>last_child
-            row_style = if_salv_c_tree_style=>emphasized_a
+            row_style = if_salv_c_tree_style=>EMPHASIZED_POSITIVE
             text           = CONV #( iv_name )
             folder         = abap_true
           )->get_key( ).
@@ -4570,7 +4574,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                                       iv_name = iv_name
                                       iv_fullname = iv_fullname
                                       i_cl_leaf = i_cl_leaf
-                                      ir_up = ir_up iv_parent_name = iv_parent_name ).
+                                      ir_up = ir_up iv_parent_name = iv_parent_name
+                                      iv_struc_name = iv_struc_name ).
 
       WHEN c_kind-table.
         e_root_key = traverse_table( io_type_descr = io_type_descr
@@ -4580,7 +4585,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                                      iv_fullname = iv_fullname
                                      ir_up = ir_up
                                      i_cl_leaf = i_cl_leaf
-                                      iv_parent_name = iv_parent_name ).
+                                     iv_parent_name = iv_parent_name ).
       WHEN c_kind-elem.
         e_root_key = traverse_elem( io_type_descr = io_type_descr
                                     iv_parent_key = iv_parent_key
@@ -4599,6 +4604,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           lo_struct_descr TYPE REF TO cl_abap_structdescr,
           ls_tree         TYPE ts_table,
           lv_text         TYPE lvc_value,
+          lv_string       type string,
           lv_node_key     TYPE salv_de_node_key,
           lv_icon         TYPE salv_de_tree_image.
 
@@ -4625,60 +4631,65 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDIF.
 
     ls_tree-fullname = iv_fullname.
-    IF lv_text IS NOT INITIAL.
 
-      READ TABLE mt_vars WITH KEY name = iv_fullname ASSIGNING FIELD-SYMBOL(<vars>).
-      IF sy-subrc NE 0.
-        e_root_key = m_new_node = lv_node_key =
-          tree->get_nodes( )->add_node(
-            related_node   = iv_parent_key
-            relationship   = iv_rel
-            collapsed_icon = lv_icon
-            expanded_icon  = lv_icon
-            data_row       = ls_tree
-            text           = lv_text
-            folder         = abap_true
-          )->get_key( ).
+    IF iv_struc_name IS NOT INITIAL.
+      IF lv_text IS NOT INITIAL.
 
-        APPEND INITIAL LINE TO mt_vars ASSIGNING <vars>.
-        <vars>-key = e_root_key.
-      ELSE.
-        lv_node_key = <vars>-key.
+        READ TABLE mt_vars WITH KEY name = iv_fullname ASSIGNING FIELD-SYMBOL(<vars>).
+        IF sy-subrc NE 0.
+          e_root_key = m_new_node = lv_node_key =
+            tree->get_nodes( )->add_node(
+              related_node   = iv_parent_key
+              relationship   = iv_rel
+              collapsed_icon = lv_icon
+              expanded_icon  = lv_icon
+              data_row       = ls_tree
+              text           = lv_text
+              folder         = abap_true
+            )->get_key( ).
+
+          APPEND INITIAL LINE TO mt_vars ASSIGNING <vars>.
+          <vars>-key = e_root_key.
+        ELSE.
+          lv_node_key = <vars>-key.
+        ENDIF.
       ENDIF.
-    ENDIF.
 
-    <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
-    <vars>-step  = mo_debugger->m_step - mo_debugger->m_step_delta.
+      <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
+      <vars>-step  = mo_debugger->m_step - mo_debugger->m_step_delta.
 
-    <vars>-program   = mo_debugger->mo_window->m_prg-program.
-    <vars>-eventtype = mo_debugger->mo_window->m_prg-eventtype.
-    <vars>-eventname = mo_debugger->mo_window->m_prg-eventname.
+      <vars>-program   = mo_debugger->mo_window->m_prg-program.
+      <vars>-eventtype = mo_debugger->mo_window->m_prg-eventtype.
+      <vars>-eventname = mo_debugger->mo_window->m_prg-eventname.
 
-    <vars>-leaf  = m_leaf.
-    <vars>-name  = iv_fullname.
-    <vars>-short = iv_name.
+      <vars>-leaf  = m_leaf.
+      <vars>-name  = iv_fullname.
+      <vars>-short = iv_name.
 
-    <vars>-ref  = ir_up.
-    <vars>-tree = me.
-    <vars>-cl_leaf = i_cl_leaf.
+      <vars>-ref  = ir_up.
+      <vars>-tree = me.
+      <vars>-cl_leaf = i_cl_leaf.
 
-    READ TABLE mt_state
-      WITH KEY name = iv_fullname
-               program = mo_debugger->mo_window->mt_stack[ 1 ]-program
-                      eventtype = mo_debugger->mo_window->mt_stack[ 1 ]-eventtype
-                      eventname = mo_debugger->mo_window->mt_stack[ 1 ]-eventname
-               stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
-      ASSIGNING FIELD-SYMBOL(<state>).
+      READ TABLE mt_state
+        WITH KEY name = iv_fullname
+                 program = mo_debugger->mo_window->mt_stack[ 1 ]-program
+                        eventtype = mo_debugger->mo_window->mt_stack[ 1 ]-eventtype
+                        eventname = mo_debugger->mo_window->mt_stack[ 1 ]-eventname
+                 stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel
+        ASSIGNING FIELD-SYMBOL(<state>).
 
-    IF sy-subrc <> 0.
-      APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
-      <state> = <vars>.
-      <state>-is_appear = abap_true.
+      IF sy-subrc <> 0.
+        APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
+        <state> = <vars>.
+        <state>-is_appear = abap_true.
+      ELSE.
+        <state> = <vars>.
+      ENDIF.
+
+      mo_debugger->save_hist( CHANGING i_state = <state> ).
     ELSE.
-      <state> = <vars>.
+      lv_node_key = iv_parent_key.
     ENDIF.
-
-    mo_debugger->save_hist( CHANGING i_state = <state> ).
 
     lt_component = lo_struct_descr->get_components( ).
     LOOP AT lt_component INTO ls_component.
@@ -4691,14 +4702,21 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         GET REFERENCE OF <new> INTO lr_new_struc.
       ENDIF.
 
+      IF ls_component-name IS NOT INITIAL.
+        lv_string = |{ iv_fullname }-{ ls_component-name }|.
+      ELSE.
+        lv_string = iv_fullname.
+      ENDIF.
+
       traverse(
         io_type_descr = ls_component-type
         iv_parent_key = lv_node_key
         iv_rel  = if_salv_c_node_relation=>last_child
         iv_name = ls_component-name
-        iv_fullname = |{ iv_fullname }-{ ls_component-name }|
+        iv_fullname = lv_string
         ir_up = lr_new_struc
-        iv_parent_name = |{ iv_parent_name }-{ ls_component-name }| ).
+        iv_parent_name = |{ iv_parent_name }-{ ls_component-name }|
+        iv_struc_name = ls_component-name ).
     ENDLOOP.
   ENDMETHOD.
 
