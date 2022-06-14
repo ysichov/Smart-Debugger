@@ -1716,7 +1716,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSE.
       mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
     ENDIF.
-
+    
     LOOP AT mt_locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
       CASE ls_local-parkind.
@@ -4571,23 +4571,23 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     CASE io_type_descr->kind.
       WHEN c_kind-struct.
-        IF iv_struc_name is SUPPLIED.
-        e_root_key = traverse_struct( io_type_descr = io_type_descr
-                                      iv_parent_key = iv_parent_key
-                                      iv_rel  = iv_rel
-                                      iv_name = iv_name
-                                      iv_fullname = iv_fullname
-                                      i_cl_leaf = i_cl_leaf
-                                      ir_up = ir_up iv_parent_name = iv_parent_name
-                                      iv_struc_name = iv_struc_name ).
+        IF iv_struc_name IS SUPPLIED.
+          e_root_key = traverse_struct( io_type_descr = io_type_descr
+                                        iv_parent_key = iv_parent_key
+                                        iv_rel  = iv_rel
+                                        iv_name = iv_name
+                                        iv_fullname = iv_fullname
+                                        i_cl_leaf = i_cl_leaf
+                                        ir_up = ir_up iv_parent_name = iv_parent_name
+                                        iv_struc_name = iv_struc_name ).
         ELSE.
-           e_root_key = traverse_struct( io_type_descr = io_type_descr
-                                      iv_parent_key = iv_parent_key
-                                      iv_rel  = iv_rel
-                                      iv_name = iv_name
-                                      iv_fullname = iv_fullname
-                                      i_cl_leaf = i_cl_leaf
-                                      ir_up = ir_up iv_parent_name = iv_parent_name ).
+          e_root_key = traverse_struct( io_type_descr = io_type_descr
+                                     iv_parent_key = iv_parent_key
+                                     iv_rel  = iv_rel
+                                     iv_name = iv_name
+                                     iv_fullname = iv_fullname
+                                     i_cl_leaf = i_cl_leaf
+                                     ir_up = ir_up iv_parent_name = iv_parent_name ).
         ENDIF.
 
       WHEN c_kind-table.
@@ -4619,7 +4619,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           lo_struct_descr TYPE REF TO cl_abap_structdescr,
           ls_tree         TYPE ts_table,
           lv_text         TYPE lvc_value,
-          lv_string       type string,
+          lv_string       TYPE string,
           lv_node_key     TYPE salv_de_node_key,
           lv_icon         TYPE salv_de_tree_image.
 
@@ -4647,7 +4647,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     ls_tree-fullname = iv_fullname.
 
-    IF  ( iv_struc_name IS SUPPLIED and iv_struc_name is not INITIAL ) OR iv_struc_name IS NOT SUPPLIED.
+    IF  ( iv_struc_name IS SUPPLIED AND iv_struc_name IS NOT INITIAL ) OR iv_struc_name IS NOT SUPPLIED.
       IF lv_text IS NOT INITIAL.
 
         READ TABLE mt_vars WITH KEY name = iv_fullname ASSIGNING FIELD-SYMBOL(<vars>).
@@ -4724,35 +4724,38 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDIF.
 
       TRY.
-       CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-          EXPORTING
-            p_var_name   = lv_string
-          RECEIVING
-            p_symb_quick = data(l_quick).
-      CATCH cx_tpda_varname .
-        "i_tree->del_variable( CONV #( i_name ) ).
-    ENDTRY.
+          CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+            EXPORTING
+              p_var_name   = lv_string
+            RECEIVING
+              p_symb_quick = DATA(l_quick).
+        CATCH cx_tpda_varname .
+          "i_tree->del_variable( CONV #( i_name ) ).
+      ENDTRY.
 
-    IF l_quick-typid = 'r'.
-       mo_debugger->create_reference( EXPORTING i_name = lv_string
-                                     i_shortname = ls_component-name
-                                     i_new_node = lv_node_key
-                                     iv_rel = if_salv_c_node_relation=>last_child
-                                     i_quick = l_quick
-                                     i_no_cl_twin = abap_true
-                                     ).
-    else.
+      IF l_quick-typid = 'r'.
+        DATA: lr_var      TYPE REF TO data.
+        lr_var = m_variable. "need to refactor m_variable
+        mo_debugger->create_reference( EXPORTING i_name = lv_string
+                                      i_shortname = ls_component-name
+                                      i_new_node = lv_node_key
+                                      iv_rel = if_salv_c_node_relation=>last_child
+                                      i_quick = l_quick
+                                      i_no_cl_twin = abap_true
+                                      ).
+        m_variable = lr_var.
+      ELSE.
 
-      traverse(
-        io_type_descr = ls_component-type
-        iv_parent_key = lv_node_key
-        iv_rel  = if_salv_c_node_relation=>last_child
-        iv_name = ls_component-name
-        iv_fullname = lv_string
-        ir_up = lr_new_struc
-        iv_parent_name = |{ iv_parent_name }-{ ls_component-name }|
-        iv_struc_name = ls_component-name ).
-      endif.
+        traverse(
+          io_type_descr = ls_component-type
+          iv_parent_key = lv_node_key
+          iv_rel  = if_salv_c_node_relation=>last_child
+          iv_name = ls_component-name
+          iv_fullname = lv_string
+          ir_up = lr_new_struc
+          iv_parent_name = |{ iv_parent_name }-{ ls_component-name }|
+          iv_struc_name = ls_component-name ).
+      ENDIF.
     ENDLOOP.
   ENDMETHOD.
 
