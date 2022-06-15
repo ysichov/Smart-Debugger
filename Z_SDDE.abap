@@ -416,7 +416,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mo_tree_imp      TYPE REF TO lcl_rtti_tree,
           mo_tree_local    TYPE REF TO lcl_rtti_tree,
           mo_tree_exp      TYPE REF TO lcl_rtti_tree,
-
+          mv_selected_var  TYPE string,
           m_quick          TYPE tpda_scr_quick_info.
 
     METHODS: prologue  REDEFINITION,
@@ -425,7 +425,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
       end     REDEFINITION,
 
       run_script,
-      run_script_hist,
+      run_script_hist EXPORTING es_stop TYPE xfeld,
       save_hist CHANGING i_state TYPE lcl_appl=>var_table,
 
       f5,
@@ -523,7 +523,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
           m_no_refresh    TYPE xfeld,
           m_prg_info      TYPE tpda_scr_prg_info,
           mo_debugger     TYPE REF TO lcl_debugger_script,
-          mv_selected_var TYPE string,
           tree            TYPE REF TO cl_salv_tree.
 
     METHODS constructor IMPORTING i_header   TYPE clike DEFAULT 'View'
@@ -1393,6 +1392,16 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     is_history = abap_true.
     lv_prev_step = m_hist_step.
 
+    IF mo_window->m_debug_button = 'BACK' AND m_hist_step = 1.
+      es_stop = abap_true.
+      RETURN.
+    ENDIF.
+
+    IF mo_window->m_debug_button = 'FORW' AND m_hist_step = m_step.
+      es_stop = abap_true.
+      RETURN.
+    ENDIF.
+
     IF mo_window->m_debug_button = 'BACK' AND m_hist_step > 1.
       SUBTRACT 1 FROM m_hist_step.
     ENDIF.
@@ -1536,6 +1545,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     LOOP AT lt_hist ASSIGNING <hist> WHERE leaf NE 'Globals' AND leaf NE 'SYST'.
       add_hist_var( CHANGING cs_var = <hist> ).
+      IF <hist>-name = mv_selected_var.
+        es_stop = abap_true.
+      ENDIF.
     ENDLOOP.
 
     LOOP AT lt_del ASSIGNING <hist>.
@@ -1572,10 +1584,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         DELETE mo_tree_local->mt_vars WHERE leaf =  'SYST'.
       ENDIF.
     ENDIF.
-
-    mo_tree_imp->display( ).
-    mo_tree_local->display( ).
-    mo_tree_exp->display( ).
 
     IF mo_window->m_visualization IS INITIAL AND mo_window->m_debug_button NE 'F5'.
       mo_window->m_show_step = abap_true.
@@ -1734,7 +1742,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       transfer_variable( EXPORTING i_name =  ls_local-name i_tree = mo_tree_local i_no_cl_twin = 'X' ).
     ENDLOOP.
 
-
     IF mo_tree_local->m_globals IS NOT INITIAL.
 
       mo_tree_local->m_leaf = 'Globals'.
@@ -1777,6 +1784,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       mo_tree_local->mt_state = mo_tree_local->mt_vars.
     ENDIF.
 
+*    mo_tree_imp->display( ).
+*    mo_tree_local->display( ).
+*    mo_tree_exp->display( ).
+
     mo_tree_local->m_no_refresh = 'X'.
     mo_tree_exp->m_no_refresh = 'X'.
     mo_tree_imp->m_no_refresh = 'X'.
@@ -1793,6 +1804,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.                    "script
 
   METHOD hndl_script_buttons.
+
     IF mo_window->m_debug_button = 'F5'.
       IF mo_window->m_visualization IS INITIAL.
         show_step( ).
@@ -1839,9 +1851,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSEIF mo_window->m_debug_button IS NOT INITIAL.
       READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = mo_window->m_prg-include linesrc = mo_window->m_prg-line INTO DATA(gs_break).
       IF sy-subrc = 0.
-        IF mo_window->m_visualization IS INITIAL.
-          show_step( ).
-        ENDIF.
+        "IF mo_window->m_visualization IS INITIAL.
+        show_step( ).
+        "ENDIF.
         me->break( ).
       ELSE.
         IF mo_window->m_debug_button = 'F6BEG' AND iv_stack_changed IS NOT INITIAL.
@@ -1962,6 +1974,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF mo_window->m_visualization IS INITIAL AND mo_window->m_debug_button NE 'F5'.
       mo_window->m_show_step = abap_true.
     ENDIF.
+
 
   ENDMETHOD.
 
@@ -2151,6 +2164,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
       "CLEAR i_state-key.
+
       INSERT i_state INTO mt_vars_hist INDEX 1.
     ENDIF.
 
@@ -2469,7 +2483,16 @@ CLASS lcl_window IMPLEMENTATION.
           mo_debugger->f5( ).
         ENDIF.
       WHEN 'BACK' OR 'FORW'.
-        mo_debugger->run_script_hist( ).
+        DO.
+          mo_debugger->run_script_hist( IMPORTING es_stop = DATA(lv_stop) ).
+          IF lv_stop = abap_true.
+            mo_Debugger->mo_tree_imp->display( ).
+            mo_Debugger->mo_tree_local->display( ).
+            mo_Debugger->mo_tree_exp->display( ).
+
+            RETURN.
+          ENDIF.
+        ENDDO.
     ENDCASE.
   ENDMETHOD.
 
@@ -4061,26 +4084,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDIF.
 
     lo_functions->add_function(
-           name     = 'BACK'
-           icon     = CONV #( icon_column_left )
-           text     = 'Back'
-           tooltip  = 'Back to seleced variable change'
-           position = if_salv_c_function_position=>right_of_salv_functions ).
-
-    lo_functions->add_function(
-           name     = 'FORW'
-           icon     = CONV #( icon_column_right )
-           text     = 'Forward'
-           tooltip  = 'Back to seleced variable change'
-           position = if_salv_c_function_position=>right_of_salv_functions ).
-
-
-    lo_functions->add_function(
-       name     = 'REFRESH'
-       icon     = CONV #( icon_refresh )
-       text     = ''
-       tooltip  = 'Refresh'
-       position = if_salv_c_function_position=>left_of_salv_functions ).
+     name     = 'REFRESH'
+     icon     = CONV #( icon_refresh )
+     text     = ''
+     tooltip  = 'Refresh'
+     position = if_salv_c_function_position=>left_of_salv_functions ).
   ENDMETHOD.
 
   METHOD clear.
@@ -4360,42 +4368,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
         lcl_appl=>open_int_table( iv_name = 'classes' it_tab =  mt_classes_leaf ).
 
-      WHEN 'BACK'.
-        DO.
-          IF mo_debugger->m_hist_step = 1.
-
-            EXIT.
-          ENDIF.
-          SUBTRACT 1 FROM mo_debugger->m_hist_step.
-          READ TABLE mo_debugger->mt_vars_hist WITH KEY step = mo_debugger->m_hist_step name = mv_selected_var  INTO DATA(ls_var_step).
-          IF sy-subrc = 0.
-            EXIT.
-          ENDIF.
-        ENDDO.
-        ADD 1 TO mo_debugger->m_hist_step.
-        mo_debugger->mo_window->m_debug_button = 'BACK'.
-        mo_debugger->run_script_hist( ).
-
-
-      WHEN 'FORW'.
-        DATA(lv_max) = mo_debugger->mt_vars_hist[ 1 ]-step.
-        lv_step = mo_debugger->m_hist_step.
-        DO.
-          ADD 1 TO mo_debugger->m_hist_step.
-          IF mo_debugger->m_hist_step > lv_max .
-            mo_debugger->m_hist_step = lv_step.
-            RETURN.
-          ENDIF.
-
-          READ TABLE mo_debugger->mt_vars_hist WITH KEY step = mo_debugger->m_hist_step name = mv_selected_var INTO ls_var_step.
-          IF sy-subrc = 0.
-            EXIT.
-          ENDIF.
-        ENDDO.
-        "SUBTRACT 1 FROM mo_debugger->m_hist_step.
-        mo_debugger->mo_window->m_debug_button = 'FORW'.
-        mo_debugger->run_script_hist( ).
-
     ENDCASE.
 
     CLEAR mo_debugger->mo_window->m_debug_button.
@@ -4419,7 +4391,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
     ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
     ASSIGN COMPONENT 'FULLNAME' OF STRUCTURE <row> TO FIELD-SYMBOL(<fullname>).
-    mv_selected_var = <fullname>.
+    mo_debugger->mv_selected_var = <fullname>.
 
     CASE <kind>.
       WHEN cl_abap_datadescr=>typekind_table.
