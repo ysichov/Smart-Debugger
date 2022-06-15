@@ -1474,7 +1474,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF mo_window->m_debug_button = 'BACK'.
-      BREAK-POINT.
+      
       LOOP AT mt_var_step INTO step WHERE step = m_hist_step.
         READ TABLE lt_hist
          WITH KEY program = step-program
