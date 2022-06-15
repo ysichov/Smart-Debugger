@@ -523,6 +523,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
           m_no_refresh    TYPE xfeld,
           m_prg_info      TYPE tpda_scr_prg_info,
           mo_debugger     TYPE REF TO lcl_debugger_script,
+          mv_selected_var TYPE string,
           tree            TYPE REF TO cl_salv_tree.
 
     METHODS constructor IMPORTING i_header   TYPE clike DEFAULT 'View'
@@ -1408,7 +1409,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
 
-    LOOP AT mt_vars_hist INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X' OR is_appear = 'X'.
+    LOOP AT mt_vars_hist INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X'. "OR is_appear = 'X'.
       APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
       <hist> = ls_hist.
     ENDLOOP.
@@ -1473,7 +1474,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF mo_window->m_debug_button = 'BACK'.
-
+      BREAK-POINT.
       LOOP AT mt_var_step INTO step WHERE step = m_hist_step.
         READ TABLE lt_hist
          WITH KEY program = step-program
@@ -1716,7 +1717,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSE.
       mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
     ENDIF.
-    
+
     LOOP AT mt_locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
       CASE ls_local-parkind.
@@ -2106,6 +2107,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     i_state-step = m_step - m_step_delta.
     ASSIGN i_state-ref->* TO FIELD-SYMBOL(<state>).
+
     lv_name = i_state-name.
 
     IF lv_name+0(2) NE '{O'.
@@ -4059,6 +4061,21 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDIF.
 
     lo_functions->add_function(
+           name     = 'BACK'
+           icon     = CONV #( icon_column_left )
+           text     = 'Back'
+           tooltip  = 'Back to seleced variable change'
+           position = if_salv_c_function_position=>right_of_salv_functions ).
+
+    lo_functions->add_function(
+           name     = 'FORW'
+           icon     = CONV #( icon_column_right )
+           text     = 'Forward'
+           tooltip  = 'Back to seleced variable change'
+           position = if_salv_c_function_position=>right_of_salv_functions ).
+
+
+    lo_functions->add_function(
        name     = 'REFRESH'
        icon     = CONV #( icon_refresh )
        text     = ''
@@ -4340,6 +4357,36 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 *        lcl_appl=>open_int_table( iv_name = 'Steps' it_tab =  lt_hist2 ).
 
         lcl_appl=>open_int_table( iv_name = 'classes' it_tab =  mt_classes_leaf ).
+
+
+      WHEN 'BACK'.
+
+        DO.
+          IF mo_debugger->m_hist_step = 1.
+            EXIT.
+          ENDIF.
+          SUBTRACT 1 FROM mo_debugger->m_hist_step.
+          READ TABLE mo_debugger->mt_vars_hist WITH KEY step = mo_debugger->m_hist_step INTO DATA(ls_var_step).
+          IF ls_var_step-name = mv_selected_var.
+            EXIT.
+          ENDIF.
+        ENDDO.
+        mo_debugger->run_script_hist( ).
+
+      WHEN 'FORW'.
+        DO.
+          ADD 1 TO mo_debugger->m_hist_step.
+          READ TABLE mo_debugger->mt_vars_hist WITH KEY step = mo_debugger->m_hist_step INTO ls_var_step.
+          IF sy-subrc NE 0.
+            SUBTRACT 1 FROM mo_debugger->m_hist_step.
+            EXIT.
+          ENDIF.
+          IF ls_var_step-name = mv_selected_var.
+            EXIT.
+          ENDIF.
+        ENDDO.
+        mo_debugger->run_script_hist( ).
+
     ENDCASE.
 
     CLEAR mo_debugger->mo_window->m_debug_button.
@@ -4363,6 +4410,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
     ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
     ASSIGN COMPONENT 'FULLNAME' OF STRUCTURE <row> TO FIELD-SYMBOL(<fullname>).
+    mv_selected_var = <fullname>.
 
     CASE <kind>.
       WHEN cl_abap_datadescr=>typekind_table.
@@ -4734,8 +4782,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDTRY.
 
       IF l_quick-typid = 'r'.
-        DATA: lr_var      TYPE REF TO data.
-        lr_var = m_variable. "need to refactor m_variable
         mo_debugger->create_reference( EXPORTING i_name = lv_string
                                       i_shortname = ls_component-name
                                       i_new_node = lv_node_key
@@ -4743,7 +4789,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                                       i_quick = l_quick
                                       i_no_cl_twin = abap_true
                                       ).
-        m_variable = lr_var.
       ELSE.
 
         traverse(
