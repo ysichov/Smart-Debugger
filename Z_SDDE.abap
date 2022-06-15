@@ -1474,7 +1474,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF mo_window->m_debug_button = 'BACK'.
-      
+
       LOOP AT mt_var_step INTO step WHERE step = m_hist_step.
         READ TABLE lt_hist
          WITH KEY program = step-program
@@ -4329,6 +4329,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD hndl_user_command.
+    DATA: lv_step TYPE i.
+
     CONSTANTS: c_mask TYPE x VALUE '01'.
     CASE e_salv_function.
       WHEN 'REFRESH'."
@@ -4358,33 +4360,40 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
         lcl_appl=>open_int_table( iv_name = 'classes' it_tab =  mt_classes_leaf ).
 
-
       WHEN 'BACK'.
-
         DO.
           IF mo_debugger->m_hist_step = 1.
+
             EXIT.
           ENDIF.
           SUBTRACT 1 FROM mo_debugger->m_hist_step.
-          READ TABLE mo_debugger->mt_vars_hist WITH KEY step = mo_debugger->m_hist_step INTO DATA(ls_var_step).
-          IF ls_var_step-name = mv_selected_var.
+          READ TABLE mo_debugger->mt_vars_hist WITH KEY step = mo_debugger->m_hist_step name = mv_selected_var  INTO DATA(ls_var_step).
+          IF sy-subrc = 0.
             EXIT.
           ENDIF.
         ENDDO.
+        ADD 1 TO mo_debugger->m_hist_step.
+        mo_debugger->mo_window->m_debug_button = 'BACK'.
         mo_debugger->run_script_hist( ).
 
+
       WHEN 'FORW'.
+        DATA(lv_max) = mo_debugger->mt_vars_hist[ 1 ]-step.
+        lv_step = mo_debugger->m_hist_step.
         DO.
           ADD 1 TO mo_debugger->m_hist_step.
-          READ TABLE mo_debugger->mt_vars_hist WITH KEY step = mo_debugger->m_hist_step INTO ls_var_step.
-          IF sy-subrc NE 0.
-            SUBTRACT 1 FROM mo_debugger->m_hist_step.
-            EXIT.
+          IF mo_debugger->m_hist_step > lv_max .
+            mo_debugger->m_hist_step = lv_step.
+            RETURN.
           ENDIF.
-          IF ls_var_step-name = mv_selected_var.
+
+          READ TABLE mo_debugger->mt_vars_hist WITH KEY step = mo_debugger->m_hist_step name = mv_selected_var INTO ls_var_step.
+          IF sy-subrc = 0.
             EXIT.
           ENDIF.
         ENDDO.
+        "SUBTRACT 1 FROM mo_debugger->m_hist_step.
+        mo_debugger->mo_window->m_debug_button = 'FORW'.
         mo_debugger->run_script_hist( ).
 
     ENDCASE.
