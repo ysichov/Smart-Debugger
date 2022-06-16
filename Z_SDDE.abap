@@ -417,6 +417,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mo_tree_local    TYPE REF TO lcl_rtti_tree,
           mo_tree_exp      TYPE REF TO lcl_rtti_tree,
           mv_selected_var  TYPE string,
+          mv_stack_changed TYPE xfeld,
           m_quick          TYPE tpda_scr_quick_info.
 
     METHODS: prologue  REDEFINITION,
@@ -1163,6 +1164,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
         ELSEIF m_quick-typid = 'g'."string
           DATA(new_string) = create_simple_string( i_name ).
+
           i_tree->add_variable( EXPORTING iv_root_name = i_name
                                            iv_full_name = i_name
                                            CHANGING io_var =  new_string ).
@@ -1545,7 +1547,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     LOOP AT lt_hist ASSIGNING <hist> WHERE leaf NE 'Globals' AND leaf NE 'SYST'.
       add_hist_var( CHANGING cs_var = <hist> ).
-      IF <hist>-name = mv_selected_var.
+      IF <hist>-name = mv_selected_var or mv_selected_var is INITIAL.
         es_stop = abap_true.
       ENDIF.
     ENDLOOP.
@@ -1664,7 +1666,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                  mt_obj,
                  mt_ret_exp.
 
-          lv_stack_changed = abap_true.
+          mv_stack_changed = lv_stack_changed = abap_true.
 
           mo_tree_local->m_prg_info-event-eventname = mo_window->m_prg-event-eventname.
 
@@ -1683,7 +1685,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           mo_tree_exp->clear( ).
           mo_tree_imp->clear( ).
         ELSE.
-          CLEAR lv_stack_changed.
+
+          CLEAR: lv_stack_changed, mv_stack_changed.
           m_step_delta = 1.
         ENDIF.
 
@@ -2123,6 +2126,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     lv_name = i_state-name.
 
+    IF mv_stack_changed ne abap_true.
     IF lv_name+0(2) NE '{O'.
 
       READ TABLE mt_vars_hist
@@ -2154,6 +2158,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
     ENDIF.
+     lv_add = abap_on.
+    endif.
     IF lv_add = abap_on.
 
       CLEAR i_state-first.
@@ -4102,7 +4108,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
            m_class_key,
            mt_vars,
            mt_classes_leaf,
-           m_no_refresh.
+           m_no_refresh,
+           mt_state.
   ENDMETHOD.
 
   METHOD save_stack_vars.
@@ -4763,6 +4770,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDTRY.
 
       IF l_quick-typid = 'r'.
+        data: lr_variable type ref to data. "need to refaktor
+        lr_variable = m_variable.
         mo_debugger->create_reference( EXPORTING i_name = lv_string
                                       i_shortname = ls_component-name
                                       i_new_node = lv_node_key
@@ -4770,6 +4779,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                                       i_quick = l_quick
                                       i_no_cl_twin = abap_true
                                       ).
+
+        m_variable = lr_variable.
       ELSE.
 
         traverse(
