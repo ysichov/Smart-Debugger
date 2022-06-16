@@ -2498,6 +2498,11 @@ CLASS lcl_window IMPLEMENTATION.
             mo_Debugger->mo_tree_imp->display( ).
             mo_Debugger->mo_tree_local->display( ).
             mo_Debugger->mo_tree_exp->display( ).
+            if mo_debugger->m_hist_step = 1.
+              mo_toolbar->set_button_state( EXPORTING fcode = 'BACK' enabled = abap_false ).
+            ELSE.
+              mo_toolbar->set_button_state( EXPORTING fcode = 'BACK' enabled = abap_true ).
+            ENDIF.
 
             RETURN.
           ENDIF.
@@ -4602,10 +4607,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       IF <kind> NE 'v' AND <kind> NE 'u'.
         IF l_node IS NOT INITIAL.
           DATA(key) = l_node->get_key( ). "need to refactor
-          READ TABLE mt_state WITH KEY key = key TRANSPORTING NO FIELDS.
-          IF sy-subrc = 0.
+"          READ TABLE mt_state WITH KEY key = key TRANSPORTING NO FIELDS.
+*          IF sy-subrc = 0.
+          BREAK-POINT.
             l_node->delete( ).
-          ENDIF.
+*          ENDIF.
         ENDIF.
       ENDIF.
     ENDIF.
