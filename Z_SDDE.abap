@@ -1730,7 +1730,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSE.
       mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
     ENDIF.
-
+     BREAK-POINT.
     LOOP AT mt_locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
       CASE ls_local-parkind.
@@ -4451,7 +4451,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         DELETE mt_state WHERE name CS l_nam.
       ENDIF.
       TRY.
-          IF l_node IS NOT INITIAL.
+          IF l_node IS NOT INITIAL and iv_del_in_tree = abap_true.
             l_node->delete( ).
           ENDIF.
         CATCH cx_salv_msg.
@@ -4537,10 +4537,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
               l_key = l_var-key.
               l_rel = if_salv_c_node_relation=>next_sibling.
               IF <kind> NE 'v' AND <kind> NE 'u'.
-                DELETE mt_vars WHERE name = l_full_name.
-                DATA(l_nam) = l_full_name && '-'.
-                lv_len = strlen( l_nam ).
-                DELETE mt_vars WHERE name CS l_nam.
+                 me->del_variable( iv_full_name = l_full_name iv_del_in_tree = abap_false ).
+*                DELETE mt_vars WHERE name = l_full_name.
+*                DATA(l_nam) = l_full_name && '-'.
+*                lv_len = strlen( l_nam ).
+*                DELETE mt_vars WHERE name CS l_nam.
               ENDIF.
             ELSE.
 
