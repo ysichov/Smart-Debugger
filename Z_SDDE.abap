@@ -1,8 +1,4 @@
-*---------------------------------------------------------------------*
-*       CLASS lcl_debugger_script DEFINITION
-*---------------------------------------------------------------------*
-*
-*-----------------*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
 *& Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
@@ -1550,9 +1546,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     LOOP AT lt_hist ASSIGNING <hist> WHERE leaf NE 'Globals' AND leaf NE 'SYST'.
-      
+
       add_hist_var( CHANGING cs_var = <hist> ).
-      IF <hist>-name = mv_selected_var or mv_selected_var is INITIAL.
+      IF <hist>-name = mv_selected_var OR mv_selected_var IS INITIAL.
         es_stop = abap_true.
       ENDIF.
     ENDLOOP.
@@ -1797,16 +1793,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 *    mo_tree_local->display( ).
 *    mo_tree_exp->display( ).
 
-    mo_tree_local->m_no_refresh = 'X'.
-    mo_tree_exp->m_no_refresh = 'X'.
-    mo_tree_imp->m_no_refresh = 'X'.
-    CLEAR mo_window->m_show_step.
-
     IF lv_stack_changed = abap_true.
       mo_tree_local->save_stack_vars( m_step ).
       mo_tree_exp->save_stack_vars( m_step ).
       mo_tree_imp->save_stack_vars( m_step ).
     ENDIF.
+
+    mo_tree_local->m_no_refresh = 'X'.
+    mo_tree_exp->m_no_refresh = 'X'.
+    mo_tree_imp->m_no_refresh = 'X'.
+    CLEAR mo_window->m_show_step.
+
 
     hndl_script_buttons( lv_stack_changed ).
 
@@ -2132,40 +2129,40 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     lv_name = i_state-name.
 
-    IF mv_stack_changed ne abap_true.
-    IF lv_name+0(2) NE '{O'.
+    IF mv_stack_changed NE abap_true.
+      IF lv_name+0(2) NE '{O'.
 
-      READ TABLE mt_vars_hist
-       WITH KEY stack = i_state-stack
-                name = i_state-name
-                program = i_state-program
-                eventtype = i_state-eventtype
-                eventname = i_state-eventname
-                INTO DATA(lv_hist).
+        READ TABLE mt_vars_hist
+         WITH KEY stack = i_state-stack
+                  name = i_state-name
+                  program = i_state-program
+                  eventtype = i_state-eventtype
+                  eventname = i_state-eventname
+                  INTO DATA(lv_hist).
 
-      IF sy-subrc NE 0.
-        lv_add = abap_on.
-      ELSE.
-        ASSIGN lv_hist-ref->* TO FIELD-SYMBOL(<hist>).
-        IF <hist> NE <state>.
+        IF sy-subrc NE 0.
           lv_add = abap_on.
-        ENDIF.
-      ENDIF.
-    ELSE.
-      CLEAR i_state-leaf.
-      READ TABLE mt_vars_hist WITH KEY name = i_state-name INTO lv_hist.
-      IF sy-subrc = 0.
-        ASSIGN lv_hist-ref->* TO <hist>.
-        IF <hist> NE <state>.
-          lv_add = abap_on.
+        ELSE.
+          ASSIGN lv_hist-ref->* TO FIELD-SYMBOL(<hist>).
+          IF <hist> NE <state>.
+            lv_add = abap_on.
+          ENDIF.
         ENDIF.
       ELSE.
-        lv_add = abap_on.
-      ENDIF.
+        CLEAR i_state-leaf.
+        READ TABLE mt_vars_hist WITH KEY name = i_state-name INTO lv_hist.
+        IF sy-subrc = 0.
+          ASSIGN lv_hist-ref->* TO <hist>.
+          IF <hist> NE <state>.
+            lv_add = abap_on.
+          ENDIF.
+        ELSE.
+          lv_add = abap_on.
+        ENDIF.
 
+      ENDIF.
+      lv_add = abap_on.
     ENDIF.
-     lv_add = abap_on.
-    endif.
     IF lv_add = abap_on.
 
       CLEAR i_state-first.
@@ -4124,6 +4121,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
       READ TABLE mo_debugger->mt_var_step WITH KEY name = vars-name step = iv_step TRANSPORTING NO FIELDS  .
       IF sy-subrc NE 0.
+
         APPEND INITIAL LINE TO mo_debugger->mt_var_step ASSIGNING FIELD-SYMBOL(<step>).
         MOVE-CORRESPONDING vars TO <step>.
         <step>-step = iv_step.
@@ -4320,7 +4318,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   METHOD delete_node.
     DATA(lo_nodes) = tree->get_nodes( ).
     DATA(l_node) =  lo_nodes->get_node( iv_key ).
-    IF sy-subrc = 0.
+    IF l_node IS NOT INITIAL.
       l_node->delete( ).
     ENDIF.
   ENDMETHOD.
@@ -4603,7 +4601,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     IF l_rel = if_salv_c_node_relation=>next_sibling.
       IF <kind> NE 'v' AND <kind> NE 'u'.
         IF l_node IS NOT INITIAL.
-          l_node->delete( ).
+          DATA(key) = l_node->get_key( ). "need to refactor
+          READ TABLE mt_state WITH KEY key = key TRANSPORTING NO FIELDS.
+          IF sy-subrc = 0.
+            l_node->delete( ).
+          ENDIF.
         ENDIF.
       ENDIF.
     ENDIF.
@@ -4776,7 +4778,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDTRY.
 
       IF l_quick-typid = 'r'.
-        data: lr_variable type ref to data. "need to refaktor
+        DATA: lr_variable TYPE REF TO data. "need to refaktor
         lr_variable = m_variable.
         mo_debugger->create_reference( EXPORTING i_name = lv_string
                                       i_shortname = ls_component-name
@@ -4980,7 +4982,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     mo_debugger->save_hist( CHANGING i_state = <state> ).
 
     IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
-      l_node->delete( ).
+      IF l_node IS NOT INITIAL.
+        l_node->delete( ).
+      ENDIF.
     ENDIF.
   ENDMETHOD.
 
@@ -5141,7 +5145,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         ENDIF.
 
         IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
-          l_node->delete( ).
+          IF l_node IS NOT INITIAL.
+            l_node->delete( ).
+          ENDIF.
         ENDIF.
 
       ENDIF.
