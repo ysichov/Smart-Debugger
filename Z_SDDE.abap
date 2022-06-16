@@ -1730,7 +1730,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSE.
       mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
     ENDIF.
-     BREAK-POINT.
+
     LOOP AT mt_locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
       CASE ls_local-parkind.
