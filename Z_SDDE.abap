@@ -1,4 +1,8 @@
-*&---------------------------------------------------------------------*
+*---------------------------------------------------------------------*
+*       CLASS lcl_debugger_script DEFINITION
+*---------------------------------------------------------------------*
+*
+*-----------------*&---------------------------------------------------------------------*
 *& Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
@@ -1546,6 +1550,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     LOOP AT lt_hist ASSIGNING <hist> WHERE leaf NE 'Globals' AND leaf NE 'SYST'.
+      
       add_hist_var( CHANGING cs_var = <hist> ).
       IF <hist>-name = mv_selected_var or mv_selected_var is INITIAL.
         es_stop = abap_true.
@@ -1629,6 +1634,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     cs_var-tree->add_variable( EXPORTING iv_root_name = cs_var-short
                                       iv_full_name = CONV #( cs_var-name )
                                       i_cl_leaf   = cs_var-cl_leaf
+                                      iv_key = cs_var-key
                              CHANGING io_var =  <var>  ).
 
   ENDMETHOD.
@@ -4108,8 +4114,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
            m_class_key,
            mt_vars,
            mt_classes_leaf,
-           m_no_refresh,
-           mt_state.
+           mt_state,
+           m_no_refresh.
   ENDMETHOD.
 
   METHOD save_stack_vars.
