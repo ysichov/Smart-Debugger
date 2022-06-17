@@ -1630,7 +1630,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     cs_var-tree->add_variable( EXPORTING iv_root_name = cs_var-short
                                       iv_full_name = CONV #( cs_var-name )
                                       i_cl_leaf   = cs_var-cl_leaf
-                                      iv_key = cs_var-key
+                                      "iv_key = cs_var-key
                              CHANGING io_var =  <var>  ).
 
   ENDMETHOD.
@@ -2161,6 +2161,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDIF.
 
       ENDIF.
+    ELSE.
       lv_add = abap_on.
     ENDIF.
     IF lv_add = abap_on.
@@ -2350,6 +2351,7 @@ CLASS lcl_window IMPLEMENTATION.
      ( butn_type = 3  )
      ( function = 'BACK' icon = CONV #( icon_column_left ) quickinfo = 'Step Back' text = 'Back' )
      ( function = 'FORW' icon = CONV #( icon_column_right ) quickinfo = 'Step forward' text = 'Forward' )
+     ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Select variable to scan' text = 'Select variable to scan' )
                         ).
 
     mo_toolbar->add_button_group( lt_button ).
@@ -2498,7 +2500,7 @@ CLASS lcl_window IMPLEMENTATION.
             mo_Debugger->mo_tree_imp->display( ).
             mo_Debugger->mo_tree_local->display( ).
             mo_Debugger->mo_tree_exp->display( ).
-            if mo_debugger->m_hist_step = 1.
+            IF mo_debugger->m_hist_step = 1.
               mo_toolbar->set_button_state( EXPORTING fcode = 'BACK' enabled = abap_false ).
             ELSE.
               mo_toolbar->set_button_state( EXPORTING fcode = 'BACK' enabled = abap_true ).
@@ -2507,6 +2509,9 @@ CLASS lcl_window IMPLEMENTATION.
             RETURN.
           ENDIF.
         ENDDO.
+      WHEN 'CLEARVAR'.
+        CLEAR mo_debugger->mv_selected_var.
+        mo_toolbar->set_button_info( EXPORTING icon = CONV #( icon_select_detail ) fcode =  'CLEARVAR'  text = 'Select variable to scan' ).
     ENDCASE.
   ENDMETHOD.
 
@@ -4409,6 +4414,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ASSIGN COMPONENT 'FULLNAME' OF STRUCTURE <row> TO FIELD-SYMBOL(<fullname>).
     mo_debugger->mv_selected_var = <fullname>.
 
+    mo_debugger->mo_window->mo_toolbar->set_button_info( EXPORTING fcode =  'CLEARVAR' icon = CONV #( icon_select_detail ) text = |'Clear { mo_debugger->mv_selected_var }| ).
+
     CASE <kind>.
       WHEN cl_abap_datadescr=>typekind_table.
         lcl_appl=>open_int_table( iv_name = <fullname> it_ref = <ref> ).
@@ -4439,9 +4446,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDIF.
 
 
-      IF iv_del_in_tree = abap_false.
-        DELETE mt_state WHERE name = iv_full_name.
-      ENDIF.
+*      IF iv_del_in_tree = abap_false.
+*        DELETE mt_state WHERE name = iv_full_name.
+*      ENDIF.
       DELETE mt_vars WHERE name = iv_full_name.
 
       DATA(l_nam) = iv_full_name && '-'.
@@ -4451,7 +4458,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         DELETE mt_state WHERE name CS l_nam.
       ENDIF.
       TRY.
-          IF l_node IS NOT INITIAL and iv_del_in_tree = abap_true.
+          IF l_node IS NOT INITIAL AND iv_del_in_tree = abap_true.
             l_node->delete( ).
           ENDIF.
         CATCH cx_salv_msg.
@@ -4537,7 +4544,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
               l_key = l_var-key.
               l_rel = if_salv_c_node_relation=>next_sibling.
               IF <kind> NE 'v' AND <kind> NE 'u'.
-                 me->del_variable( iv_full_name = l_full_name iv_del_in_tree = abap_false ).
+                me->del_variable( iv_full_name = l_full_name iv_del_in_tree = abap_false ).
 *                DELETE mt_vars WHERE name = l_full_name.
 *                DATA(l_nam) = l_full_name && '-'.
 *                lv_len = strlen( l_nam ).
@@ -4608,9 +4615,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       IF <kind> NE 'v' AND <kind> NE 'u'.
         IF l_node IS NOT INITIAL.
           DATA(key) = l_node->get_key( ). "need to refactor
-"          READ TABLE mt_state WITH KEY key = key TRANSPORTING NO FIELDS.
+*          READ TABLE mt_vars WITH KEY key = key TRANSPORTING NO FIELDS.
 *          IF sy-subrc = 0.
-          BREAK-POINT.
+
             l_node->delete( ).
 *          ENDIF.
         ENDIF.
