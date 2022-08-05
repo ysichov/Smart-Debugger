@@ -1088,6 +1088,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
           table_clone    TYPE REF TO data,
           l_name         TYPE string,
+          l_full_name    type string,
           lo_deep_handle TYPE REF TO cl_abap_datadescr,
           deep_ref       TYPE REF TO cl_abap_typedescr,
           lo_tabl        TYPE REF TO cl_abap_tabledescr,
@@ -1104,6 +1105,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     FIELD-SYMBOLS: <lv_value> TYPE any.
 
+    l_full_name = i_name.
     IF i_name NE '{A:initial}'.
       TRY.
           CALL METHOD cl_tpda_script_data_descr=>get_quick_info
@@ -1162,7 +1164,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                     <to> = <elem>.
                   ENDIF.
                 ENDLOOP.
-
+              BREAK-POINT.
                 traverse( io_type_descr = cl_abap_typedescr=>describe_by_data_ref( r_header )
                           iv_name = l_name
                           iv_fullname = i_name
@@ -1173,14 +1175,15 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                           ir_up = r_header ).
 
                 l_name = l_name && '[]'.
+                l_full_name = i_name && '[]'.
               CATCH cx_tpda_varname .
             ENDTRY.
           ENDIF.
           GET REFERENCE OF <f> INTO lr_struc.
-          BREAK-POINT.
+
           traverse( io_type_descr = cl_abap_typedescr=>describe_by_data_ref( lr_struc )
                     iv_name = l_name
-                    iv_fullname = i_name
+                    iv_fullname = l_full_name
                     iv_type = iv_type
                     i_instance = i_instance
                     iv_parent_name = i_parent_name
