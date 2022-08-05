@@ -2,7 +2,7 @@
 *& Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
-*& version: beta 0.6.277.280
+*& version: beta 0.7.350
 *& Git https://github.com/ysichov/SDDE
 *& RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *& EN description - https://github.com/ysichov/SDDE/wiki
@@ -655,7 +655,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                 iv_rel            TYPE salv_de_node_relation
                 is_var            TYPE lcl_appl=>var_table
                 iv_value          TYPE any OPTIONAL
-                "ir_up             TYPE REF TO data OPTIONAL
                 iv_parent_name    TYPE string OPTIONAL
       RETURNING VALUE(e_root_key) TYPE salv_de_node_key.
 
@@ -668,7 +667,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                 ir_up             TYPE REF TO data OPTIONAL
                 iv_parent_name    TYPE string OPTIONAL
       RETURNING VALUE(e_root_key) TYPE salv_de_node_key.
-
 
     METHODS traverse_table
       IMPORTING
@@ -1008,7 +1006,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF ls_param-name IS NOT INITIAL.
       APPEND ls_param TO lt_param.
     ENDIF.
-
 
     LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
       READ TABLE mt_locals WITH KEY name = ls_param-name ASSIGNING FIELD-SYMBOL(<loc>).
@@ -1368,12 +1365,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           LOOP AT lt_attributes ASSIGNING <ls_attribute>.
 
             transfer_variable( EXPORTING
-                                                  i_name =  |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
-                                                  i_shortname = <ls_attribute>-name
-                                                  iv_type = i_type
-                                                  i_instance = <ls_symobjref>-instancename
-                                                  i_cl_leaf  = <ls_attribute>-acckind
-                                                  i_parent_name = lv_parent ).
+                            i_name =  |{ <ls_symobjref>-instancename  }-{ <ls_attribute>-name }|
+                            i_shortname = <ls_attribute>-name
+                            iv_type = i_type
+                            i_instance = <ls_symobjref>-instancename
+                            i_cl_leaf  = <ls_attribute>-acckind
+                            i_parent_name = lv_parent ).
 
             READ TABLE mt_state WITH KEY path = |{ lv_parent  }-{ <ls_attribute>-name }| ASSIGNING FIELD-SYMBOL(<state>).
             IF sy-subrc = 0.
@@ -1801,22 +1798,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         <var>-done = abap_true.
       ENDIF.
 
-*      IF <var>-cl_leaf IS NOT INITIAL.
-*
-*        lo_tree->add_obj_nodes( EXPORTING is_var = <var> ).
-*
-*        READ TABLE lo_tree->mt_classes_leaf WITH KEY name = <var>-parent type = <var>-cl_leaf INTO DATA(ls_leaf).
-*        IF sy-subrc = 0.
-*          lv_key = ls_leaf-key.
-*        ENDIF.
-*      ELSE.
       READ TABLE lo_tree->mt_vars WITH KEY path = <var>-parent INTO DATA(ls_var).
       IF sy-subrc = 0.
         lv_key = ls_var-key.
       ELSE.
         lv_key = lo_tree->main_node_key.
       ENDIF.
-*      ENDIF.
 
       IF <var>-ref IS NOT INITIAL.
         lo_tree->traverse(
@@ -1895,9 +1882,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSEIF mo_window->m_debug_button IS NOT INITIAL.
       READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = mo_window->m_prg-include linesrc = mo_window->m_prg-line INTO DATA(gs_break).
       IF sy-subrc = 0.
-        "IF mo_window->m_visualization IS INITIAL.
         show_step( ).
-        "ENDIF.
         me->break( ).
       ELSE.
         IF mo_window->m_debug_button = 'F6BEG' AND iv_stack_changed IS NOT INITIAL.
@@ -2246,7 +2231,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             ENDIF.
           ENDIF.
         ELSE.
-          "CLEAR <state>-leaf.
           READ TABLE mt_vars_hist WITH KEY name = <state>-name INTO lv_hist.
           IF sy-subrc = 0.
             ASSIGN lv_hist-ref->* TO <hist>.
