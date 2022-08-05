@@ -455,7 +455,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                   iv_name        TYPE clike
                   iv_fullname    TYPE string
                   iv_type        TYPE string
-                  iv_cl_leaf        type int4
+                  iv_cl_leaf     TYPE int4
                   "iv_old_name    TYPE string OPTIONAL
                   iv_parent_name TYPE string
                   ir_up          TYPE any OPTIONAL
@@ -492,7 +492,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                                          i_shortname   TYPE string OPTIONAL
                                          iv_value      TYPE string OPTIONAL
                                          i_parent_name TYPE string OPTIONAL
-                                         i_cl_leaf     type int4 OPTIONAL
+                                         i_cl_leaf     TYPE int4 OPTIONAL
                                          i_instance    TYPE string OPTIONAL,
 
       create_simple_var IMPORTING i_name        TYPE string
@@ -531,7 +531,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
         iv_parent_name TYPE string OPTIONAL
         iv_struc_name  TYPE string OPTIONAL
         i_instance     TYPE string OPTIONAL
-        i_cl_leaf      type int4
+        i_cl_leaf      TYPE int4
         i_ref          TYPE xfeld OPTIONAL.
 
     METHODS traverse_struct
@@ -539,7 +539,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                 iv_name        TYPE clike
                 iv_fullname    TYPE string OPTIONAL
                 iv_type        TYPE string
-                i_cl_leaf      type int4
+                i_cl_leaf      TYPE int4
                 ir_up          TYPE  REF TO data OPTIONAL
                 iv_parent_name TYPE string OPTIONAL
                 iv_struc_name  TYPE string OPTIONAL
@@ -553,7 +553,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
         iv_value       TYPE any OPTIONAL
         ir_up          TYPE  REF TO data OPTIONAL
         iv_parent_name TYPE string OPTIONAL
-        i_cl_leaf      type int4
+        i_cl_leaf      TYPE int4
         i_instance     TYPE string OPTIONAL.
 
 ENDCLASS.
@@ -1762,7 +1762,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     mo_tree_imp->m_leaf   =  'IMP'.
     mo_tree_exp->m_leaf =  'EXP'.
 
-    
     IF mo_tree_local->m_no_refresh IS INITIAL.
       mo_tree_local->add_node( iv_name = mo_tree_local->m_leaf iv_icon = CONV #( icon_life_events ) ).
     ELSE.
@@ -1825,18 +1824,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         iv_parent_name = CONV #( <var>-name ) ).
       ELSE.
         lo_tree->traverse_obj(
-      iv_parent_key = lv_key
-       iv_rel  = l_rel
-       is_var = <var>
-       ir_up = <var>-ref
-       iv_parent_name = CONV #( <var>-name ) ).
+        iv_parent_key = lv_key
+        iv_rel  = l_rel
+        is_var = <var>
+        ir_up = <var>-ref
+        iv_parent_name = CONV #( <var>-name ) ).
       ENDIF.
 
     ENDLOOP.
 
     IF is_skip = abap_true.
       CLEAR is_skip.
-      "show_variables( CHANGING it_var = it_var ).
+      show_variables( CHANGING it_var = it_var ).
     ENDIF.
     IF sy-subrc NE 0 AND mv_selected_var IS INITIAL.
       rv_stop = abap_true.
@@ -2243,7 +2242,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             ENDIF.
           ENDIF.
         ELSE.
-          CLEAR <state>-leaf.
+          "CLEAR <state>-leaf.
           READ TABLE mt_vars_hist WITH KEY name = <state>-name INTO lv_hist.
           IF sy-subrc = 0.
             ASSIGN lv_hist-ref->* TO <hist>.
@@ -4468,7 +4467,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           lv_text         TYPE lvc_value,
           lv_string       TYPE string,
           l_key           TYPE salv_de_node_key,
-          l_rel         TYPE salv_de_node_relation,
+          l_rel           TYPE salv_de_node_relation,
           lv_node_key     TYPE salv_de_node_key,
           lv_icon         TYPE salv_de_tree_image.
 
@@ -4738,7 +4737,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     IF l_key IS INITIAL.
       l_key = iv_parent_key.
-       l_rel = iv_rel.
+      l_rel = iv_rel.
     ENDIF.
 
     e_root_key = tree->get_nodes( )->add_node(
@@ -4916,6 +4915,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD add_obj_nodes.
+
     DATA l_new_node TYPE salv_de_node_key.
     DATA lv_text TYPE lvc_value.
     DATA lv_node_key TYPE salv_de_node_key.
@@ -4925,10 +4925,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     CASE is_var-cl_leaf.
       WHEN 1.
         lv_icon = icon_led_green.
+        lv_text = 'Public'.
       WHEN 2.
         lv_icon = icon_led_yellow.
+        lv_text = 'Protected'.
       WHEN 3.
         lv_icon = icon_led_red.
+        lv_text = 'Private'.
     ENDCASE.
 
     READ TABLE mt_classes_leaf WITH KEY name = is_var-parent type = is_var-cl_leaf ASSIGNING FIELD-SYMBOL(<class>).
@@ -4941,14 +4944,14 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           relationship   = if_salv_c_node_relation=>last_child
           collapsed_icon = lv_icon
           expanded_icon  = lv_icon
-          text           = 'Public'
+          text           = lv_text
           folder         = abap_true
         )->get_key( ).
 
       APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
       <class>-name = is_var-parent.
       <class>-key = lv_node_key.
-      <class>-type = 1.
+      <class>-type = is_var-cl_leaf.
     ENDIF.
 
   ENDMETHOD.
