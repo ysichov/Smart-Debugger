@@ -1165,7 +1165,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
                 traverse( io_type_descr = cl_abap_typedescr=>describe_by_data_ref( r_header )
                           iv_name = l_name
-                          iv_fullname = l_name
+                          iv_fullname = i_name
                           iv_type = iv_type
                           iv_parent_name = i_parent_name
                           i_instance = i_instance
@@ -1176,15 +1176,16 @@ CLASS lcl_debugger_script IMPLEMENTATION.
               CATCH cx_tpda_varname .
             ENDTRY.
           ENDIF.
-
-          traverse( io_type_descr = cl_abap_typedescr=>describe_by_data( <f> )
+          GET REFERENCE OF <f> INTO lr_struc.
+          BREAK-POINT.
+          traverse( io_type_descr = cl_abap_typedescr=>describe_by_data_ref( lr_struc )
                     iv_name = l_name
-                    iv_fullname = l_name
+                    iv_fullname = i_name
                     iv_type = iv_type
                     i_instance = i_instance
                     iv_parent_name = i_parent_name
                     i_cl_leaf = i_cl_leaf
-                    ir_up = <f> ).
+                    ir_up = lr_struc ).
 
         ELSEIF m_quick-typid = 'l'. "data ref
           DATA: ls_info TYPE tpda_scr_quick_info.
@@ -4483,7 +4484,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDIF.
 
     ls_tree-kind = lo_struct_descr->type_kind.
-    ls_tree-objname = is_var-instance.
 
     IF m_icon IS INITIAL.
       lv_icon = icon_structure.
@@ -4717,6 +4717,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lv_icon = icon_oo_object.
     lv_text = is_var-short.
     ls_tree-fullname = is_var-path.
+    ls_tree-objname = is_var-instance.
 
 *    IF iv_parent_key IS NOT INITIAL.
 *      l_key = iv_parent_key.
@@ -4795,10 +4796,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ASSIGN ir_up->* TO <tab>.
     DATA(lines) = lines( <tab> ).
     ls_tree-ref = ir_up.
+    l_key = iv_parent_key.
 
     lo_table_descr ?= io_type_descr.
 
-    ls_tree-fullname = |{ is_var-path } ({ lines })|.
+    ls_tree-fullname = |{ is_var-short } ({ lines })|.
     ls_tree-kind = lo_table_descr->type_kind.
     IF is_var-instance NE '{A:initial}'.
       ls_tree-typename = replace( val = lo_table_descr->absolute_name sub = '\TYPE=' with = ''   ).
@@ -4810,6 +4812,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ELSE.
       lv_text = ls_tree-typename.
     ENDIF.
+
 
     l_rel = iv_rel.
     ASSIGN ir_up->* TO FIELD-SYMBOL(<new_value>).
@@ -4847,6 +4850,19 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
+
+    IF is_var-cl_leaf IS NOT INITIAL.
+
+      add_obj_nodes( EXPORTING is_var = is_var ).
+
+      READ TABLE mt_classes_leaf WITH KEY name = is_var-parent type = is_var-cl_leaf INTO DATA(ls_leaf).
+      IF sy-subrc = 0.
+        l_key = ls_leaf-key.
+      ENDIF.
+    ELSE.
+      l_key = iv_parent_key.
+    ENDIF.
+
     "IF m_hide IS INITIAL.
     READ TABLE mt_vars WITH KEY name = iv_parent_name TRANSPORTING NO FIELDS.
     IF sy-subrc NE 0.
@@ -4854,7 +4870,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ls_tree-fullname = is_var-name.
       e_root_key =
         tree->get_nodes( )->add_node(
-          related_node   = iv_parent_key
+          related_node   = l_key
           relationship   = iv_rel
           collapsed_icon = lv_icon
           expanded_icon  = lv_icon
