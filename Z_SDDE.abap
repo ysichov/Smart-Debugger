@@ -715,7 +715,6 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           WITH NON-UNIQUE DEFAULT KEY.
 
     DATA: m_history              TYPE x,
-          m_visualization        TYPE x,
           m_zcode                TYPE x,
           m_prg                  TYPE tpda_scr_prg_info,
           m_debug_button         LIKE sy-ucomm,
@@ -1600,7 +1599,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     mt_state = lt_hist.
     es_stop = show_variables( CHANGING it_var = mt_state ).
 
-    IF mo_window->m_visualization IS INITIAL AND mo_window->m_debug_button NE 'F5'.
+    IF mo_window->m_debug_button NE 'F5'.
       mo_window->m_show_step = abap_true.
     ENDIF.
 
@@ -1613,7 +1612,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD run_script_new.
 
     DATA: lv_type TYPE string.
-
     "get mt_state
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = mo_window->m_prg ).
@@ -1700,11 +1698,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     mo_tree_imp->m_prg_info = mo_window->m_prg.
-    IF mo_window->m_visualization IS NOT INITIAL.
-      mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
-      mo_window->set_program_line( mo_window->m_prg-line ).
-      mo_window->show_stack( ).
-    ENDIF.
+    mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+    mo_window->set_program_line( mo_window->m_prg-line ).
+    mo_window->show_stack( ).
 
     IF mo_tree_local->m_locals IS NOT INITIAL.
       LOOP AT mt_locals INTO DATA(ls_local).
@@ -1772,6 +1768,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     mo_tree_imp->m_leaf   =  'IMP'.
     mo_tree_exp->m_leaf =  'EXP'.
 
+    IF mo_tree_local->m_locals_key IS NOT INITIAL AND mo_tree_local->m_locals IS INITIAL.
+      mo_tree_local->delete_node( mo_tree_local->m_locals_key ).
+      CLEAR mo_tree_local->m_locals_key.
+
+      DELETE mo_tree_local->mt_vars WHERE leaf = 'LOCAL'.
+      DELETE mt_state WHERE leaf = 'LOCAL'.
+    ENDIF.
 
     IF mo_tree_local->m_globals_key IS NOT INITIAL AND mo_tree_local->m_globals IS INITIAL.
       mo_tree_local->delete_node( mo_tree_local->m_globals_key ).
@@ -1781,8 +1784,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF mo_tree_local->m_syst IS INITIAL.
-    "BREAK-POINT.
-      READ TABLE mo_tree_local->mt_vars WITH KEY name = 'SYST' INTO data(ls_var).
+      "
+      READ TABLE mo_tree_local->mt_vars WITH KEY name = 'SYST' INTO DATA(ls_var).
       IF sy-subrc = 0.
         mo_tree_local->delete_node( ls_var-key ).
         DELETE mo_tree_local->mt_vars WHERE leaf =  'SYST'.
@@ -1808,6 +1811,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
         WHEN 'SYST'.
           mo_tree_local->m_leaf =  'SYST'.
+        WHEN 'CLASS'.
+          mo_tree_local->m_leaf =  'CLASS'.
+          IF mo_tree_local->m_class_key IS INITIAL.
+            mo_tree_local->add_node( iv_name = 'Class-data global variables' iv_icon = CONV #( icon_life_events ) ).
+          ENDIF.
       ENDCASE.
 
 
@@ -1875,17 +1883,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD hndl_script_buttons.
 
     IF mo_window->m_debug_button = 'F5'.
-      IF mo_window->m_visualization IS INITIAL.
-        show_step( ).
-      ENDIF.
+      show_step( ).
       me->break( ).
 
     ELSEIF mo_window->m_debug_button = 'F6'.
       IF m_f6_level IS NOT INITIAL AND m_f6_level = ms_stack-stacklevel.
         CLEAR m_f6_level.
-        IF mo_window->m_visualization IS INITIAL.
-          show_step( ).
-        ENDIF.
+        show_step( ).
         me->break( ).
       ELSE.
         IF mo_window->m_history IS NOT INITIAL.
@@ -1895,9 +1899,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     ELSEIF mo_window->m_debug_button = 'F7END'.
       IF mo_window->m_prg-flag_eoev IS NOT INITIAL.
-        IF mo_window->m_visualization IS INITIAL.
-          show_step( ).
-        ENDIF.
+        show_step( ).
         me->break( ).
       ELSE.
         f5( ).
@@ -1905,9 +1907,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSEIF mo_window->m_debug_button = 'F7'.
 
       IF mv_f7_stop = abap_true.
-        IF mo_window->m_visualization IS INITIAL.
-          show_step( ).
-        ENDIF.
+        show_step( ).
         me->break( ).
         CLEAR mv_f7_stop.
       ELSE.
@@ -1924,9 +1924,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         me->break( ).
       ELSE.
         IF mo_window->m_debug_button = 'F6BEG' AND iv_stack_changed IS NOT INITIAL.
-          IF mo_window->m_visualization IS INITIAL.
-            show_step( ).
-          ENDIF.
+          show_step( ).
           me->break( ).
         ELSE.
           IF mo_window->m_history IS NOT INITIAL.
@@ -1935,30 +1933,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDIF.
       ENDIF.
     ELSE.
-      IF mo_window->m_visualization IS INITIAL.
-        show_step( ).
-      ENDIF.
+      show_step( ).
       me->break( ).
     ENDIF.
 
-    IF mo_window->m_debug_button = 'F7END' AND mo_window->m_prg-flag_eoev IS NOT INITIAL.
-      IF mo_window->m_visualization IS INITIAL.
-        show_step( ).
-      ENDIF.
-      me->break( ).
-    ENDIF.
-
-    IF mo_window->m_debug_button = 'F6BEG' AND iv_stack_changed IS NOT INITIAL.
-      IF mo_window->m_visualization IS INITIAL.
-        show_step( ).
-      ENDIF.
-      me->break( ).
-    ENDIF.
-
-    IF mo_window->m_history IS INITIAL AND mo_window->m_debug_button NE 'F7END' AND mo_window->m_debug_button NE 'F6BEG'.
-      IF mo_window->m_visualization IS INITIAL.
-        show_step( ).
-      ENDIF.
+    IF ( mo_window->m_debug_button = 'F7END' AND mo_window->m_prg-flag_eoev IS NOT INITIAL ) OR
+       ( mo_window->m_debug_button = 'F6BEG' AND iv_stack_changed IS NOT INITIAL ) OR
+       ( mo_window->m_history IS INITIAL AND mo_window->m_debug_button NE 'F7END' AND mo_window->m_debug_button NE 'F6BEG' ).
+       show_step( ).
       me->break( ).
     ENDIF.
 
@@ -2038,7 +2020,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     mo_tree_imp->display( ).
     mo_tree_local->display( ).
     mo_tree_exp->display( ).
-    IF mo_window->m_visualization IS INITIAL AND mo_window->m_debug_button NE 'F5'.
+    IF mo_window->m_debug_button NE 'F5'.
       mo_window->m_show_step = abap_true.
     ENDIF.
 
@@ -2051,7 +2033,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lt_inc       TYPE TABLE OF  d010inc,
           l_class      TYPE seu_name.
 
-    "mo_tree_local->m_leaf = 'Class-data global variables'.
+    mo_tree_local->m_leaf = 'Class-data global variables'.
     IF mo_tree_local->m_class_data IS NOT INITIAL.
 
       DATA: l_name(40).
@@ -2090,12 +2072,21 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           IF sy-subrc NE 0.
             APPEND INITIAL LINE TO mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
             <obj>-name = l_class.
+
+             save_hist( EXPORTING
+                     iv_fullname = conv #( <compo>-class )
+                     iv_name = conv #( <compo>-class )
+                     iv_parent_name = ''
+                     iv_type = 'CLASS'
+                     iv_cl_leaf = 0
+                     i_instance = conv #(  <compo>-class ) ).
           ENDIF.
         ENDIF.
 
         transfer_variable( EXPORTING i_name =  CONV #( |{ <compo>-class }=>{ <compo>-name }| )
                                      i_shortname = CONV #( <compo>-name )
-                                      iv_type = 'LOCAL' ).
+                                     i_parent_name =  CONV #( <compo>-class )
+                                      iv_type = 'CLASS' ).
       ENDLOOP.
 
       "global classes
@@ -2128,10 +2119,20 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           <obj>-name = l_class.
         ENDIF.
 
+                     save_hist( EXPORTING
+                     iv_fullname = conv #( ls_prog-name )
+                     iv_name = conv #( ls_prog-name )
+                     iv_parent_name = ''
+                     iv_type = 'CLASS'
+                     iv_cl_leaf = 0
+                     i_instance = conv #(  ls_prog-name ) ).
+
+
         LOOP AT REFc->attributes INTO DATA(ls_atr).
           transfer_variable( EXPORTING i_name =  CONV #( |{ ls_prog-name }=>{ ls_Atr-name }| )
                              i_shortname = CONV #( ls_Atr-name )
-                              iv_type = 'LOCAL' ).
+                             i_parent_name = CONV #( ls_prog-name )
+                              iv_type = 'CLASS' ).
         ENDLOOP.
       ENDLOOP.
 
@@ -2655,7 +2656,6 @@ CLASS lcl_window IMPLEMENTATION.
 
     lt_button  = VALUE #(
      ( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'History On' text = 'History On' )
-     ( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization Off' text = 'Visualization Off' )
      ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
      ( butn_type = 3  )
      ( function = 'F5' icon = CONV #( icon_debugger_step_into ) quickinfo = 'Step into' text = 'Step into' )
@@ -2759,13 +2759,6 @@ CLASS lcl_window IMPLEMENTATION.
     CONSTANTS: c_mask TYPE x VALUE '01'.
     m_debug_button = fcode.
     CASE fcode.
-      WHEN 'VIS'.
-        m_visualization = m_visualization BIT-XOR c_mask.
-        IF m_visualization IS INITIAL.
-          mo_toolbar->set_button_info( EXPORTING fcode =  'VIS' icon = CONV #( icon_flight ) text = 'Visualization OFF' ).
-        ELSE.
-          mo_toolbar->set_button_info( EXPORTING fcode =  'VIS' icon = CONV #( icon_car ) text = 'Visualization ON' ).
-        ENDIF.
 
       WHEN 'HIST'.
         m_history = m_history BIT-XOR c_mask.
@@ -5046,7 +5039,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       WHEN 'INITIALS'."Show/hide empty variables
         m_hide = m_hide BIT-XOR c_mask.
       WHEN 'LOCALS'."Show/hide locals variables
-        m_globals = m_locals BIT-XOR c_mask.
+        m_locals = m_locals BIT-XOR c_mask.
       WHEN 'GLOBALS'."Show/hide global variables
         m_globals = m_globals BIT-XOR c_mask.
       WHEN 'SYST'."Show/hide sy structure
