@@ -1166,7 +1166,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                     <to> = <elem>.
                   ENDIF.
                 ENDLOOP.
-                
+
                 traverse( io_type_descr = cl_abap_typedescr=>describe_by_data_ref( r_header )
                           iv_name = l_name
                           iv_fullname = i_name
@@ -1730,6 +1730,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     ENDLOOP.
    endif.
+
     IF mo_tree_local->m_globals IS NOT INITIAL.
       LOOP AT mt_globals INTO DATA(ls_global).
         transfer_variable( EXPORTING i_name =  ls_global-name iv_type = 'GLOBAL' ).
@@ -1767,19 +1768,39 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lo_tree TYPE REF TO  lcl_rtti_tree,
           is_skip TYPE xfeld.
 
-    mo_tree_local->m_leaf =  'Locals'.
+
     mo_tree_imp->m_leaf   =  'IMP'.
     mo_tree_exp->m_leaf =  'EXP'.
 
-    IF mo_tree_local->m_no_refresh IS INITIAL.
-      mo_tree_local->add_node( iv_name = mo_tree_local->m_leaf iv_icon = CONV #( icon_life_events ) ).
-    ELSE.
-      mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
-    ENDIF.
+
+    IF mo_tree_local->m_globals_key IS NOT INITIAL and mo_tree_local->m_globals IS INITIAL.
+        mo_tree_local->delete_node( mo_tree_local->m_globals_key ).
+        CLEAR mo_tree_local->m_globals_key.
+        DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
+        DELETE mt_state WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
+      ENDIF.
+
+*    IF mo_tree_local->m_no_refresh IS INITIAL.
+*      mo_tree_local->add_node( iv_name = mo_tree_local->m_leaf iv_icon = CONV #( icon_life_events ) ).
+*    ENDIF.
 
     l_rel = if_salv_c_node_relation=>last_child.
-
+   
     LOOP AT it_var ASSIGNING FIELD-SYMBOL(<var>) WHERE done = abap_false.
+
+      CASE <var>-leaf.
+       when 'LOCAL'.
+         mo_tree_local->m_leaf =  'LOCAL'.
+        IF mo_tree_local->m_locals_key is INITIAL.
+          mo_tree_local->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
+        ENDIF.
+       when 'GLOBAL'.
+         mo_tree_local->m_leaf =  'GLOBAL'.
+         IF mo_tree_local->m_globals_key is INITIAL.
+          mo_tree_local->add_node( iv_name = 'Globals' iv_icon = CONV #( icon_life_events ) ).
+        ENDIF.
+      endcase.
+
 
       IF <var>-name = mv_selected_var OR mv_selected_var IS INITIAL.
         rv_stop = abap_true.
@@ -4920,9 +4941,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     CASE iv_name.
       WHEN 'Locals'.
         m_locals_key = main_node_key.
-      WHEN 'Globals'.
+        WHEN 'Globals'.
         m_globals_key = main_node_key.
-      WHEN 'LDB'.
+        WHEN 'LDB'.
         m_ldb_key = main_node_key.
       WHEN 'Class-data global variables'.
         m_class_key = main_node_key.
