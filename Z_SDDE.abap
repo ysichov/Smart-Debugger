@@ -584,6 +584,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
           m_variable      TYPE REF TO data,
           m_object        TYPE REF TO object,
           m_hide          TYPE x,
+          m_locals        TYPE x,
           m_globals       TYPE x,
           m_syst          TYPE x,
           m_class_data    TYPE x,
@@ -751,6 +752,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.                    "prolog
 
   METHOD init.
+    CONSTANTS: c_mask TYPE x VALUE '01'.
+
     is_step = abap_on.
     lcl_appl=>init_lang( ).
     lcl_appl=>init_icons_table( ).
@@ -765,6 +768,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     mo_tree_exp = NEW lcl_rtti_tree( i_header = 'Exporting & Returning parameters' i_type = 'E' i_cont = mo_window->mo_exporting_container
                                      i_debugger = me ).
+
+    mo_tree_local->m_locals = mo_tree_local->m_locals BIT-XOR c_mask.
   ENDMETHOD.
 
   METHOD create_simple_var.
@@ -1085,7 +1090,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
           table_clone    TYPE REF TO data,
           l_name         TYPE string,
-          l_full_name    type string,
+          l_full_name    TYPE string,
           lo_deep_handle TYPE REF TO cl_abap_datadescr,
           deep_ref       TYPE REF TO cl_abap_typedescr,
           lo_tabl        TYPE REF TO cl_abap_tabledescr,
@@ -1161,7 +1166,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                     <to> = <elem>.
                   ENDIF.
                 ENDLOOP.
-              BREAK-POINT.
+                
                 traverse( io_type_descr = cl_abap_typedescr=>describe_by_data_ref( r_header )
                           iv_name = l_name
                           iv_fullname = i_name
@@ -1674,15 +1679,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF mv_stack_changed = abap_true OR is_history = abap_true.
 
-      CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
-      SORT mt_locals.
+      IF mo_tree_local->m_locals IS NOT INITIAL.
+        CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
+        SORT mt_locals.
 
-      mt_loc_fs = lcl_source_parcer=>get_fs_var( iv_program = CONV #( mo_window->m_prg-program )
-                                                 iv_type = CONV #( mo_window->m_prg-eventtype )
-                                                 iv_name = CONV #( mo_window->m_prg-eventname ) ).
+        mt_loc_fs = lcl_source_parcer=>get_fs_var( iv_program = CONV #( mo_window->m_prg-program )
+                                                   iv_type = CONV #( mo_window->m_prg-eventtype )
+                                                   iv_name = CONV #( mo_window->m_prg-eventname ) ).
 
-      IF mo_window->m_prg-event-eventtype = 'FORM'.
-        get_form_parameters( mo_window->m_prg ).
+        IF mo_window->m_prg-event-eventtype = 'FORM'.
+          get_form_parameters( mo_window->m_prg ).
+        ENDIF.
       ENDIF.
 
     ENDIF.
@@ -1699,6 +1706,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       mo_window->show_stack( ).
     ENDIF.
 
+    IF mo_tree_local->m_locals IS NOT INITIAL.
     LOOP AT mt_locals INTO DATA(ls_local).
       CHECK NOT ls_local-name CA '[]'.
 
@@ -1721,7 +1729,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       transfer_variable( EXPORTING i_name =  ls_local-name iv_type = 'LOCAL' ).
 
     ENDLOOP.
-
+   endif.
     IF mo_tree_local->m_globals IS NOT INITIAL.
       LOOP AT mt_globals INTO DATA(ls_global).
         transfer_variable( EXPORTING i_name =  ls_global-name iv_type = 'GLOBAL' ).
@@ -4343,6 +4351,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
        position = if_salv_c_function_position=>right_of_salv_functions ).
 
     lo_functions->add_function(
+       name     = 'LOCALS'
+       icon     = CONV #( icon_foreign_trade )
+       text     = 'Locals'
+       tooltip  = 'Show/hide locals variables'
+       position = if_salv_c_function_position=>right_of_salv_functions ).
+
+    lo_functions->add_function(
        name     = 'GLOBALS'
        icon     = CONV #( icon_foreign_trade )
        text     = 'Globals'
@@ -5000,6 +5015,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         mo_debugger->run_script_new( ).
       WHEN 'INITIALS'."Show/hide empty variables
         m_hide = m_hide BIT-XOR c_mask.
+      WHEN 'LOCALS'."Show/hide locals variables
+        m_globals = m_locals BIT-XOR c_mask.
       WHEN 'GLOBALS'."Show/hide global variables
         m_globals = m_globals BIT-XOR c_mask.
       WHEN 'SYST'."Show/hide sy structure
