@@ -1707,29 +1707,29 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF mo_tree_local->m_locals IS NOT INITIAL.
-    LOOP AT mt_locals INTO DATA(ls_local).
-      CHECK NOT ls_local-name CA '[]'.
+      LOOP AT mt_locals INTO DATA(ls_local).
+        CHECK NOT ls_local-name CA '[]'.
 
-      CASE ls_local-parkind.
-        WHEN 0.
-          lv_type = 'LOCAL'.
-        WHEN 1.
-          lv_type = 'IMP'.
-        WHEN OTHERS.
-          lv_type = 'EXP'.
-      ENDCASE.
+        CASE ls_local-parkind.
+          WHEN 0.
+            lv_type = 'LOCAL'.
+          WHEN 1.
+            lv_type = 'IMP'.
+          WHEN OTHERS.
+            lv_type = 'EXP'.
+        ENDCASE.
 
-      transfer_variable( EXPORTING i_name =  ls_local-name iv_type = lv_type ).
+        transfer_variable( EXPORTING i_name =  ls_local-name iv_type = lv_type ).
 
-    ENDLOOP.
+      ENDLOOP.
 
-    LOOP AT mt_loc_fs INTO ls_local.
-      CHECK NOT ls_local-name CA '[]'.
+      LOOP AT mt_loc_fs INTO ls_local.
+        CHECK NOT ls_local-name CA '[]'.
 
-      transfer_variable( EXPORTING i_name =  ls_local-name iv_type = 'LOCAL' ).
+        transfer_variable( EXPORTING i_name =  ls_local-name iv_type = 'LOCAL' ).
 
-    ENDLOOP.
-   endif.
+      ENDLOOP.
+    ENDIF.
 
     IF mo_tree_local->m_globals IS NOT INITIAL.
       LOOP AT mt_globals INTO DATA(ls_global).
@@ -1773,33 +1773,42 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     mo_tree_exp->m_leaf =  'EXP'.
 
 
-    IF mo_tree_local->m_globals_key IS NOT INITIAL and mo_tree_local->m_globals IS INITIAL.
-        mo_tree_local->delete_node( mo_tree_local->m_globals_key ).
-        CLEAR mo_tree_local->m_globals_key.
-        DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
-        DELETE mt_state WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
-      ENDIF.
+    IF mo_tree_local->m_globals_key IS NOT INITIAL AND mo_tree_local->m_globals IS INITIAL.
+      mo_tree_local->delete_node( mo_tree_local->m_globals_key ).
+      CLEAR mo_tree_local->m_globals_key.
+      DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
+      DELETE mt_state WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
+    ENDIF.
 
-*    IF mo_tree_local->m_no_refresh IS INITIAL.
-*      mo_tree_local->add_node( iv_name = mo_tree_local->m_leaf iv_icon = CONV #( icon_life_events ) ).
-*    ENDIF.
+    IF mo_tree_local->m_syst IS INITIAL.
+    "BREAK-POINT.
+      READ TABLE mo_tree_local->mt_vars WITH KEY name = 'SYST' INTO data(ls_var).
+      IF sy-subrc = 0.
+        mo_tree_local->delete_node( ls_var-key ).
+        DELETE mo_tree_local->mt_vars WHERE leaf =  'SYST'.
+        DELETE mt_state WHERE leaf = 'SYST'.
+      ENDIF.
+    ENDIF.
+
 
     l_rel = if_salv_c_node_relation=>last_child.
-   
+
     LOOP AT it_var ASSIGNING FIELD-SYMBOL(<var>) WHERE done = abap_false.
 
       CASE <var>-leaf.
-       when 'LOCAL'.
-         mo_tree_local->m_leaf =  'LOCAL'.
-        IF mo_tree_local->m_locals_key is INITIAL.
-          mo_tree_local->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
-        ENDIF.
-       when 'GLOBAL'.
-         mo_tree_local->m_leaf =  'GLOBAL'.
-         IF mo_tree_local->m_globals_key is INITIAL.
-          mo_tree_local->add_node( iv_name = 'Globals' iv_icon = CONV #( icon_life_events ) ).
-        ENDIF.
-      endcase.
+        WHEN 'LOCAL'.
+          mo_tree_local->m_leaf =  'LOCAL'.
+          IF mo_tree_local->m_locals_key IS INITIAL.
+            mo_tree_local->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
+          ENDIF.
+        WHEN 'GLOBAL'.
+          mo_tree_local->m_leaf =  'GLOBAL'.
+          IF mo_tree_local->m_globals_key IS INITIAL.
+            mo_tree_local->add_node( iv_name = 'Globals' iv_icon = CONV #( icon_life_events ) ).
+          ENDIF.
+        WHEN 'SYST'.
+          mo_tree_local->m_leaf =  'SYST'.
+      ENDCASE.
 
 
       IF <var>-name = mv_selected_var OR mv_selected_var IS INITIAL.
@@ -1827,7 +1836,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         <var>-done = abap_true.
       ENDIF.
 
-      READ TABLE lo_tree->mt_vars WITH KEY path = <var>-parent INTO DATA(ls_var).
+      READ TABLE lo_tree->mt_vars WITH KEY path = <var>-parent INTO ls_var.
       IF sy-subrc = 0.
         lv_key = ls_var-key.
       ELSE.
@@ -4941,9 +4950,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     CASE iv_name.
       WHEN 'Locals'.
         m_locals_key = main_node_key.
-        WHEN 'Globals'.
+      WHEN 'Globals'.
         m_globals_key = main_node_key.
-        WHEN 'LDB'.
+      WHEN 'LDB'.
         m_ldb_key = main_node_key.
       WHEN 'Class-data global variables'.
         m_class_key = main_node_key.
