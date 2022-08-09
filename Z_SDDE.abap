@@ -716,6 +716,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
 
     DATA: m_history              TYPE x,
           m_zcode                TYPE x,
+          m_direction            TYPE x,
           m_prg                  TYPE tpda_scr_prg_info,
           m_debug_button         LIKE sy-ucomm,
           m_show_step            TYPE xfeld,
@@ -1433,7 +1434,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD run_script_hist.
-
+    
     DATA: lv_prev_step TYPE i,
           lt_hist      LIKE mt_vars_hist,
           lt_del       LIKE mt_vars_hist..
@@ -1441,21 +1442,21 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     is_history = abap_true.
     lv_prev_step = m_hist_step.
 
-    IF mo_window->m_debug_button = 'BACK' AND m_hist_step = 1.
+    IF mo_window->m_direction is not INITIAL AND m_hist_step = 1.
       es_stop = abap_true.
       RETURN.
     ENDIF.
 
-    IF mo_window->m_debug_button = 'FORW' AND m_hist_step = m_step.
+    IF mo_window->m_direction is INITIAL AND m_hist_step = m_step.
       es_stop = abap_true.
       RETURN.
     ENDIF.
 
-    IF mo_window->m_debug_button = 'BACK' AND m_hist_step > 1.
+    IF mo_window->m_direction is not INITIAL AND m_hist_step > 1.
       SUBTRACT 1 FROM m_hist_step.
     ENDIF.
 
-    IF mo_window->m_debug_button = 'FORW' AND m_hist_step < m_step.
+    IF mo_window->m_direction is INITIAL AND m_hist_step < m_step.
       ADD 1  TO m_hist_step.
     ENDIF.
 
@@ -1472,7 +1473,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       <hist> = ls_hist.
     ENDLOOP.
 
-    IF  mo_window->m_debug_button = 'BACK'.
+    IF mo_window->m_direction is not INITIAL.
       LOOP AT mt_vars_hist INTO ls_hist WHERE step =  m_hist_step AND first = abap_false AND is_appear = abap_true.
         APPEND INITIAL LINE TO lt_del ASSIGNING <hist>.
         <hist> = ls_hist.
@@ -1509,7 +1510,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       mo_window->show_stack( ).
     ENDIF.
 
-    IF mo_window->m_debug_button = 'FORW'.
+    IF mo_window->m_direction is INITIAL.
 
       LOOP AT mt_var_step INTO DATA(step) WHERE step = m_hist_step.
         READ TABLE lt_hist
@@ -1538,7 +1539,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDLOOP.
     ENDIF.
 
-    IF mo_window->m_debug_button = 'BACK'.
+    IF mo_window->m_direction is not INITIAL.
 
       LOOP AT mt_var_step INTO step WHERE step = m_hist_step.
         READ TABLE lt_hist
@@ -1597,11 +1598,16 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     ENDIF.
     mt_state = lt_hist.
+
+    LOOP AT mt_state ASSIGNING FIELD-SYMBOL(<state>).
+      clear <state>-done.
+    ENDLOOP.
+
     es_stop = show_variables( CHANGING it_var = mt_state ).
 
-    IF mo_window->m_debug_button NE 'F5'.
-      mo_window->m_show_step = abap_true.
-    ENDIF.
+*    IF mo_window->m_debug_button NE 'F5'.
+*      mo_window->m_show_step = abap_true.
+*    ENDIF.
 
     mo_tree_local->m_no_refresh = 'X'.
     mo_tree_exp->m_no_refresh = 'X'.
@@ -1940,7 +1946,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF ( mo_window->m_debug_button = 'F7END' AND mo_window->m_prg-flag_eoev IS NOT INITIAL ) OR
        ( mo_window->m_debug_button = 'F6BEG' AND iv_stack_changed IS NOT INITIAL ) OR
        ( mo_window->m_history IS INITIAL AND mo_window->m_debug_button NE 'F7END' AND mo_window->m_debug_button NE 'F6BEG' ).
-       show_step( ).
+      show_step( ).
       me->break( ).
     ENDIF.
 
@@ -2073,13 +2079,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             APPEND INITIAL LINE TO mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
             <obj>-name = l_class.
 
-             save_hist( EXPORTING
-                     iv_fullname = conv #( <compo>-class )
-                     iv_name = conv #( <compo>-class )
-                     iv_parent_name = ''
-                     iv_type = 'CLASS'
-                     iv_cl_leaf = 0
-                     i_instance = conv #(  <compo>-class ) ).
+            save_hist( EXPORTING
+                    iv_fullname = CONV #( <compo>-class )
+                    iv_name = CONV #( <compo>-class )
+                    iv_parent_name = ''
+                    iv_type = 'CLASS'
+                    iv_cl_leaf = 0
+                    i_instance = CONV #(  <compo>-class ) ).
           ENDIF.
         ENDIF.
 
@@ -2119,13 +2125,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           <obj>-name = l_class.
         ENDIF.
 
-                     save_hist( EXPORTING
-                     iv_fullname = conv #( ls_prog-name )
-                     iv_name = conv #( ls_prog-name )
-                     iv_parent_name = ''
-                     iv_type = 'CLASS'
-                     iv_cl_leaf = 0
-                     i_instance = conv #(  ls_prog-name ) ).
+        save_hist( EXPORTING
+        iv_fullname = CONV #( ls_prog-name )
+        iv_name = CONV #( ls_prog-name )
+        iv_parent_name = ''
+        iv_type = 'CLASS'
+        iv_cl_leaf = 0
+        i_instance = CONV #(  ls_prog-name ) ).
 
 
         LOOP AT REFc->attributes INTO DATA(ls_atr).
@@ -2164,7 +2170,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     DATA: lv_add        TYPE xfeld,
           lv_name2(100).
 
-    CHECK mo_window->m_debug_button NE 'BACK' AND mo_window->m_debug_button NE 'FORW'.
+    check m_hist_step = m_step and mo_window->m_direction is INITIAL.
+    "CHECK mo_window->m_debug_button NE 'BACK' AND mo_window->m_debug_button NE 'FORW'.
     IF ir_up IS SUPPLIED.
       ASSIGN ir_up->* TO FIELD-SYMBOL(<ir_up>).
     ENDIF.
@@ -2665,8 +2672,9 @@ CLASS lcl_window IMPLEMENTATION.
      ( function = 'F7' icon = CONV #( icon_debugger_step_out ) quickinfo = 'Step out' text = 'Step out' )
      ( function = 'F8' icon = CONV #( icon_debugger_continue ) quickinfo = 'Continue' text = 'Continue' )
      ( butn_type = 3  )
-     ( function = 'BACK' icon = CONV #( icon_column_left ) quickinfo = 'Step Back' text = 'Back' )
-     ( function = 'FORW' icon = CONV #( icon_column_right ) quickinfo = 'Step forward' text = 'Forward' )
+     "( function = 'BACK' icon = CONV #( icon_column_left ) quickinfo = 'Step Back' text = 'Back' )
+     "( function = 'FORW' icon = CONV #( icon_column_right ) quickinfo = 'Step forward' text = 'Forward' )
+     ( function = 'DIRECTION' icon = CONV #( icon_column_right ) quickinfo = 'Forward' text = 'Forward' )
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Select variable to scan' text = 'Select variable to scan' )
                        ).
     mo_toolbar->add_button_group( lt_button ).
@@ -2760,6 +2768,14 @@ CLASS lcl_window IMPLEMENTATION.
     m_debug_button = fcode.
     CASE fcode.
 
+      WHEN 'DIRECTION'.
+        m_direction = m_direction BIT-XOR c_mask.
+        IF m_direction IS INITIAL.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'DIRECTION' icon = CONV #( icon_column_right ) text = 'Forward' ).
+        ELSE.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'DIRECTION' icon = CONV #( icon_column_left ) text = 'Backward' ).
+        ENDIF.
+
       WHEN 'HIST'.
         m_history = m_history BIT-XOR c_mask.
         IF m_history IS INITIAL.
@@ -2776,51 +2792,60 @@ CLASS lcl_window IMPLEMENTATION.
           mo_toolbar->set_button_info( EXPORTING fcode =  'CODE'  text = 'Only Z code' ).
         ENDIF.
 
-      WHEN 'F5' OR 'F7END' OR 'F6BEG'.
-        mo_debugger->f5( ).
-
-      WHEN 'F6'.
-        IF m_history IS INITIAL.
-          mo_debugger->f6( ).
-        ELSE.
-          READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
-          mo_debugger->m_f6_level = ls_stack-stacklevel.
-          mo_debugger->f5( ).
-        ENDIF.
-
-      WHEN 'F7'.
-        IF m_history IS INITIAL.
-          mo_debugger->f7( ).
-        ELSE.
-          mo_debugger->f5( ).
-        ENDIF.
-
-      WHEN 'F8'.
-        IF m_history IS INITIAL.
-          mo_debugger->f8( ).
-        ELSE.
-          mo_debugger->f5( ).
-        ENDIF.
-      WHEN 'BACK' OR 'FORW'.
-        DO.
-          mo_debugger->run_script_hist( IMPORTING es_stop = DATA(lv_stop) ).
-          IF lv_stop = abap_true.
-            mo_Debugger->mo_tree_imp->display( ).
-            mo_Debugger->mo_tree_local->display( ).
-            mo_Debugger->mo_tree_exp->display( ).
-            IF mo_debugger->m_hist_step = 1.
-              mo_toolbar->set_button_state( EXPORTING fcode = 'BACK' enabled = abap_false ).
-            ELSE.
-              mo_toolbar->set_button_state( EXPORTING fcode = 'BACK' enabled = abap_true ).
-            ENDIF.
-
-            RETURN.
-          ENDIF.
-        ENDDO.
       WHEN 'CLEARVAR'.
         CLEAR mo_debugger->mv_selected_var.
         mo_toolbar->set_button_info( EXPORTING icon = CONV #( icon_select_detail ) fcode =  'CLEARVAR'  text = 'Select variable to scan' ).
+
     ENDCASE.
+
+    IF m_direction IS INITIAL and mo_debugger->m_hist_step = mo_debugger->m_step.
+      CASE fcode.
+
+        WHEN 'F5' OR 'F7END' OR 'F6BEG'.
+          mo_debugger->f5( ).
+
+        WHEN 'F6'.
+          IF m_history IS INITIAL.
+            mo_debugger->f6( ).
+          ELSE.
+            READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
+            mo_debugger->m_f6_level = ls_stack-stacklevel.
+            mo_debugger->f5( ).
+          ENDIF.
+
+        WHEN 'F7'.
+          IF m_history IS INITIAL.
+            mo_debugger->f7( ).
+          ELSE.
+            mo_debugger->f5( ).
+          ENDIF.
+
+        WHEN 'F8'.
+          IF m_history IS INITIAL.
+            mo_debugger->f8( ).
+          ELSE.
+            mo_debugger->f5( ).
+          ENDIF.
+
+      ENDCASE.
+    ELSE.
+      CASE fcode.
+
+        WHEN 'F5' OR 'F6'.
+
+
+          DO.
+            mo_debugger->run_script_hist( IMPORTING es_stop = DATA(lv_stop) ).
+            IF lv_stop = abap_true.
+              mo_Debugger->mo_tree_imp->display( ).
+              mo_Debugger->mo_tree_local->display( ).
+              mo_Debugger->mo_tree_exp->display( ).
+              RETURN.
+            ENDIF.
+          ENDDO.
+
+      ENDCASE.
+    ENDIF.
   ENDMETHOD.
 
 ENDCLASS.
@@ -5118,10 +5143,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         CATCH cx_salv_msg.
       ENDTRY.
 
-      IF mo_debugger->mo_window->m_debug_button NE 'BACK' AND mo_debugger->mo_window->m_debug_button NE 'FORW'.
-        <var>-step = mo_debugger->m_step.
-        APPEND <var> TO mo_debugger->mt_del_vars.
-      ENDIF.
+*      IF mo_debugger->mo_window->m_debug_button NE 'BACK' AND mo_debugger->mo_window->m_debug_button NE 'FORW'.
+*        <var>-step = mo_debugger->m_step.
+*        APPEND <var> TO mo_debugger->mt_del_vars.
+*      ENDIF.
 
       DELETE mt_vars WHERE name = iv_full_name.
       """""DELETE mo_debugger->mt_state WHERE name = iv_full_name.
