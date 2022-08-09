@@ -1446,21 +1446,21 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     is_history = abap_true.
     lv_prev_step = m_hist_step.
 
-    IF mo_window->m_direction IS NOT INITIAL AND m_hist_step = 1.
+    IF mo_window->m_direction IS NOT INITIAL AND m_hist_step = 1 and mo_window->m_debug_button is not INITIAL.
       es_stop = abap_true.
       RETURN.
     ENDIF.
 
-    IF mo_window->m_direction IS INITIAL AND m_hist_step = m_step.
+    IF mo_window->m_direction IS INITIAL AND m_hist_step = m_step and mo_window->m_debug_button is not INITIAL.
       es_stop = abap_true.
       RETURN.
     ENDIF.
 
-    IF mo_window->m_direction IS NOT INITIAL AND m_hist_step > 1.
+    IF mo_window->m_direction IS NOT INITIAL AND m_hist_step > 1 and mo_window->m_debug_button is not INITIAL.
       SUBTRACT 1 FROM m_hist_step.
     ENDIF.
 
-    IF mo_window->m_direction IS INITIAL AND m_hist_step < m_step.
+    IF mo_window->m_direction IS INITIAL AND m_hist_step < m_step and mo_window->m_debug_button is not INITIAL.
       ADD 1  TO m_hist_step.
     ENDIF.
 
@@ -1630,7 +1630,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD run_script_new.
-
+    
     DATA: lv_type TYPE string.
     "get mt_state
     TRY.
@@ -1899,7 +1899,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD hndl_script_buttons.
-    
+
     IF m_is_find = abap_true.
       show_step( ).
       me->break( ).
@@ -5142,8 +5142,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDCASE.
 
     CLEAR mo_debugger->mo_window->m_debug_button.
+    IF mo_debugger->m_hist_step = mo_debugger->m_step.
+      clear mo_debugger->is_history.
+    ENDIF.
     IF e_salv_function NE 'TEST'.
-
       IF mo_debugger->is_history = abap_true.
         mo_debugger->run_script_hist( ).
       ELSE.
