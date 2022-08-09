@@ -1899,7 +1899,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD hndl_script_buttons.
-    BREAK-POINT.
+    
     IF m_is_find = abap_true.
       show_step( ).
       me->break( ).
