@@ -137,7 +137,6 @@ CLASS lcl_appl DEFINITION.
              instance      TYPE string,
              objname       TYPE string,
              done          TYPE xfeld,
-             "tree          TYPE REF TO lcl_rtti_tree,
            END OF var_table,
 
            t_var_table TYPE STANDARD TABLE OF var_table WITH NON-UNIQUE DEFAULT KEY,
@@ -458,7 +457,6 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                   iv_fullname    TYPE string
                   iv_type        TYPE string
                   iv_cl_leaf     TYPE int4
-                  "iv_old_name    TYPE string OPTIONAL
                   iv_parent_name TYPE string
                   ir_up          TYPE any OPTIONAL
                   i_instance     TYPE string OPTIONAL,
@@ -609,7 +607,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                                   i_cont     TYPE REF TO cl_gui_container OPTIONAL
                                   i_debugger TYPE REF TO lcl_debugger_script OPTIONAL.
 
-
     METHODS del_variable IMPORTING  iv_full_name TYPE string.
 
     METHODS clear.
@@ -696,7 +693,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
 
 
     METHODS: hndl_double_click FOR EVENT double_click OF cl_salv_events_tree IMPORTING node_key,
-
       hndl_user_command FOR EVENT added_function OF cl_salv_events IMPORTING e_salv_function.
 
 ENDCLASS.
@@ -1331,8 +1327,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       READ TABLE mt_obj WITH KEY obj = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
       IF sy-subrc = 0.
         IF i_no_cl_twin IS INITIAL.
-*          mo_tree_local->add_obj_var( EXPORTING iv_name = CONV #( i_shortname )
-*                                          iv_full = <ls_symobjref>-instancename ).
           RETURN.
         ENDIF.
       ENDIF.
@@ -1624,7 +1618,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       es_Stop = abap_true.
       CLEAR m_stop_stack.
     ENDIF.
-    
+
     IF ( mo_window->m_debug_button = 'F6BEG' AND ls_step-first = abap_true ) OR
        ( mo_window->m_debug_button = 'F7END' AND ls_step-last = abap_true ).
       es_Stop = abap_true.
@@ -1775,7 +1769,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     LOOP AT mt_state ASSIGNING FIELD-SYMBOL(<state>).
       CLEAR <state>-done.
     ENDLOOP.
-    "hndl_script_buttons( mv_stack_changed ).
 
     mo_tree_local->m_no_refresh = 'X'.
     mo_tree_exp->m_no_refresh = 'X'.
@@ -1790,7 +1783,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lv_key  TYPE salv_de_node_key,
           lo_tree TYPE REF TO  lcl_rtti_tree,
           is_skip TYPE xfeld.
-
 
     mo_tree_imp->m_leaf   =  'IMP'.
     mo_tree_exp->m_leaf =  'EXP'.
@@ -1899,9 +1891,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CLEAR is_skip.
       show_variables( CHANGING it_var = it_var ).
     ENDIF.
-*    IF sy-subrc NE 0 AND mv_selected_var IS INITIAL.
-*      rv_stop = abap_true.
-*    ENDIF.
 
   ENDMETHOD.
 
@@ -1931,9 +1920,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     ELSEIF mo_window->m_debug_button = 'F7END'.
       IF mo_window->m_prg-flag_eoev IS NOT INITIAL.
-        "IF mo_window->m_visualization IS NOT INITIAL.
-          show_step( ).
-        "ENDIF.
+        show_step( ).
         me->break( ).
       ELSE.
         f5( ).
@@ -1960,7 +1947,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         me->break( ).
       ELSE.
         IF mo_window->m_debug_button = 'F6BEG' AND iv_stack_changed IS NOT INITIAL.
-            show_step( ).
+          show_step( ).
           me->break( ).
         ELSE.
           IF mo_window->m_history IS NOT INITIAL.
@@ -1973,30 +1960,20 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       me->break( ).
     ENDIF.
 
-*    IF ( mo_window->m_debug_button = 'F7END' AND mo_window->m_prg-flag_eoev IS NOT INITIAL ) OR
-*       ( mo_window->m_debug_button = 'F6BEG' AND iv_stack_changed IS NOT INITIAL ) OR
-*       ( mo_window->m_history IS INITIAL AND mo_window->m_debug_button NE 'F7END' AND mo_window->m_debug_button NE 'F6BEG' ).
-*      "IF mo_window->m_visualization IS NOT INITIAL.
-*
-*        show_step( ).
-*      "ENDIF.
-*      me->break( ).
-*    ENDIF.
-
   ENDMETHOD.
 
-  METHOD end.
+  METHOD end. "dummy method
   ENDMETHOD.
 
   METHOD f5.
     IF mo_window->m_debug_button NE 'F5' AND mo_window->m_zcode IS NOT INITIAL.
       READ TABLE mo_window->mt_stack INTO DATA(stack) INDEX 1.
       IF stack-program+0(1) NE 'Z'.
-
         f7( ).
         RETURN.
       ENDIF.
     ENDIF.
+
     TRY.
         CALL METHOD debugger_controller->debug_step
           EXPORTING
@@ -2207,7 +2184,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lv_name2(100).
 
     CHECK m_hist_step = m_step AND mo_window->m_direction IS INITIAL.
-    "CHECK mo_window->m_debug_button NE 'BACK' AND mo_window->m_debug_button NE 'FORW'.
     IF ir_up IS SUPPLIED.
       ASSIGN ir_up->* TO FIELD-SYMBOL(<ir_up>).
     ENDIF.
@@ -2267,6 +2243,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
               <state>-path = iv_fullname.
             ENDIF.
           ELSE.
+
             IF iv_name IS NOT INITIAL.
               <state>-path =  |{ iv_parent_name }-{ iv_name }|.
             ELSE.
@@ -2274,6 +2251,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             ENDIF.
 
           ENDIF.
+
         ENDIF.
       ENDIF.
 
@@ -2383,9 +2361,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     DATA td TYPE sydes_desc.
     DESCRIBE FIELD ir_up INTO td.
-    IF td-types[ 1 ]-type = 'r'.
-      "m_object = ir_up.
-    ENDIF.
+*    IF td-types[ 1 ]-type = 'r'.
+*      "m_object = ir_up.
+*    ENDIF.
 
     ASSIGN m_variable->* TO FIELD-SYMBOL(<new_value>).
 
@@ -2523,7 +2501,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           iv_name = ls_component-name
           iv_fullname = lv_string
           iv_type = iv_type
-          ir_up = lr_new_struc"<new>
+          ir_up = lr_new_struc
           iv_parent_name = lv_parent
           iv_struc_name = ls_component-name
           i_cl_leaf = i_cl_leaf
@@ -2715,8 +2693,6 @@ CLASS lcl_window IMPLEMENTATION.
      ( function = 'F6BEG' icon = CONV #( icon_release ) quickinfo = 'Start of block' text = 'Start of block' )
      ( function = 'F7END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
      ( butn_type = 3  )
-     "( function = 'BACK' icon = CONV #( icon_column_left ) quickinfo = 'Step Back' text = 'Back' )
-     "( function = 'FORW' icon = CONV #( icon_column_right ) quickinfo = 'Step forward' text = 'Forward' )
      ( function = 'DIRECTION' icon = CONV #( icon_column_right ) quickinfo = 'Forward' text = 'Forward' )
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Select variable to scan' text = 'Select variable to scan' )
                        ).
@@ -4394,6 +4370,7 @@ CLASS lcl_appl IMPLEMENTATION.
 ENDCLASS.
 
 CLASS lcl_rtti_tree IMPLEMENTATION.
+
   METHOD constructor.
     super->constructor( ).
     mo_debugger = i_debugger.
@@ -4420,7 +4397,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
     lo_columns->get_column( 'TYPENAME' )->set_medium_text( 'Absolute Type' ).
-
     lo_columns->get_column( 'OBJNAME' )->set_short_text( 'Int. obj.' ).
     lo_columns->get_column( 'OBJNAME' )->set_medium_text( 'Int. obj. name' ).
 
@@ -4558,7 +4534,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                                     iv_parent_key = iv_parent_key
                                     iv_rel  = iv_rel
                                     is_var = is_var
-                                    "ir_up = ir_up
                                      iv_parent_name = iv_parent_name ).
 
     ENDCASE.
@@ -4706,12 +4681,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lv_text = is_var-short.
     ls_tree-fullname = is_var-path.
 
-*    IF iv_parent_key IS NOT INITIAL.
-*      l_key = iv_parent_key.
-*    ELSE.
-*      l_key = main_node_key.
-*    ENDIF.
-
     "own new method
     IF is_var-cl_leaf IS NOT INITIAL.
 
@@ -4822,12 +4791,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lv_text = is_var-short.
     ls_tree-fullname = is_var-path.
     ls_tree-objname = is_var-instance.
-
-*    IF iv_parent_key IS NOT INITIAL.
-*      l_key = iv_parent_key.
-*    ELSE.
-*      l_key = main_node_key.
-*    ENDIF.
 
     "own new method
     IF is_var-cl_leaf IS NOT INITIAL.
@@ -4967,7 +4930,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       l_key = iv_parent_key.
     ENDIF.
 
-    "IF m_hide IS INITIAL.
     READ TABLE mt_vars WITH KEY name = iv_parent_name TRANSPORTING NO FIELDS.
     IF sy-subrc NE 0.
 
@@ -5130,7 +5092,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         m_ldb = m_ldb BIT-XOR c_mask.
       WHEN 'TEST'.
 
-        "lcl_appl=>open_int_table( iv_name = 'Classes' it_tab =  mo_debugger->mt_classes_types ).
         lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
 
         DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
@@ -5142,10 +5103,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         lcl_appl=>open_int_table( iv_name = 'mt_vars_hist -  History' it_tab =  lt_hist ).
 
         "DATA(f) = 10 / 0.
-
-*        DATA: lt_hist3 TYPE TABLE OF lcl_appl=>t_step_counter.
-*        MOVE-CORRESPONDING  mo_debugger->mt_steps TO lt_hist3.
-*        lcl_appl=>open_int_table( iv_name = 'Steps' it_tab =  lt_hist3 ).
 
         DATA: lt_var TYPE TABLE OF lcl_appl=>var_table_temp.
         MOVE-CORRESPONDING  mo_debugger->mo_tree_local->mt_vars TO lt_var.
