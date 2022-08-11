@@ -2,7 +2,7 @@
 *& Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
-*& version: beta 0.7.350
+*& version: beta 0.7.360
 *& Git https://github.com/ysichov/SDDE
 *& RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *& EN description - https://github.com/ysichov/SDDE/wiki
@@ -1253,6 +1253,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
 
         ELSEIF m_quick-typid = 'g'."string
+
           IF i_name NE '{A:initial}'.
             DATA(l_new_string) = create_simple_string( i_name ).
           ELSE.
@@ -2348,7 +2349,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF lv_type NE cl_abap_typedescr=>typekind_table.
       CREATE DATA lr_new LIKE <ir_up>.
       ASSIGN lr_new->*  TO <new>.
-      ASSIGN ir_up->* TO <new>.
+      ASSIGN ir_up->* TO FIELD-SYMBOL(<new2>).
+      <new> = <new2>.
     ELSE.
       ASSIGN ir_up->* TO <tab_from>.
       CREATE DATA lr_struc LIKE LINE OF <tab_from>.
@@ -2357,7 +2359,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ASSIGN lr_new->* TO <tab_to>.
       <tab_to> = <tab_from>.
     ENDIF.
-    m_variable = lr_new.
+    GET REFERENCE OF <new> into m_variable.
 
     DATA td TYPE sydes_desc.
     DESCRIBE FIELD ir_up INTO td.
@@ -2365,7 +2367,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 *      "m_object = ir_up.
 *    ENDIF.
 
-    ASSIGN m_variable->* TO FIELD-SYMBOL(<new_value>).
+    m_variable = lr_new.
 
     CASE io_type_descr->kind.
       WHEN c_kind-struct.
