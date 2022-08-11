@@ -1624,6 +1624,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       es_Stop = abap_true.
       CLEAR m_stop_stack.
     ENDIF.
+    
+    IF ( mo_window->m_debug_button = 'F6BEG' AND ls_step-first = abap_true ) OR
+       ( mo_window->m_debug_button = 'F7END' AND ls_step-last = abap_true ).
+      es_Stop = abap_true.
+    ENDIF.
 
     mo_tree_local->m_no_refresh = 'X'.
     mo_tree_exp->m_no_refresh = 'X'.
@@ -1634,7 +1639,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD run_script_new.
 
     DATA: lv_type TYPE string.
-    "get mt_state
+
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = mo_window->m_prg ).
 
@@ -1656,6 +1661,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           <step>-step = m_step.
           CLEAR is_step.
           IF mv_stack_changed = abap_true AND  ms_stack_prev-stacklevel < ms_stack-stacklevel.
+
             <step>-first = abap_true.
           ENDIF.
           IF mo_window->m_prg-flag_eoev = abap_true.
@@ -2876,7 +2882,7 @@ CLASS lcl_window IMPLEMENTATION.
     ELSE.
       CASE fcode.
 
-        WHEN 'F5' OR 'F6' OR 'F7' OR 'F8'.
+        WHEN 'F5' OR 'F6' OR 'F7' OR 'F8' OR 'F6BEG' OR 'F7END'.
           DO.
             mo_debugger->run_script_hist( IMPORTING es_stop = DATA(lv_stop) ).
 
@@ -5125,7 +5131,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       WHEN 'TEST'.
 
         "lcl_appl=>open_int_table( iv_name = 'Classes' it_tab =  mo_debugger->mt_classes_types ).
-        "lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
+        lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
 
         DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
         MOVE-CORRESPONDING  mo_debugger->mt_state TO lt_hist2.
