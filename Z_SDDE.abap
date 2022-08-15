@@ -1969,7 +1969,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD f5.
     IF mo_window->m_debug_button NE 'F5' AND mo_window->m_zcode IS NOT INITIAL.
       READ TABLE mo_window->mt_stack INTO DATA(stack) INDEX 1.
-      IF stack-program+0(1) NE 'Z'.
+      IF stack-program+0(1) NE 'Z' AND stack-program+0(5) NE 'SAPLZ'.
         f7( ).
         RETURN.
       ENDIF.
