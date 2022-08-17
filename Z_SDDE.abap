@@ -1896,7 +1896,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF is_skip = abap_true.
       CLEAR is_skip.
-      "show_variables( CHANGING it_var = it_var ).
+      show_variables( CHANGING it_var = it_var ).
     ENDIF.
 
   ENDMETHOD.
