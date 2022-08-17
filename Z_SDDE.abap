@@ -2,7 +2,7 @@
 *& Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
-*& version: beta 0.7.360
+*& version: beta 0.7.350
 *& Git https://github.com/ysichov/SDDE
 *& RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *& EN description - https://github.com/ysichov/SDDE/wiki
@@ -442,6 +442,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mv_selected_var  TYPE string,
           mv_stack_changed TYPE xfeld,
           m_variable       TYPE REF TO data,
+          m_new_string     TYPE string,
           m_quick          TYPE tpda_scr_quick_info.
 
     METHODS: prologue  REDEFINITION,
@@ -1255,11 +1256,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ELSEIF m_quick-typid = 'g'."string
 
           IF i_name NE '{A:initial}'.
-            DATA(l_new_string) = create_simple_string( i_name ).
+            m_new_string = create_simple_string( i_name ).
           ELSE.
-            l_new_string = '{A:initial}'.
+            m_new_string = '{A:initial}'.
           ENDIF.
-          GET REFERENCE OF l_new_string INTO m_variable.
+          GET REFERENCE OF m_new_string INTO m_variable.
           traverse( io_type_descr = cl_abap_typedescr=>describe_by_data_ref( m_variable )
           iv_name = l_name
                     iv_type = iv_type
@@ -1804,7 +1805,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF mo_tree_local->m_syst IS INITIAL.
-      "
       READ TABLE mo_tree_local->mt_vars WITH KEY name = 'SYST' INTO DATA(ls_var).
       IF sy-subrc = 0.
         mo_tree_local->delete_node( ls_var-key ).
@@ -1822,11 +1822,15 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           mo_tree_local->m_leaf =  'LOCAL'.
           IF mo_tree_local->m_locals_key IS INITIAL.
             mo_tree_local->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
+          else.
+            mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
           ENDIF.
         WHEN 'GLOBAL'.
           mo_tree_local->m_leaf =  'GLOBAL'.
           IF mo_tree_local->m_globals_key IS INITIAL.
             mo_tree_local->add_node( iv_name = 'Globals' iv_icon = CONV #( icon_life_events ) ).
+          ELSE.
+            mo_tree_local->main_node_key = mo_tree_local->m_globals_key.
           ENDIF.
         WHEN 'SYST'.
           mo_tree_local->m_leaf =  'SYST'.
@@ -1855,8 +1859,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         IF sy-subrc = 0.
           <var>-done = abap_true.
         ELSE.
-          is_skip = abap_true.
-          CONTINUE.
+          IF lo_tree->m_hide IS INITIAL.
+            is_skip = abap_true.
+            CONTINUE.
+          ENDIF.
         ENDIF.
       ELSE.
         <var>-done = abap_true.
@@ -1890,7 +1896,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF is_skip = abap_true.
       CLEAR is_skip.
-      show_variables( CHANGING it_var = it_var ).
+      "show_variables( CHANGING it_var = it_var ).
     ENDIF.
 
   ENDMETHOD.
@@ -2349,8 +2355,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF lv_type NE cl_abap_typedescr=>typekind_table.
       CREATE DATA lr_new LIKE <ir_up>.
       ASSIGN lr_new->*  TO <new>.
-      ASSIGN ir_up->* TO FIELD-SYMBOL(<new2>).
-      <new> = <new2>.
+      ASSIGN ir_up->* TO <new>.
+      GET REFERENCE OF <new> INTO lr_new.
     ELSE.
       ASSIGN ir_up->* TO <tab_from>.
       CREATE DATA lr_struc LIKE LINE OF <tab_from>.
@@ -2359,7 +2365,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ASSIGN lr_new->* TO <tab_to>.
       <tab_to> = <tab_from>.
     ENDIF.
-    GET REFERENCE OF <new> into m_variable.
+    GET REFERENCE OF <new> INTO m_variable.
 
     DATA td TYPE sydes_desc.
     DESCRIBE FIELD ir_up INTO td.
@@ -2574,7 +2580,7 @@ CLASS lcl_window IMPLEMENTATION.
     m_history = '01'.
     m_zcode = '01'.
 
-    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.2' i_width = 1200 i_hight = 400 ).
+    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.7' i_width = 1200 i_hight = 400 ).
     CREATE OBJECT mo_splitter ##FM_SUBRC_OK
       EXPORTING
         parent  = mo_box
