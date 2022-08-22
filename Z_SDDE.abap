@@ -405,7 +405,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
            END OF t_obj.
 
     DATA: mt_obj           TYPE TABLE OF t_obj,
-
+          mt_compo         TYPE TABLE OF scompo,
           mt_locals        TYPE tpda_scr_locals_it,
           mt_loc_fs        TYPE tpda_scr_locals_it, "locals Field Symbols
           mt_globals       TYPE tpda_scr_globals_it,
@@ -1697,6 +1697,22 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     mo_tree_local->m_prg_info = mo_window->m_prg.
 
+    IF mo_tree_local->m_globals IS NOT INITIAL OR mo_tree_local->m_ldb IS NOT INITIAL.
+      DATA: l_name(40),
+            lt_inc       TYPE TABLE OF  d010inc.
+      l_name = abap_source->program( ).
+
+      CALL FUNCTION 'RS_PROGRAM_INDEX'
+        EXPORTING
+          pg_name      = l_name
+        TABLES
+          compo        = mt_compo
+          inc          = lt_inc
+        EXCEPTIONS
+          syntax_error = 1
+          OTHERS       = 2.
+    ENDIF.
+
     IF mv_stack_changed = abap_true OR is_history = abap_true.
 
       IF mo_tree_local->m_locals IS NOT INITIAL.
@@ -1714,9 +1730,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     ENDIF.
 
-    IF mo_tree_local->m_globals IS NOT INITIAL.
+    IF mo_tree_local->m_globals IS NOT INITIAL OR mo_tree_local->m_ldb IS NOT INITIAL.
       CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
       SORT mt_globals.
+
+      LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
+        READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
+        IF sy-subrc NE 0.
+          <global>-parisval = 'L'.
+        ENDIF.
+        IF <global>-name = 'GV_GLOB'. <global>-parisval = 'L'. endif. "delete
+      ENDLOOP.
     ENDIF.
 
     mo_tree_imp->m_prg_info = mo_window->m_prg.
@@ -1752,11 +1776,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF mo_tree_local->m_globals IS NOT INITIAL.
-      LOOP AT mt_globals INTO DATA(ls_global).
+      LOOP AT mt_globals INTO DATA(ls_global) WHERE parisval NE 'L'.
         transfer_variable( EXPORTING i_name =  ls_global-name iv_type = 'GLOBAL' ).
-        IF mo_tree_local->m_syst IS NOT INITIAL.
-          transfer_variable( EXPORTING i_name =  'SYST' iv_type = 'SYST' ).
-        ENDIF.
+      ENDLOOP.
+      IF mo_tree_local->m_syst IS NOT INITIAL.
+        transfer_variable( EXPORTING i_name =  'SYST' iv_type = 'SYST' ).
+      ENDIF.
+
+    ENDIF.
+
+    IF mo_tree_local->m_ldb IS NOT INITIAL.
+      LOOP AT mt_globals INTO ls_global WHERE parisval = 'L'.
+        transfer_variable( EXPORTING i_name =  ls_global-name iv_type = 'LDB' ).
       ENDLOOP.
     ENDIF.
 
@@ -1813,6 +1844,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
+    IF mo_tree_local->m_ldb_key IS NOT INITIAL AND mo_tree_local->m_ldb IS INITIAL.
+      mo_tree_local->delete_node( mo_tree_local->m_ldb_key ).
+      CLEAR mo_tree_local->m_ldb_key.
+      DELETE mo_tree_local->mt_vars WHERE leaf = 'LDB'.
+      DELETE mt_state WHERE leaf = 'LDB'.
+    ENDIF.
+
     l_rel = if_salv_c_node_relation=>last_child.
 
     LOOP AT it_var ASSIGNING FIELD-SYMBOL(<var>) WHERE done = abap_false.
@@ -1822,7 +1860,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           mo_tree_local->m_leaf =  'LOCAL'.
           IF mo_tree_local->m_locals_key IS INITIAL.
             mo_tree_local->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
-          else.
+          ELSE.
             mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
           ENDIF.
         WHEN 'GLOBAL'.
@@ -1832,6 +1870,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ELSE.
             mo_tree_local->main_node_key = mo_tree_local->m_globals_key.
           ENDIF.
+        WHEN 'LDB'.
+          mo_tree_local->m_leaf =  'LDB'.
+          IF mo_tree_local->m_ldb_key IS INITIAL.
+            mo_tree_local->add_node( iv_name = 'LDB' iv_icon = CONV #( icon_life_events ) ).
+          ELSE.
+            mo_tree_local->main_node_key = mo_tree_local->m_ldb_key.
+          ENDIF.
+
         WHEN 'SYST'.
           mo_tree_local->m_leaf =  'SYST'.
         WHEN 'CLASS'.
@@ -2056,28 +2102,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD read_class_globals.
 
-    DATA: lt_compo     TYPE TABLE OF scompo,
-          lt_compo_tmp TYPE TABLE OF scompo,
-          lt_inc       TYPE TABLE OF  d010inc,
+    DATA: lt_compo_tmp TYPE TABLE OF scompo,
           l_class      TYPE seu_name.
 
     mo_tree_local->m_leaf = 'Class-data global variables'.
     IF mo_tree_local->m_class_data IS NOT INITIAL.
 
-      DATA: l_name(40).
-      l_name = abap_source->program( ).
-
-      CALL FUNCTION 'RS_PROGRAM_INDEX'
-        EXPORTING
-          pg_name      = l_name
-        TABLES
-          compo        = lt_compo
-          inc          = lt_inc
-        EXCEPTIONS
-          syntax_error = 1
-          OTHERS       = 2.
-
-      lt_compo_tmp = lt_compo.
+      lt_compo_tmp = mt_compo.
       DELETE lt_compo_tmp WHERE  type NE '+' OR exposure NE 2.
       SORT lt_compo_tmp BY class.
       LOOP AT lt_compo_tmp ASSIGNING FIELD-SYMBOL(<compo>).
@@ -2165,24 +2196,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     ENDIF.
 
-    lt_compo_tmp = lt_compo.
+    lt_compo_tmp = mt_compo.
     DELETE lt_compo_tmp WHERE  type NE 'D'.
-
-*    "в отдельный метод
-*    IF mo_tree_local->m_ldb IS NOT INITIAL.
-*      mo_tree_local->m_leaf = 'LDB'.
-*      IF mo_tree_local->m_ldb_key IS INITIAL.
-*        mo_tree_local->add_node( iv_name = mo_tree_local->m_leaf iv_icon = CONV #( icon_biw_report_view ) ).
-*      ELSE.
-*        mo_tree_local->main_node_key = mo_tree_local->m_ldb_key.
-*      ENDIF.
-*      LOOP AT mt_globals INTO DATA(ls_global).
-*        READ TABLE lt_compo WITH KEY name = ls_global-name TRANSPORTING NO FIELDS.
-*        IF sy-subrc NE 0.
-*          "transfer_variable( EXPORTING i_name = ls_global-name i_tree = mo_tree_local ).
-*        ENDIF.
-*      ENDLOOP.
-*    ENDIF.
 
   ENDMETHOD.
 
@@ -4464,12 +4479,12 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
        tooltip  = 'Show/hide Class-Data variables (global)'
        position = if_salv_c_function_position=>right_of_salv_functions ).
 
-*    lo_functions->add_function(
-*           name     = 'LDB'
-*           icon     = CONV #( icon_biw_report_view )
-*           text     = 'LDB'
-*           tooltip  = 'Show/hide Local Data Base variables (global)'
-*           position = if_salv_c_function_position=>right_of_salv_functions ).
+    lo_functions->add_function(
+           name     = 'LDB'
+           icon     = CONV #( icon_biw_report_view )
+           text     = 'LDB'
+           tooltip  = 'Show/hide Local Data Base variables (global)'
+           position = if_salv_c_function_position=>right_of_salv_functions ).
 
     IF sy-uname = 'DEVELOPER'.
       lo_functions->add_function(
