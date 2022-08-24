@@ -411,7 +411,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mt_globals       TYPE tpda_scr_globals_it,
 
           mt_ret_exp       TYPE tpda_scr_locals_it,
-
+          m_counter        TYPE i,
           mt_steps         TYPE  TABLE OF lcl_appl=>t_step_counter, "source code steps
           mt_var_step      TYPE  TABLE OF lcl_appl=>var_table_h,
           mt_del_vars      TYPE STANDARD TABLE OF lcl_appl=>var_table,
@@ -1635,7 +1635,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD run_script_new.
 
     DATA: lv_type TYPE string.
-
+    ADD 1 TO m_counter.
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info  = mo_window->m_prg ).
 
@@ -1739,7 +1739,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         IF sy-subrc NE 0.
           <global>-parisval = 'L'.
         ENDIF.
-        IF <global>-name = 'GV_GLOB'. <global>-parisval = 'L'. endif. "delete
+        IF <global>-name = 'GV_GLOB'. <global>-parisval = 'L'. ENDIF. "delete
       ENDLOOP.
     ENDIF.
 
@@ -1961,7 +1961,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       me->break( ).
 
     ELSEIF mo_window->m_debug_button = 'F6'.
-      IF m_f6_level IS NOT INITIAL AND m_f6_level = ms_stack-stacklevel.
+      IF m_f6_level IS NOT INITIAL AND m_f6_level = ms_stack-stacklevel or mo_window->m_history is INITIAL.
         CLEAR m_f6_level.
         show_step( ).
         me->break( ).
@@ -1981,7 +1981,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSEIF mo_window->m_debug_button = 'F7'.
 
       IF mv_f7_stop = abap_true.
-        IF mo_window->m_visualization IS NOT INITIAL.
+        IF mo_window->m_visualization IS NOT INITIAL or mo_window->m_history is INITIAL .
           show_step( ).
         ENDIF.
         me->break( ).
@@ -2035,8 +2035,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
-    me->run_script_new( ).
-    hndl_script_buttons( mv_stack_changed ).
+    IF m_counter < 100.
+      me->run_script_new( ).
+      hndl_script_buttons( mv_stack_changed ).
+    ELSE.
+      CLEAR m_counter.
+    ENDIF.
   ENDMETHOD.
 
   METHOD f6.
@@ -2049,6 +2053,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
     me->run_script_new( ).
+    BREAK-POINT.
     hndl_script_buttons( mv_stack_changed ).
   ENDMETHOD.
 
@@ -2718,7 +2723,8 @@ CLASS lcl_window IMPLEMENTATION.
      ( butn_type = 3  )
      ( function = 'DIRECTION' icon = CONV #( icon_column_right ) quickinfo = 'Forward' text = 'Forward' )
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Select variable to scan' text = 'Select variable to scan' )
-                       ).
+     ( function = 'INFO' icon = CONV #( icon_information ) quickinfo = 'Documentation' text = '' )
+                     ).
     mo_toolbar->add_button_group( lt_button ).
 
 * Register events
@@ -2846,6 +2852,11 @@ CLASS lcl_window IMPLEMENTATION.
         CLEAR mo_debugger->mv_selected_var.
         mo_toolbar->set_button_info( EXPORTING icon = CONV #( icon_select_detail ) fcode =  'CLEARVAR'  text = 'Select variable to scan' ).
 
+      WHEN 'INFO'.
+        DATA(l_url) = 'https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/'.
+        CALL FUNCTION 'CALL_BROWSER' EXPORTING url = l_url.
+
+
     ENDCASE.
 
     IF m_direction IS INITIAL AND mo_debugger->m_hist_step = mo_debugger->m_step.
@@ -2871,6 +2882,7 @@ CLASS lcl_window IMPLEMENTATION.
           ENDIF.
 
         WHEN 'F8'.
+          CLEAR m_counter.
           IF m_history IS INITIAL.
             mo_debugger->f8( ).
           ELSE.
@@ -2896,7 +2908,6 @@ CLASS lcl_window IMPLEMENTATION.
               RETURN.
             ENDIF.
           ENDDO.
-
       ENDCASE.
     ENDIF.
   ENDMETHOD.
@@ -4501,6 +4512,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
      text     = ''
      tooltip  = 'Refresh'
      position = if_salv_c_function_position=>left_of_salv_functions ).
+
+
   ENDMETHOD.
 
   METHOD clear.
