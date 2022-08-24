@@ -1739,7 +1739,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         IF sy-subrc NE 0.
           <global>-parisval = 'L'.
         ENDIF.
-        IF <global>-name = 'GV_GLOB'. <global>-parisval = 'L'. ENDIF. "delete
       ENDLOOP.
     ENDIF.
 
@@ -2855,7 +2854,6 @@ CLASS lcl_window IMPLEMENTATION.
       WHEN 'INFO'.
         DATA(l_url) = 'https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/'.
         CALL FUNCTION 'CALL_BROWSER' EXPORTING url = l_url.
-
 
     ENDCASE.
 
@@ -4512,7 +4510,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
      text     = ''
      tooltip  = 'Refresh'
      position = if_salv_c_function_position=>left_of_salv_functions ).
-
 
   ENDMETHOD.
 
