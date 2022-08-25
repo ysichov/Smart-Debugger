@@ -1106,7 +1106,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                    <tab_to>   TYPE STANDARD TABLE.
 
     FIELD-SYMBOLS: <lv_value> TYPE any.
-    
+
     l_full_name = i_name.
     IF i_name NE '{A:initial}'.
       TRY.
@@ -1857,7 +1857,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     l_rel = if_salv_c_node_relation=>last_child.
 
     LOOP AT it_var ASSIGNING FIELD-SYMBOL(<var>) WHERE done = abap_false.
-     
+
       CASE <var>-leaf.
         WHEN 'LOCAL'.
           mo_tree_local->m_leaf =  'LOCAL'.
@@ -4435,11 +4435,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lo_columns->set_optimize( abap_true ).
 
     lo_columns->get_column( 'VALUE' )->set_short_text( 'Value' ).
-    lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full name' ).
+    "lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full name' ).
 
-    IF i_type NE 'L'.
+    "IF i_type NE 'L'.
       lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
-    ENDIF.
+    "ENDIF.
 
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
     lo_columns->get_column( 'TYPENAME' )->set_medium_text( 'Absolute Type' ).
