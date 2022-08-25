@@ -442,7 +442,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mv_selected_var  TYPE string,
           mv_stack_changed TYPE xfeld,
           m_variable       TYPE REF TO data,
-          m_new_string     TYPE string,
+          mt_new_string    TYPE table of  string,
           m_quick          TYPE tpda_scr_quick_info.
 
     METHODS: prologue  REDEFINITION,
@@ -1106,7 +1106,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                    <tab_to>   TYPE STANDARD TABLE.
 
     FIELD-SYMBOLS: <lv_value> TYPE any.
-
+    
     l_full_name = i_name.
     IF i_name NE '{A:initial}'.
       TRY.
@@ -1255,13 +1255,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
 
         ELSEIF m_quick-typid = 'g'."string
-
+          APPEND INITIAL LINE TO mt_new_string ASSIGNING FIELD-SYMBOL(<m_string>).
           IF i_name NE '{A:initial}'.
-            m_new_string = create_simple_string( i_name ).
+            <m_string> = create_simple_string( i_name ).
           ELSE.
-            m_new_string = '{A:initial}'.
+            <m_string> = '{A:initial}'.
           ENDIF.
-          GET REFERENCE OF m_new_string INTO m_variable.
+          GET REFERENCE OF <m_string> INTO m_variable.
           traverse( io_type_descr = cl_abap_typedescr=>describe_by_data_ref( m_variable )
           iv_name = l_name
                     iv_type = iv_type
@@ -1857,7 +1857,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     l_rel = if_salv_c_node_relation=>last_child.
 
     LOOP AT it_var ASSIGNING FIELD-SYMBOL(<var>) WHERE done = abap_false.
-
+     
       CASE <var>-leaf.
         WHEN 'LOCAL'.
           mo_tree_local->m_leaf =  'LOCAL'.
