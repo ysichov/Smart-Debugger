@@ -2358,6 +2358,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           <state>-first = 'X'.
         ENDIF.
 
+        <state>-cl_leaf = iv_cl_leaf.
         INSERT <state> INTO mt_vars_hist INDEX 1.
 
         IF mv_selected_var = <state>-name.
