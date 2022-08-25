@@ -608,7 +608,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                                   i_cont     TYPE REF TO cl_gui_container OPTIONAL
                                   i_debugger TYPE REF TO lcl_debugger_script OPTIONAL.
 
-    METHODS del_variable IMPORTING  iv_full_name TYPE string.
+    METHODS del_variable IMPORTING  iv_full_name TYPE string i_state type xfeld OPTIONAL.
 
     METHODS clear.
 
@@ -1117,7 +1117,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
               p_symb_quick = m_quick.
         CATCH cx_tpda_varname .
 
-          mo_tree_local->del_variable(  i_name ).
+          mo_tree_local->del_variable( EXPORTING iv_full_name =  i_name i_state = 'X' ).
           RETURN.
       ENDTRY.
     ELSE.
@@ -1542,6 +1542,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       "find deleted variables to del it
       LOOP AT mt_del_vars INTO ls_hist WHERE step = m_hist_step.
+
         mo_tree_local->del_variable( CONV #( ls_hist-name ) ).
       ENDLOOP.
     ENDIF.
@@ -1600,7 +1601,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       "find apeeared variable to delete it
       LOOP AT mt_vars_hist INTO ls_hist WHERE step = m_hist_step  AND is_appear = abap_true AND first IS INITIAL .
-        mo_tree_local->del_variable( CONV #( ls_hist-name ) ).
+        mo_tree_local->del_variable( EXPORTING iv_full_name = CONV #( ls_hist-name ) i_state = abap_true ).
       ENDLOOP.
 
     ENDIF.
@@ -1769,6 +1770,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDLOOP.
 
       LOOP AT mt_loc_fs INTO ls_local.
+
         CHECK NOT ls_local-name CA '[]'.
 
         transfer_variable( EXPORTING i_name =  ls_local-name iv_type = 'LOCAL' ).
@@ -1962,7 +1964,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       me->break( ).
 
     ELSEIF mo_window->m_debug_button = 'F6'.
-      IF m_f6_level IS NOT INITIAL AND m_f6_level = ms_stack-stacklevel or mo_window->m_history is INITIAL.
+      IF m_f6_level IS NOT INITIAL AND m_f6_level = ms_stack-stacklevel OR mo_window->m_history IS INITIAL.
         CLEAR m_f6_level.
         show_step( ).
         me->break( ).
@@ -1982,7 +1984,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSEIF mo_window->m_debug_button = 'F7'.
 
       IF mv_f7_stop = abap_true.
-        IF mo_window->m_visualization IS NOT INITIAL or mo_window->m_history is INITIAL .
+        IF mo_window->m_visualization IS NOT INITIAL OR mo_window->m_history IS INITIAL .
           show_step( ).
         ENDIF.
         me->break( ).
@@ -2210,7 +2212,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD save_hist.
     DATA: lv_add        TYPE xfeld,
           lv_name2(100),
-          lv_full_name type string.
+          lv_full_name  TYPE string.
 
     CHECK m_hist_step = m_step AND mo_window->m_direction IS INITIAL.
     IF ir_up IS SUPPLIED.
@@ -2218,18 +2220,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF i_instance IS INITIAL.
-        lv_full_name = iv_fullname.
-      ELSE.
-        IF iv_parent_name IS INITIAL.
-          IF iv_name IS NOT INITIAL.
-            lv_full_name = iv_name.
-          ELSE.
-            lv_full_name = iv_fullname.
-          ENDIF.
+      lv_full_name = iv_fullname.
+    ELSE.
+      IF iv_parent_name IS INITIAL.
+        IF iv_name IS NOT INITIAL.
+          lv_full_name = iv_name.
         ELSE.
-          lv_full_name =  |{ iv_parent_name }-{ iv_name }|.
+          lv_full_name = iv_fullname.
         ENDIF.
+      ELSE.
+        lv_full_name =  |{ iv_parent_name }-{ iv_name }|.
       ENDIF.
+    ENDIF.
 
     READ TABLE mt_state
          WITH KEY name = lv_full_name
@@ -2346,8 +2348,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
 
-        lo_elem = cl_abap_typedescr=>describe_by_data_ref( <state>-ref ).
-        <state>-type = lo_elem->absolute_name.
+      lo_elem = cl_abap_typedescr=>describe_by_data_ref( <state>-ref ).
+      <state>-type = lo_elem->absolute_name.
 
       IF lv_add = abap_on.
 
@@ -4632,7 +4634,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       l_key = iv_parent_key.
     ENDIF.
 
- IF l_key IS INITIAL.
+    IF l_key IS INITIAL.
       l_key = iv_parent_key.
       l_rel = iv_rel.
     ENDIF.
@@ -4640,49 +4642,39 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     IF  ( iv_struc_name IS SUPPLIED AND iv_struc_name IS NOT INITIAL ) OR iv_struc_name IS NOT SUPPLIED.
       IF lv_text IS NOT INITIAL.
 
-READ TABLE mt_vars WITH KEY name = is_var-name INTO DATA(l_var).
-    IF sy-subrc = 0.
-      TRY.
-          DATA(lo_nodes) = tree->get_nodes( ).
-          DATA(l_node) =  lo_nodes->get_node( l_var-key ).
+        READ TABLE mt_vars WITH KEY name = is_var-name INTO DATA(l_var).
+        IF sy-subrc = 0.
+          TRY.
+              DATA(lo_nodes) = tree->get_nodes( ).
+              DATA(l_node) =  lo_nodes->get_node( l_var-key ).
 
-          ASSIGN l_var-ref->* TO FIELD-SYMBOL(<old_value>).
+              ASSIGN l_var-ref->* TO FIELD-SYMBOL(<old_value>).
 
-          IF is_var-type = l_var-type.
-            IF <old_value> NE <new_value>.
-              l_key = l_var-key.
-              l_rel = if_salv_c_node_relation=>next_sibling.
-              DELETE mt_vars WHERE name = is_var-name.
-            ELSE.
-              IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
-*                me->del_variable( iv_full_name = iv_fullname iv_del_in_tree = abap_true ).
-              ELSE.
+              IF is_var-type = l_var-type.
                 RETURN.
+              ELSE.
+                l_key = l_var-key.
+                l_rel = if_salv_c_node_relation=>next_sibling.
+                DELETE mt_vars WHERE name = is_var-name.
               ENDIF.
-            ENDIF.
-          ELSE.
-            l_key = l_var-key.
-            l_rel = if_salv_c_node_relation=>next_sibling.
-            DELETE mt_vars WHERE name = is_var-name.
-          ENDIF.
 
-        CATCH cx_root.
-      ENDTRY.
+            CATCH cx_root.
+          ENDTRY.
 
-    ENDIF.
+        ENDIF.
 
       ENDIF.
 
-e_root_key = tree->get_nodes( )->add_node(
-       related_node   = l_key
-       relationship   = l_rel
-       data_row       = ls_tree
-       collapsed_icon = lv_icon
-       expanded_icon  = lv_icon
-       text           = lv_text
-       folder         = abap_false )->get_key( ).
+      e_root_key = tree->get_nodes( )->add_node(
+             related_node   = l_key
+             relationship   = l_rel
+             data_row       = ls_tree
+             collapsed_icon = lv_icon
+             expanded_icon  = lv_icon
+             text           = lv_text
+             folder         = abap_false )->get_key( ).
 
-    APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+      APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
       <vars>-key = e_root_key.
       <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
       <vars>-step  = mo_debugger->m_step - mo_debugger->m_step_delta.
@@ -4698,7 +4690,7 @@ e_root_key = tree->get_nodes( )->add_node(
       <vars>-path = is_var-path.
     ENDIF.
 
-  IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
+    IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
       IF l_node IS NOT INITIAL.
         l_node->delete( ).
       ENDIF.
@@ -4806,35 +4798,60 @@ e_root_key = tree->get_nodes( )->add_node(
 
     ENDIF.
 
-    e_root_key = tree->get_nodes( )->add_node(
-       related_node   = l_key
-       relationship   = l_rel
-       data_row       = ls_tree
-       collapsed_icon = lv_icon
-       expanded_icon  = lv_icon
-       text           = lv_text
-       folder         = abap_false )->get_key( ).
+*  try.
+*     tree->get_nodes( )->add_node( EXPORTING
+*       related_node   = l_key
+*       relationship   = l_rel
+*       data_row       = ls_tree
+*       collapsed_icon = lv_icon
+*       expanded_icon  = lv_icon
+*       text           = lv_text
+*       folder         = abap_false
+*       RECEIVING node = data(lo_node)
+*
+*        ).
+    lo_nodes = tree->get_nodes( ).
 
-    APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
-    <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
-    <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
-    <vars>-program = mo_debugger->mo_window->m_prg-program.
-    <vars>-eventtype = mo_debugger->mo_window->m_prg-eventtype.
-    <vars>-eventname = mo_debugger->mo_window->m_prg-eventname.
-    <vars>-leaf = m_leaf.
-    <vars>-name = is_var-name.
-    <vars>-short = is_var-short.
-    <vars>-key = e_root_key.
-    <vars>-ref = is_var-ref.
-    <vars>-cl_leaf = is_var-cl_leaf.
-    <vars>-type = lo_elem_descr->absolute_name.
-    <vars>-path = is_var-path.
+    TRY.
+        CALL METHOD lo_nodes->add_node
+          EXPORTING
+            related_node   = l_key
+            relationship   = l_rel
+            data_row       = ls_tree
+            collapsed_icon = lv_icon
+            expanded_icon  = lv_icon
+            text           = lv_text
+            folder         = abap_false
+          RECEIVING
+            node           = DATA(lo_node)
+          .
 
-    IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
-      IF l_node IS NOT INITIAL.
-        l_node->delete( ).
-      ENDIF.
-    ENDIF.
+        IF sy-subrc = 0.
+          e_root_key = lo_node->get_key( ).
+
+          APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
+          <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
+          <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
+          <vars>-program = mo_debugger->mo_window->m_prg-program.
+          <vars>-eventtype = mo_debugger->mo_window->m_prg-eventtype.
+          <vars>-eventname = mo_debugger->mo_window->m_prg-eventname.
+          <vars>-leaf = m_leaf.
+          <vars>-name = is_var-name.
+          <vars>-short = is_var-short.
+          <vars>-key = e_root_key.
+          <vars>-ref = is_var-ref.
+          <vars>-cl_leaf = is_var-cl_leaf.
+          <vars>-type = lo_elem_descr->absolute_name.
+          <vars>-path = is_var-path.
+
+          IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
+            IF l_node IS NOT INITIAL.
+              l_node->delete( ).
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      CATCH cx_salv_msg.
+    ENDTRY.
   ENDMETHOD.
 
   METHOD traverse_obj.
@@ -5236,19 +5253,26 @@ e_root_key = tree->get_nodes( )->add_node(
         CATCH cx_salv_msg.
       ENDTRY.
 
-*      IF mo_debugger->mo_window->m_debug_button NE 'BACK' AND mo_debugger->mo_window->m_debug_button NE 'FORW'.
-*        <var>-step = mo_debugger->m_step.
-*        APPEND <var> TO mo_debugger->mt_del_vars.
-*      ENDIF.
+IF  NOT ( ( mo_debugger->mo_window->m_direction IS NOT INITIAL AND mo_debugger->m_hist_step > 1 AND mo_debugger->mo_window->m_debug_button IS NOT INITIAL ) OR
+   ( mo_debugger->mo_window->m_direction IS INITIAL AND mo_debugger->m_hist_step < mo_debugger->m_step AND mo_debugger->mo_window->m_debug_button IS NOT INITIAL ) ).
+
+        <var>-step = mo_debugger->m_step.
+        APPEND <var> TO mo_debugger->mt_del_vars.
+      ENDIF.
 
       DELETE mt_vars WHERE name = iv_full_name.
-      """""DELETE mo_debugger->mt_state WHERE name = iv_full_name.
+      DELETE mt_classes_leaf where name = iv_full_name.
+      IF i_state = abap_true.
+       DELETE mo_debugger->mt_state WHERE name = iv_full_name.
+      ENDIF.
 
       DATA(l_nam) = iv_full_name && '-'.
       lv_len = strlen( l_nam ).
       DELETE mt_vars WHERE name CS l_nam.
-      """""DELETE mo_debugger->mt_state WHERE name CS l_nam.
-
+      DELETE mt_classes_leaf where name  CS l_nam.
+      IF i_state = abap_true.
+        DELETE mo_debugger->mt_state WHERE name CS l_nam.
+      ENDIF.
       TRY.
           IF l_node IS NOT INITIAL.
             l_node->delete( ).
