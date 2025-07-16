@@ -1,16 +1,22 @@
 *&---------------------------------------------------------------------*
+*& Report Z_SMART_DEBUGGER
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT z_smart_debugger.
+
+*&---------------------------------------------------------------------*
 *& Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
-*& version: beta 0.7.350
+*& version: beta 0.7.360
 *& Git https://github.com/ysichov/SDDE
 *& RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *& EN description - https://github.com/ysichov/SDDE/wiki
 
 *& Written by Yurii Sychov
 *& e-mail:   ysichov@gmail.com
-*& skype:    ysichov
-*& blog:     https://ysychov.wordpress.com/blog/
+**& blog:     https://ysychov.wordpress.com/blog/
 *& LinkedIn: https://www.linkedin.com/in/ysychov/
 *&---------------------------------------------------------------------*
 
@@ -442,7 +448,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mv_selected_var  TYPE string,
           mv_stack_changed TYPE xfeld,
           m_variable       TYPE REF TO data,
-          mt_new_string    TYPE table of  string,
+          mt_new_string    TYPE TABLE OF  string,
           m_quick          TYPE tpda_scr_quick_info.
 
     METHODS: prologue  REDEFINITION,
@@ -608,7 +614,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                                   i_cont     TYPE REF TO cl_gui_container OPTIONAL
                                   i_debugger TYPE REF TO lcl_debugger_script OPTIONAL.
 
-    METHODS del_variable IMPORTING  iv_full_name TYPE string i_state type xfeld OPTIONAL.
+    METHODS del_variable IMPORTING  iv_full_name TYPE string i_state TYPE xfeld OPTIONAL.
 
     METHODS clear.
 
@@ -961,7 +967,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lv_par   TYPE char1,
           lv_type  TYPE char1.
     DATA(gr_source) = cl_ci_source_include=>create( p_name = CONV #( i_prg-include ) ).
-    CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
+    CREATE OBJECT gr_scan EXPORTING p_include = gr_source.
 
     LOOP AT gr_scan->tokens INTO DATA(l_token) WHERE str = 'FORM' .
       READ TABLE gr_scan->statements INTO DATA(l_statement) WITH KEY from =  sy-tabix.
@@ -1719,6 +1725,71 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       IF mo_tree_local->m_locals IS NOT INITIAL.
         CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
+
+        IF ms_stack-eventtype = 'FUNCTION'.
+          DATA: lv_fname              TYPE rs38l_fnam,
+                lt_exception_list     TYPE TABLE OF  rsexc,
+                lt_export_parameter   TYPE TABLE OF  rsexp,
+                lt_import_parameter   TYPE TABLE OF  rsimp,
+                lt_changing_parameter TYPE TABLE OF    rscha,
+                lt_tables_parameter   TYPE TABLE OF    rstbl.
+          lv_fname = ms_stack-eventname.
+          CALL FUNCTION 'FUNCTION_IMPORT_INTERFACE'
+            EXPORTING
+              funcname           = lv_fname
+*             INACTIVE_VERSION   = ' '
+*             WITH_ENHANCEMENTS  = 'X'
+*             IGNORE_SWITCHES    = ' '
+*             INACTIVE_ANY       = ' '
+*        IMPORTING
+*             GLOBAL_FLAG        =
+*             REMOTE_CALL        =
+*             UPDATE_TASK        =
+*             EXCEPTION_CLASSES  =
+*             REMOTE_BASXML_SUPPORTED       =
+*             RFCSCOPE           =
+*             RFCVERS            =
+            TABLES
+              exception_list     = lt_exception_list
+              export_parameter   = lt_export_parameter
+              import_parameter   = lt_import_parameter
+              changing_parameter = lt_changing_parameter
+              tables_parameter   = lt_tables_parameter
+*             P_DOCU             =
+*             ENHA_EXP_PARAMETER =
+*             ENHA_IMP_PARAMETER =
+*             ENHA_CHA_PARAMETER =
+*             ENHA_TBL_PARAMETER =
+*             ENHA_DOCU          =
+            EXCEPTIONS
+              error_message      = 1
+              function_not_found = 2
+              invalid_name       = 3
+              OTHERS             = 4.
+          IF sy-subrc = 0.
+            LOOP AT lt_export_parameter INTO DATA(ls_exp).
+              APPEND INITIAL LINE TO mt_locals ASSIGNING FIELD-SYMBOL(<loc>).
+              <loc>-name = ls_exp-parameter.
+              <loc>-parkind = 2.
+            ENDLOOP.
+            LOOP AT lt_import_parameter INTO DATA(ls_imp).
+              APPEND INITIAL LINE TO mt_locals ASSIGNING <loc>.
+              <loc>-name = ls_imp-parameter.
+              <loc>-parkind = 1.
+            ENDLOOP.
+            LOOP AT lt_changing_parameter INTO DATA(ls_change).
+              APPEND INITIAL LINE TO mt_locals ASSIGNING <loc>.
+              <loc>-name = ls_change-parameter.
+              <loc>-parkind = 2.
+            ENDLOOP.
+            LOOP AT lt_tables_parameter INTO DATA(ls_table).
+              APPEND INITIAL LINE TO mt_locals ASSIGNING <loc>.
+              <loc>-name = ls_table-parameter.
+              <loc>-parkind = 2.
+            ENDLOOP.
+          ENDIF.
+        ENDIF.
+
         SORT mt_locals.
 
         mt_loc_fs = lcl_source_parcer=>get_fs_var( iv_program = CONV #( mo_window->m_prg-program )
@@ -1986,6 +2057,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       IF mv_f7_stop = abap_true.
         IF mo_window->m_visualization IS NOT INITIAL OR mo_window->m_history IS INITIAL .
           show_step( ).
+          CLEAR mv_f7_stop.
         ENDIF.
         me->break( ).
         CLEAR mv_f7_stop.
@@ -2024,7 +2096,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD f5.
     IF mo_window->m_debug_button NE 'F5' AND mo_window->m_zcode IS NOT INITIAL.
       READ TABLE mo_window->mt_stack INTO DATA(stack) INDEX 1.
-      IF stack-program+0(1) NE 'Z' AND stack-program+0(5) NE 'SAPLZ'.
+      IF stack-program+0(1) NE 'Z' AND stack-program+0(5) NE 'SAPLZ' AND m_f6_level <> stack-stacklevel.
         f7( ).
         RETURN.
       ENDIF.
@@ -2038,6 +2110,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
+    IF mv_f7_stop = abap_true.
+      CLEAR m_counter.
+      me->run_script_new( ).
+      hndl_script_buttons( mv_stack_changed ).
+    ENDIF.
     IF m_counter < 100.
       me->run_script_new( ).
       hndl_script_buttons( mv_stack_changed ).
@@ -2754,7 +2831,7 @@ CLASS lcl_window IMPLEMENTATION.
     DATA gr_scan TYPE REF TO cl_ci_scan.
     DATA(gr_source) = cl_ci_source_include=>create( p_name = iv_program ).
 
-    CREATE OBJECT gr_scan EXPORTING p_include = gr_source .
+    CREATE OBJECT gr_scan EXPORTING p_include = gr_source.
     mo_code_viewer->set_text( table = gr_source->lines  ).
   ENDMETHOD.
 
@@ -2956,7 +3033,7 @@ ENDCLASS.
 CLASS lcl_data_transmitter DEFINITION.
   PUBLIC SECTION.
     EVENTS: data_changed EXPORTING VALUE(e_row) TYPE lcl_types=>t_sel_row,
-             col_changed EXPORTING VALUE(e_column) TYPE lvc_fname.
+      col_changed EXPORTING VALUE(e_column) TYPE lvc_fname.
     METHODS: emit IMPORTING e_row TYPE lcl_types=>t_sel_row,
       emit_col IMPORTING e_column TYPE lvc_fname.
 ENDCLASS.
@@ -4438,7 +4515,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     "lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full name' ).
 
     "IF i_type NE 'L'.
-      lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
+    lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
     "ENDIF.
 
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
@@ -4823,8 +4900,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             text           = lv_text
             folder         = abap_false
           RECEIVING
-            node           = DATA(lo_node)
-          .
+            node           = DATA(lo_node).
 
         IF sy-subrc = 0.
           e_root_key = lo_node->get_key( ).
@@ -5253,23 +5329,23 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         CATCH cx_salv_msg.
       ENDTRY.
 
-IF  NOT ( ( mo_debugger->mo_window->m_direction IS NOT INITIAL AND mo_debugger->m_hist_step > 1 AND mo_debugger->mo_window->m_debug_button IS NOT INITIAL ) OR
-   ( mo_debugger->mo_window->m_direction IS INITIAL AND mo_debugger->m_hist_step < mo_debugger->m_step AND mo_debugger->mo_window->m_debug_button IS NOT INITIAL ) ).
+      IF  NOT ( ( mo_debugger->mo_window->m_direction IS NOT INITIAL AND mo_debugger->m_hist_step > 1 AND mo_debugger->mo_window->m_debug_button IS NOT INITIAL ) OR
+         ( mo_debugger->mo_window->m_direction IS INITIAL AND mo_debugger->m_hist_step < mo_debugger->m_step AND mo_debugger->mo_window->m_debug_button IS NOT INITIAL ) ).
 
         <var>-step = mo_debugger->m_step.
         APPEND <var> TO mo_debugger->mt_del_vars.
       ENDIF.
 
       DELETE mt_vars WHERE name = iv_full_name.
-      DELETE mt_classes_leaf where name = iv_full_name.
+      DELETE mt_classes_leaf WHERE name = iv_full_name.
       IF i_state = abap_true.
-       DELETE mo_debugger->mt_state WHERE name = iv_full_name.
+        DELETE mo_debugger->mt_state WHERE name = iv_full_name.
       ENDIF.
 
       DATA(l_nam) = iv_full_name && '-'.
       lv_len = strlen( l_nam ).
       DELETE mt_vars WHERE name CS l_nam.
-      DELETE mt_classes_leaf where name  CS l_nam.
+      DELETE mt_classes_leaf WHERE name  CS l_nam.
       IF i_state = abap_true.
         DELETE mo_debugger->mt_state WHERE name CS l_nam.
       ENDIF.
