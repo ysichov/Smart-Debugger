@@ -1,11 +1,4 @@
 *&---------------------------------------------------------------------*
-*& Report Z_SMART_DEBUGGER
-*&---------------------------------------------------------------------*
-*&
-*&---------------------------------------------------------------------*
-REPORT z_smart_debugger.
-
-*&---------------------------------------------------------------------*
 *& Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *& Multi-windows program for viewing all objects and data structures in debug
 *&---------------------------------------------------------------------*
@@ -16,7 +9,7 @@ REPORT z_smart_debugger.
 
 *& Written by Yurii Sychov
 *& e-mail:   ysichov@gmail.com
-**& blog:     https://ysychov.wordpress.com/blog/
+*& blog:     https://ysychov.wordpress.com/blog/
 *& LinkedIn: https://www.linkedin.com/in/ysychov/
 *&---------------------------------------------------------------------*
 
