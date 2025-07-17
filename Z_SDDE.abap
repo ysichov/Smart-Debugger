@@ -2824,7 +2824,7 @@ CLASS lcl_window IMPLEMENTATION.
      ( function = 'F5' icon = CONV #( icon_debugger_step_into ) quickinfo = 'Step into' text = 'Step into' )
      ( function = 'F6' icon = CONV #( icon_debugger_step_over ) quickinfo = 'Step over' text = 'Step over' )
      ( function = 'F7' icon = CONV #( icon_debugger_step_out ) quickinfo = 'Step out' text = 'Step out' )
-     ( function = 'F8' icon = CONV #( icon_debugger_continue ) quickinfo = 'Continue' text = 'to the next Breakpoint' )
+     ( function = 'F8' icon = CONV #( icon_debugger_continue ) quickinfo = 'to the next Breakpoint' text = 'Continue' )
      ( butn_type = 3  )
      ( function = 'F6BEG' icon = CONV #( icon_release ) quickinfo = 'Start of block' text = 'Start of block' )
      ( function = 'F6END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
@@ -5287,7 +5287,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       WHEN 'LDB'."Show/hide LDB variables (globals)
         m_ldb = m_ldb BIT-XOR c_mask.
       WHEN 'TEST'.
-     break developer.
+
         lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
 
         DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
