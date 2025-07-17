@@ -2824,7 +2824,7 @@ CLASS lcl_window IMPLEMENTATION.
      ( function = 'F5' icon = CONV #( icon_debugger_step_into ) quickinfo = 'Step into' text = 'Step into' )
      ( function = 'F6' icon = CONV #( icon_debugger_step_over ) quickinfo = 'Step over' text = 'Step over' )
      ( function = 'F7' icon = CONV #( icon_debugger_step_out ) quickinfo = 'Step out' text = 'Step out' )
-     ( function = 'F8' icon = CONV #( icon_debugger_continue ) quickinfo = 'Continue' text = 'Continue' )
+     ( function = 'F8' icon = CONV #( icon_debugger_continue ) quickinfo = 'Continue' text = 'to the next Breakpoint' )
      ( butn_type = 3  )
      ( function = 'F6BEG' icon = CONV #( icon_release ) quickinfo = 'Start of block' text = 'Start of block' )
      ( function = 'F6END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
@@ -2935,9 +2935,18 @@ CLASS lcl_window IMPLEMENTATION.
       WHEN 'DIRECTION'.
         m_direction = m_direction BIT-XOR c_mask.
         IF m_direction IS INITIAL.
-          mo_toolbar->set_button_info( EXPORTING fcode =  'DIRECTION' icon = CONV #( icon_column_right ) text = 'Forward' ).
+          mo_toolbar->set_button_info( EXPORTING fcode =  'DIRECTION' icon = CONV #( icon_column_right ) text = 'Forward' quickinfo = 'Forward' ).
+          mo_toolbar->set_button_info( EXPORTING fcode =  'F5'  text = 'Step into' quickinfo = 'Step into' ).
+          mo_toolbar->set_button_info( EXPORTING fcode =  'F8'  text = 'Continue' quickinfo = 'to the next Breakpoint' ).
+          mo_toolbar->set_button_visible( visible = abap_true fcode = 'F6' ).
+          mo_toolbar->set_button_visible( visible = abap_true fcode = 'F7' ).
         ELSE.
-          mo_toolbar->set_button_info( EXPORTING fcode =  'DIRECTION' icon = CONV #( icon_column_left ) text = 'Backward' ).
+          mo_toolbar->set_button_info( EXPORTING fcode =  'DIRECTION' icon = CONV #( icon_column_left ) text = 'Backward' quickinfo = 'Backward' ).
+          mo_toolbar->set_button_info( EXPORTING fcode =  'F5'  text = 'Step back' quickinfo = 'Step back' ).
+          mo_toolbar->set_button_info( EXPORTING fcode =  'F8'  text = 'to the previous Breakpoint' ).
+          mo_toolbar->set_button_visible( visible = abap_false fcode = 'F6' ).
+          mo_toolbar->set_button_visible( visible = abap_false fcode = 'F7' ).
+
         ENDIF.
 
       WHEN 'HIST'.
