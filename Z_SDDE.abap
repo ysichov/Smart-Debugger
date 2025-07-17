@@ -9,7 +9,7 @@
 
 *& Written by Yurii Sychov
 *& e-mail:   ysichov@gmail.com
-**& blog:     https://ysychov.wordpress.com/blog/
+*& blog:     https://ysychov.wordpress.com/blog/
 *& LinkedIn: https://www.linkedin.com/in/ysychov/
 *&---------------------------------------------------------------------*
 
@@ -435,6 +435,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mv_f7_stop       TYPE xfeld,
           m_f6_level       TYPE i,
           m_f7_level       TYPE i,
+          m_end_level      TYPE i,
 
           mo_tree_imp      TYPE REF TO lcl_rtti_tree,
           mo_tree_local    TYPE REF TO lcl_rtti_tree,
@@ -1624,7 +1625,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF ( mo_window->m_debug_button = 'F6BEG' AND ls_step-first = abap_true ) OR
-       ( mo_window->m_debug_button = 'F7END' AND ls_step-last = abap_true ).
+       ( mo_window->m_debug_button = 'F6END' AND ls_step-last = abap_true ).
       es_Stop = abap_true.
     ENDIF.
 
@@ -2040,8 +2041,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDIF.
       ENDIF.
 
-    ELSEIF mo_window->m_debug_button = 'F7END'.
-      IF mo_window->m_prg-flag_eoev IS NOT INITIAL.
+    ELSEIF mo_window->m_debug_button = 'F6END'.
+      IF mo_window->m_prg-flag_eoev IS NOT INITIAL and m_end_level = ms_stack-stacklevel.
         show_step( ).
         me->break( ).
       ELSE.
@@ -2050,7 +2051,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSEIF mo_window->m_debug_button = 'F7'.
       "
       IF m_f7_level = ms_stack-stacklevel.
-        clear m_f7_level.
+        CLEAR m_f7_level.
         show_step( ).
         me->break( ).
       ELSE.
@@ -2106,11 +2107,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-    IF mo_window->m_debug_button = 'F7' AND m_f7_level IS INITIAL.
-    
-      m_f7_level = stack-stacklevel - 1.
-
+    IF  mo_window->m_debug_button = 'F6END' AND m_end_level IS INITIAL.
+      m_end_level = stack-stacklevel.
     ENDIF.
+
+    IF mo_window->m_debug_button = 'F7' AND m_f7_level IS INITIAL.
+      m_f7_level = stack-stacklevel - 1.
+    ENDIF.
+
     TRY.
         CALL METHOD debugger_controller->debug_step
           EXPORTING
@@ -2820,7 +2824,7 @@ CLASS lcl_window IMPLEMENTATION.
      ( function = 'F8' icon = CONV #( icon_debugger_continue ) quickinfo = 'Continue' text = 'Continue' )
      ( butn_type = 3  )
      ( function = 'F6BEG' icon = CONV #( icon_release ) quickinfo = 'Start of block' text = 'Start of block' )
-     ( function = 'F7END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
+     ( function = 'F6END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
      ( butn_type = 3  )
      ( function = 'DIRECTION' icon = CONV #( icon_column_right ) quickinfo = 'Forward' text = 'Forward' )
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Select variable to scan' text = 'Select variable to scan' )
@@ -2962,7 +2966,7 @@ CLASS lcl_window IMPLEMENTATION.
     IF m_direction IS INITIAL AND mo_debugger->m_hist_step = mo_debugger->m_step.
       CASE fcode.
 
-        WHEN 'F5' OR 'F7END' OR 'F6BEG'.
+        WHEN 'F5' OR 'F6END' OR 'F6BEG'.
           mo_debugger->f5( ).
 
         WHEN 'F6'.
@@ -2993,7 +2997,7 @@ CLASS lcl_window IMPLEMENTATION.
     ELSE.
       CASE fcode.
 
-        WHEN 'F5' OR 'F6' OR 'F7' OR 'F8' OR 'F6BEG' OR 'F7END'.
+        WHEN 'F5' OR 'F6' OR 'F7' OR 'F8' OR 'F6BEG' OR 'F6END'.
           DO.
             mo_debugger->run_script_hist( IMPORTING es_stop = DATA(lv_stop) ).
 
