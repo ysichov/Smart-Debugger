@@ -14,6 +14,8 @@
 *&---------------------------------------------------------------------*
 
 *& External resources
+*& Inspired by
+*& https://habr.com/ru/articles/504908/
 *& https://github.com/larshp/ABAP-Object-Visualizer - Abap Object Visualizer
 *& https://github.com/ysichov/SDE_abapgit - Simple Data Explorer
 *& https://gist.github.com/AtomKrieg/7f4ec2e2f49b82def162e85904b7e25b - data object visualizer
@@ -434,8 +436,9 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mo_window        TYPE REF TO lcl_window,
           mv_f7_stop       TYPE xfeld,
           m_f6_level       TYPE i,
-          m_f7_level       TYPE i,
-          m_end_level      TYPE i,
+          m_target_stack   TYPE i,
+          "m_f7_level       TYPE i,
+          "m_end_level      TYPE i,
 
           mo_tree_imp      TYPE REF TO lcl_rtti_tree,
           mo_tree_local    TYPE REF TO lcl_rtti_tree,
@@ -1444,6 +1447,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     is_history = abap_true.
     lv_prev_step = m_hist_step.
 
+    IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack IS INITIAL.
+      READ TABLE mt_steps INTO DATA(ls_step) INDEX m_hist_step.
+      m_target_stack = ls_Step-stacklevel.
+
+    ENDIF.
+
     IF mo_window->m_direction IS NOT INITIAL AND m_hist_step = 1 AND mo_window->m_debug_button IS NOT INITIAL.
       es_stop = abap_true.
       RETURN.
@@ -1462,10 +1471,15 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ADD 1  TO m_hist_step.
     ENDIF.
 
-    READ TABLE mt_steps INTO DATA(ls_step) INDEX m_hist_step.
+    READ TABLE mt_steps INTO ls_step INDEX m_hist_step.
     IF mo_window->m_visualization IS NOT INITIAL.
       mo_window->set_program( CONV #( ls_step-include ) ).
       mo_window->set_program_line( ls_step-line ).
+    ENDIF.
+
+    IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack =  ls_step-stacklevel.
+      CLEAR m_target_stack.
+      es_stop = abap_true.
     ENDIF.
 
     READ TABLE mo_window->mt_stack INTO DATA(ls_stack) INDEX 1.
@@ -1565,7 +1579,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDLOOP.
 
       IF sy-subrc NE 0.
-        LOOP AT mt_vars_hist INTO ls_hist WHERE step = m_hist_step. "lv_prev_step.
+        LOOP AT mt_vars_hist INTO ls_hist WHERE step = m_hist_step.
 
           LOOP AT mt_vars_hist
              INTO DATA(ls_var)
@@ -1624,8 +1638,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CLEAR m_stop_stack.
     ENDIF.
 
-    IF ( mo_window->m_debug_button = 'F6BEG' AND ls_step-first = abap_true ) OR
-       ( mo_window->m_debug_button = 'F6END' AND ls_step-last = abap_true ).
+    IF ( mo_window->m_debug_button = 'F6BEG' AND ls_step-first = abap_true AND m_target_stack = ls_stack-stacklevel ) OR
+       ( mo_window->m_debug_button = 'F6END' AND ls_step-last = abap_true  AND m_target_stack = ls_stack-stacklevel ).
+      CLEAR m_target_stack.
       es_Stop = abap_true.
     ENDIF.
 
@@ -2018,7 +2033,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD hndl_script_buttons.
 
-
     IF m_is_find = abap_true.
       show_step( ).
       me->break( ).
@@ -2042,7 +2056,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
     ELSEIF mo_window->m_debug_button = 'F6END'.
-      IF mo_window->m_prg-flag_eoev IS NOT INITIAL and m_end_level = ms_stack-stacklevel.
+      IF mo_window->m_prg-flag_eoev IS NOT INITIAL AND m_target_stack = ms_stack-stacklevel.
         show_step( ).
         me->break( ).
       ELSE.
@@ -2050,26 +2064,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
     ELSEIF mo_window->m_debug_button = 'F7'.
       "
-      IF m_f7_level = ms_stack-stacklevel.
-        CLEAR m_f7_level.
+      IF m_target_stack = ms_stack-stacklevel.
+        CLEAR m_target_stack.
         show_step( ).
         me->break( ).
       ELSE.
         f5( ).
       ENDIF.
-*      IF mv_f7_stop = abap_true.
-*        IF mo_window->m_visualization IS NOT INITIAL OR mo_window->m_history IS INITIAL .
-*          show_step( ).
-*          CLEAR mv_f7_stop.
-*        ENDIF.
-*        me->break( ).
-*        CLEAR mv_f7_stop.
-*      ELSE.
-*        IF mo_window->m_prg-flag_eoev IS NOT INITIAL.
-*          mv_f7_stop = abap_true.
-*        ENDIF.
-*        f5( ).
-*      ENDIF.
 
     ELSEIF mo_window->m_debug_button IS NOT INITIAL.
       READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = mo_window->m_prg-include linesrc = mo_window->m_prg-line INTO DATA(gs_break).
@@ -2077,7 +2078,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         show_step( ).
         me->break( ).
       ELSE.
-        IF mo_window->m_debug_button = 'F6BEG' AND iv_stack_changed IS NOT INITIAL.
+
+        IF mo_window->m_debug_button = 'F6BEG' AND m_target_stack = ms_Stack-stacklevel.
           show_step( ).
           me->break( ).
         ELSE.
@@ -2107,12 +2109,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-    IF  mo_window->m_debug_button = 'F6END' AND m_end_level IS INITIAL.
-      m_end_level = stack-stacklevel.
+    IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack IS INITIAL.
+      m_target_stack = stack-stacklevel.
+
     ENDIF.
 
-    IF mo_window->m_debug_button = 'F7' AND m_f7_level IS INITIAL.
-      m_f7_level = stack-stacklevel - 1.
+    IF mo_window->m_debug_button = 'F7' AND m_target_stack IS INITIAL.
+      m_target_stack = stack-stacklevel - 1.
     ENDIF.
 
     TRY.
