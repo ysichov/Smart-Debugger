@@ -9,7 +9,7 @@
 
 *& Written by Yurii Sychov
 *& e-mail:   ysichov@gmail.com
-*& blog:     https://ysychov.wordpress.com/blog/
+**& blog:     https://ysychov.wordpress.com/blog/
 *& LinkedIn: https://www.linkedin.com/in/ysychov/
 *&---------------------------------------------------------------------*
 
@@ -434,6 +434,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mo_window        TYPE REF TO lcl_window,
           mv_f7_stop       TYPE xfeld,
           m_f6_level       TYPE i,
+          m_f7_level       TYPE i,
 
           mo_tree_imp      TYPE REF TO lcl_rtti_tree,
           mo_tree_local    TYPE REF TO lcl_rtti_tree,
@@ -2016,6 +2017,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD hndl_script_buttons.
 
+
     IF m_is_find = abap_true.
       show_step( ).
       me->break( ).
@@ -2046,20 +2048,27 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         f5( ).
       ENDIF.
     ELSEIF mo_window->m_debug_button = 'F7'.
-
-      IF mv_f7_stop = abap_true.
-        IF mo_window->m_visualization IS NOT INITIAL OR mo_window->m_history IS INITIAL .
-          show_step( ).
-          CLEAR mv_f7_stop.
-        ENDIF.
+      "
+      IF m_f7_level = ms_stack-stacklevel.
+        clear m_f7_level.
+        show_step( ).
         me->break( ).
-        CLEAR mv_f7_stop.
       ELSE.
-        IF mo_window->m_prg-flag_eoev IS NOT INITIAL.
-          mv_f7_stop = abap_true.
-        ENDIF.
         f5( ).
       ENDIF.
+*      IF mv_f7_stop = abap_true.
+*        IF mo_window->m_visualization IS NOT INITIAL OR mo_window->m_history IS INITIAL .
+*          show_step( ).
+*          CLEAR mv_f7_stop.
+*        ENDIF.
+*        me->break( ).
+*        CLEAR mv_f7_stop.
+*      ELSE.
+*        IF mo_window->m_prg-flag_eoev IS NOT INITIAL.
+*          mv_f7_stop = abap_true.
+*        ENDIF.
+*        f5( ).
+*      ENDIF.
 
     ELSEIF mo_window->m_debug_button IS NOT INITIAL.
       READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = mo_window->m_prg-include linesrc = mo_window->m_prg-line INTO DATA(gs_break).
@@ -2087,14 +2096,21 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD f5.
+    READ TABLE mo_window->mt_stack INTO DATA(stack) INDEX 1.
+
     IF mo_window->m_debug_button NE 'F5' AND mo_window->m_zcode IS NOT INITIAL.
-      READ TABLE mo_window->mt_stack INTO DATA(stack) INDEX 1.
+
       IF stack-program+0(1) NE 'Z' AND stack-program+0(5) NE 'SAPLZ' AND m_f6_level <> stack-stacklevel.
         f7( ).
         RETURN.
       ENDIF.
     ENDIF.
 
+    IF mo_window->m_debug_button = 'F7' AND m_f7_level IS INITIAL.
+    
+      m_f7_level = stack-stacklevel - 1.
+
+    ENDIF.
     TRY.
         CALL METHOD debugger_controller->debug_step
           EXPORTING
@@ -2106,7 +2122,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF mv_f7_stop = abap_true.
       CLEAR m_counter.
       me->run_script_new( ).
+
       hndl_script_buttons( mv_stack_changed ).
+      m_is_find = abap_true.
     ENDIF.
     IF m_counter < 100.
       me->run_script_new( ).
