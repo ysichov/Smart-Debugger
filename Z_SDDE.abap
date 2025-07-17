@@ -5287,7 +5287,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       WHEN 'LDB'."Show/hide LDB variables (globals)
         m_ldb = m_ldb BIT-XOR c_mask.
       WHEN 'TEST'.
-
+     break developer.
         lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
 
         DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
