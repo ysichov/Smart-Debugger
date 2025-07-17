@@ -445,6 +445,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mo_tree_local    TYPE REF TO lcl_rtti_tree,
           mo_tree_exp      TYPE REF TO lcl_rtti_tree,
           mv_selected_var  TYPE string,
+          mv_stop_next     TYPE flag,
           mv_stack_changed TYPE xfeld,
           m_variable       TYPE REF TO data,
           mt_new_string    TYPE TABLE OF  string,
@@ -1972,8 +1973,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
       ENDCASE.
 
-      IF <var>-name = mv_selected_var. "OR mv_selected_var IS INITIAL.
-        rv_stop = abap_true.
+      IF <var>-name = mv_selected_var.
+        IF mv_stop_next IS INITIAL. "OR mv_selected_var IS INITIAL.
+          mv_stop_next = abap_true.
+        ELSE.
+          rv_stop = abap_true.
+          CLEAR mv_Stop_next.
+        ENDIF.
       ENDIF.
 
       CASE <var>-leaf.
@@ -5305,9 +5311,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           IF lo_descr->type_kind = cl_abap_typedescr=>typekind_table.
             <hist>-value = 'Table'.
           ELSEIF lo_descr->type_kind = cl_abap_typedescr=>typekind_struct1."structure
-             <hist>-value = 'Structure'.
+            <hist>-value = 'Structure'.
           ELSEIF lo_descr->type_kind = cl_abap_typedescr=>typekind_struct2."deep structure
-             <hist>-value = 'Deep Structure'.
+            <hist>-value = 'Deep Structure'.
           ELSE.
             <hist>-value = ls_vars-ref->*.
           ENDIF.
