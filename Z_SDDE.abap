@@ -161,6 +161,7 @@ CLASS lcl_appl DEFINITION.
              instance      TYPE string,
              objname       TYPE string,
              done          TYPE xfeld,
+             value         TYPE string,
            END OF var_table_temp,
 
            BEGIN OF var_table_h,
@@ -3642,14 +3643,14 @@ CLASS lcl_table_viewer IMPLEMENTATION.
        ( function = 'SEL_ON' icon = icon_arrow_left quickinfo = 'Show Select-Options'  butn_type = 0 )
        ( butn_type = 3 ) ).
     ENDIF.
-    APPEND VALUE #( function = 'TECH' icon = icon_wd_caption quickinfo = 'Tech names'  butn_type = 0 ) TO lt_toolbar.
+    "APPEND VALUE #( function = 'TECH' icon = icon_wd_caption quickinfo = 'Tech names'  butn_type = 0 ) TO lt_toolbar.
 
-    LOOP AT lcl_appl=>mt_lang INTO DATA(lang).
-      IF sy-tabix > 10.
-        EXIT.
-      ENDIF.
-      APPEND VALUE #( function = lang-spras icon = icon_foreign_trade quickinfo = lang-sptxt butn_type = 0 text = lang-sptxt ) TO lt_toolbar.
-    ENDLOOP.
+*    LOOP AT lcl_appl=>mt_lang INTO DATA(lang).
+*      IF sy-tabix > 10.
+*        EXIT.
+*      ENDIF.
+*      APPEND VALUE #( function = lang-spras icon = icon_foreign_trade quickinfo = lang-sptxt butn_type = 0 text = lang-sptxt ) TO lt_toolbar.
+*    ENDLOOP.
 
     lt_toolbar = VALUE ttb_button( BASE lt_toolbar
      ( function = 'SHOW'  icon = icon_list  quickinfo = 'Show empty columns'   butn_type = 0  )
@@ -4496,12 +4497,12 @@ CLASS lcl_appl IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD init_lang.
-    SELECT c~spras t~sptxt INTO CORRESPONDING FIELDS OF TABLE mt_lang
-      FROM t002c AS c
-      INNER JOIN t002t AS t
-      ON c~spras = t~sprsl
-      WHERE t~spras = sy-langu
-      ORDER BY c~ladatum DESCENDING c~lauzeit DESCENDING.
+*    SELECT c~spras t~sptxt INTO CORRESPONDING FIELDS OF TABLE mt_lang
+*      FROM t002c AS c
+*      INNER JOIN t002t AS t
+*      ON c~spras = t~sprsl
+*      WHERE t~spras = sy-langu
+*      ORDER BY c~ladatum DESCENDING c~lauzeit DESCENDING.
   ENDMETHOD.
 
   METHOD open_int_table.
@@ -5295,13 +5296,29 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         lcl_appl=>open_int_table( iv_name = 'State' it_tab =  lt_hist2 ).
 
         DATA: lt_hist TYPE TABLE OF lcl_appl=>var_table_temp.
-        MOVE-CORRESPONDING  mo_debugger->mt_vars_hist TO lt_hist.
+        LOOP AT  mo_debugger->mt_vars_hist INTO DATA(ls_vars).
+          APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
+          MOVE-CORRESPONDING ls_vars TO <hist>.
+
+          DATA(lo_descr) = cl_abap_typedescr=>describe_by_data_ref( ls_vars-ref ).
+
+          IF lo_descr->type_kind = cl_abap_typedescr=>typekind_table.
+            <hist>-value = 'Table'.
+          ELSEIF lo_descr->type_kind = cl_abap_typedescr=>typekind_struct1."structure
+             <hist>-value = 'Structure'.
+          ELSEIF lo_descr->type_kind = cl_abap_typedescr=>typekind_struct2."deep structure
+             <hist>-value = 'Deep Structure'.
+          ELSE.
+            <hist>-value = ls_vars-ref->*.
+          ENDIF.
+        ENDLOOP.
         lcl_appl=>open_int_table( iv_name = 'mt_vars_hist -  History' it_tab =  lt_hist ).
 
-        "DATA(f) = 10 / 0.
-
         DATA: lt_var TYPE TABLE OF lcl_appl=>var_table_temp.
-        MOVE-CORRESPONDING  mo_debugger->mo_tree_local->mt_vars TO lt_var.
+
+        MOVE-CORRESPONDING mo_debugger->mo_tree_local->mt_vars TO lt_var.
+
+
         lcl_appl=>open_int_table( iv_name = 'tree' it_tab =  lt_var ).
 
     ENDCASE.
