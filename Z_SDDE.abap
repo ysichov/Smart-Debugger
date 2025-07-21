@@ -1,3 +1,5 @@
+
+
 *  &---------------------------------------------------------------------*
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
@@ -1821,6 +1823,7 @@
       IF mo_tree_local->m_globals IS NOT INITIAL OR mo_tree_local->m_ldb IS NOT INITIAL.
         CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
         SORT mt_globals.
+        
 
         LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
           READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
@@ -1865,7 +1868,7 @@
       ENDIF.
 
       IF mo_tree_local->m_globals IS NOT INITIAL.
-        LOOP AT mt_globals INTO DATA(ls_global) WHERE parisval NE 'L'.
+        LOOP AT mt_globals INTO DATA(ls_global)." WHERE parisval NE 'L'.
           transfer_variable( EXPORTING i_name =  ls_global-name iv_type = 'GLOBAL' ).
         ENDLOOP.
         IF mo_tree_local->m_syst IS NOT INITIAL.
@@ -1977,14 +1980,21 @@
         ENDCASE.
 
         IF <var>-name = mv_selected_var.
+          "
+          "IF mv_stop_next = abap_true.
+          "rv_stop = abap_true.
+          "CLEAR mv_Stop_next.
+          "ELSE.
           IF m_ref_val IS BOUND.
             IF m_ref_val->* <> <var>-ref->*.
               m_ref_val = <var>-ref.
               rv_stop = abap_true.
+              "mv_stop_next = abap_true.
             ENDIF.
           ELSE.
             m_ref_val = <var>-ref.
           ENDIF.
+          "ENDIF.
         ENDIF.
 
         CASE <var>-leaf.
@@ -2403,6 +2413,7 @@
       <state>-step = m_step - m_step_delta.
       <state>-instance = i_instance.
 
+
       IF ir_up IS SUPPLIED.
         <state>-ref = ir_up.
 
@@ -2411,6 +2422,9 @@
         lv_name2 = iv_fullname.
 
         IF lv_name2+0(2) NE '{O'.
+          IF lv_name2 = 'LV_RES'.
+            
+          ENDIF.
 
           IF <state>-leaf NE 'GLOBAL'.
             READ TABLE mt_vars_hist_view
