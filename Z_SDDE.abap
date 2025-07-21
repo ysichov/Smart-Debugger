@@ -406,51 +406,53 @@
                obj  TYPE string,
              END OF t_obj.
 
-      DATA: mt_obj           TYPE TABLE OF t_obj,
-            mt_compo         TYPE TABLE OF scompo,
-            mt_locals        TYPE tpda_scr_locals_it,
-            mt_loc_fs        TYPE tpda_scr_locals_it, "locals Field Symbols
-            mt_globals       TYPE tpda_scr_globals_it,
+      DATA: mt_obj            TYPE TABLE OF t_obj,
+            mt_compo          TYPE TABLE OF scompo,
+            mt_locals         TYPE tpda_scr_locals_it,
+            mt_loc_fs         TYPE tpda_scr_locals_it, "locals Field Symbols
+            mt_globals        TYPE tpda_scr_globals_it,
 
-            mt_ret_exp       TYPE tpda_scr_locals_it,
-            m_counter        TYPE i,
-            mt_steps         TYPE  TABLE OF lcl_appl=>t_step_counter, "source code steps
-            mt_var_step      TYPE  TABLE OF lcl_appl=>var_table_h,
-            mt_del_vars      TYPE STANDARD TABLE OF lcl_appl=>var_table,
-            m_step           TYPE i,
-            m_is_find        TYPE xfeld,
-            m_stop_stack     TYPE i,
-            is_step          TYPE xfeld,
+            mt_ret_exp        TYPE tpda_scr_locals_it,
+            m_counter         TYPE i,
+            mt_steps          TYPE  TABLE OF lcl_appl=>t_step_counter, "source code steps
+            mt_var_step       TYPE  TABLE OF lcl_appl=>var_table_h,
+            mt_del_vars       TYPE STANDARD TABLE OF lcl_appl=>var_table,
+            m_step            TYPE i,
+            m_is_find         TYPE xfeld,
+            m_stop_stack      TYPE i,
+            is_step           TYPE xfeld,
 
-            ms_stack_prev    TYPE   lcl_appl=>t_stack,
-            ms_stack         TYPE   lcl_appl=>t_stack,
+            ms_stack_prev     TYPE   lcl_appl=>t_stack,
+            ms_stack          TYPE   lcl_appl=>t_stack,
 
-            is_history       TYPE xfeld,
-            m_hist_step      TYPE i,
-            m_step_delta     TYPE i,
-            mt_vars_hist     TYPE STANDARD TABLE OF lcl_appl=>var_table,
-            mt_state         TYPE STANDARD TABLE OF lcl_appl=>var_table,
+            is_history        TYPE xfeld,
+            m_hist_step       TYPE i,
+            m_step_delta      TYPE i,
+            mt_vars_hist_view TYPE STANDARD TABLE OF lcl_appl=>var_table,
+            mt_vars_hist      TYPE STANDARD TABLE OF lcl_appl=>var_table,
 
-            mt_classes_types TYPE TABLE OF lcl_appl=>t_classes_types,
-            m_classname      TYPE string,
+            mt_state          TYPE STANDARD TABLE OF lcl_appl=>var_table,
 
-            mo_window        TYPE REF TO lcl_window,
-            mv_f7_stop       TYPE xfeld,
-            m_f6_level       TYPE i,
-            m_target_stack   TYPE i,
+            mt_classes_types  TYPE TABLE OF lcl_appl=>t_classes_types,
+            m_classname       TYPE string,
+
+            mo_window         TYPE REF TO lcl_window,
+            mv_f7_stop        TYPE xfeld,
+            m_f6_level        TYPE i,
+            m_target_stack    TYPE i,
             "m_f7_level       TYPE i,
             "m_end_level      TYPE i,
 
-            mo_tree_imp      TYPE REF TO lcl_rtti_tree,
-            mo_tree_local    TYPE REF TO lcl_rtti_tree,
-            mo_tree_exp      TYPE REF TO lcl_rtti_tree,
-            mv_selected_var  TYPE string,
-            m_ref_val        TYPE REF TO data,
-            mv_stop_next     TYPE flag,
-            mv_stack_changed TYPE xfeld,
-            m_variable       TYPE REF TO data,
-            mt_new_string    TYPE TABLE OF  string,
-            m_quick          TYPE tpda_scr_quick_info.
+            mo_tree_imp       TYPE REF TO lcl_rtti_tree,
+            mo_tree_local     TYPE REF TO lcl_rtti_tree,
+            mo_tree_exp       TYPE REF TO lcl_rtti_tree,
+            mv_selected_var   TYPE string,
+            m_ref_val         TYPE REF TO data,
+            mv_stop_next      TYPE flag,
+            mv_stack_changed  TYPE xfeld,
+            m_variable        TYPE REF TO data,
+            mt_new_string     TYPE TABLE OF  string,
+            m_quick           TYPE tpda_scr_quick_info.
 
       METHODS: prologue  REDEFINITION,
         init    REDEFINITION,
@@ -1444,8 +1446,8 @@
     METHOD run_script_hist.
 
       DATA: lv_prev_step TYPE i,
-            lt_hist      LIKE mt_vars_hist,
-            lt_del       LIKE mt_vars_hist..
+            lt_hist      LIKE mt_vars_hist_view,
+            lt_del       LIKE mt_vars_hist_view..
 
       is_history = abap_true.
       lv_prev_step = m_hist_step.
@@ -1494,13 +1496,13 @@
         m_stop_stack = ls_stack-stacklevel.
       ENDIF.
 
-      LOOP AT mt_vars_hist INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X'. "OR is_appear = 'X'.
+      LOOP AT mt_vars_hist_view INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X'. "OR is_appear = 'X'.
         APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
         <hist> = ls_hist.
       ENDLOOP.
 
       IF mo_window->m_direction IS NOT INITIAL.
-        LOOP AT mt_vars_hist INTO ls_hist WHERE step =  m_hist_step AND first = abap_false AND is_appear = abap_true.
+        LOOP AT mt_vars_hist_view INTO ls_hist WHERE step =  m_hist_step AND first = abap_false AND is_appear = abap_true.
           APPEND INITIAL LINE TO lt_del ASSIGNING <hist>.
           <hist> = ls_hist.
         ENDLOOP.
@@ -1552,7 +1554,7 @@
           ENDIF.
         ENDLOOP.
         IF sy-subrc NE 0.
-          LOOP AT mt_vars_hist INTO ls_hist WHERE step = lv_prev_step  AND first NE 'X' .
+          LOOP AT mt_vars_hist_view INTO ls_hist WHERE step = lv_prev_step  AND first NE 'X' .
             APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
             <hist> = ls_hist.
           ENDLOOP.
@@ -1582,9 +1584,9 @@
         ENDLOOP.
 
         IF sy-subrc NE 0.
-          LOOP AT mt_vars_hist INTO ls_hist WHERE step = m_hist_step.
+          LOOP AT mt_vars_hist_view INTO ls_hist WHERE step = m_hist_step.
 
-            LOOP AT mt_vars_hist
+            LOOP AT mt_vars_hist_view
                INTO DATA(ls_var)
                WHERE step < ls_hist-step
                  AND name = ls_hist-name.
@@ -1602,7 +1604,7 @@
         "find deleted variables to restore it
         LOOP AT mt_del_vars INTO ls_hist WHERE step = lv_prev_step.
 
-          LOOP AT mt_vars_hist
+          LOOP AT mt_vars_hist_view
              INTO ls_var
              WHERE step < ls_hist-step
                AND name = ls_hist-name.
@@ -1618,7 +1620,7 @@
         ENDLOOP.
 
         "find apeeared variable to delete it
-        LOOP AT mt_vars_hist INTO ls_hist WHERE step = m_hist_step  AND is_appear = abap_true AND first IS INITIAL .
+        LOOP AT mt_vars_hist_view INTO ls_hist WHERE step = m_hist_step  AND is_appear = abap_true AND first IS INITIAL .
           mo_tree_local->del_variable( EXPORTING iv_full_name = CONV #( ls_hist-name ) i_state = abap_true ).
         ENDLOOP.
 
@@ -1975,19 +1977,13 @@
         ENDCASE.
 
         IF <var>-name = mv_selected_var.
-          "break developer.
-          IF mv_stop_next = abap_true.
-            rv_stop = abap_true.
-            CLEAR mv_Stop_next.
-          ELSE. 
-            IF m_ref_val IS BOUND.
-              IF m_ref_val->* <> <var>-ref->*.
-                m_ref_val = <var>-ref.
-                mv_stop_next = abap_true.
-              ENDIF.
-            ELSE.
+          IF m_ref_val IS BOUND.
+            IF m_ref_val->* <> <var>-ref->*.
               m_ref_val = <var>-ref.
+              rv_stop = abap_true.
             ENDIF.
+          ELSE.
+            m_ref_val = <var>-ref.
           ENDIF.
         ENDIF.
 
@@ -2079,7 +2075,7 @@
           f5( ).
         ENDIF.
       ELSEIF mo_window->m_debug_button = 'F7'.
-        "
+
         IF m_target_stack = ms_stack-stacklevel.
           CLEAR m_target_stack.
           show_step( ).
@@ -2322,6 +2318,7 @@
 
     METHOD save_hist.
       DATA: lv_add        TYPE xfeld,
+            lv_add_hist   TYPE xfeld,
             lv_name2(100),
             lv_full_name  TYPE string.
 
@@ -2406,7 +2403,6 @@
       <state>-step = m_step - m_step_delta.
       <state>-instance = i_instance.
 
-
       IF ir_up IS SUPPLIED.
         <state>-ref = ir_up.
 
@@ -2414,50 +2410,57 @@
 
         lv_name2 = iv_fullname.
 
-        IF mv_stack_changed NE abap_true.
-          IF lv_name2+0(2) NE '{O'.
+        IF lv_name2+0(2) NE '{O'.
 
-            READ TABLE mt_vars_hist
+          IF <state>-leaf NE 'GLOBAL'.
+            READ TABLE mt_vars_hist_view
              WITH KEY stack = <state>-stack
                       name = iv_fullname
                       program = <state>-program
                       eventtype = <state>-eventtype
                       eventname = <state>-eventname
                       INTO DATA(lv_hist).
-
-            IF sy-subrc NE 0.
-              lv_add = abap_on.
-            ELSE.
-              ASSIGN lv_hist-ref->* TO FIELD-SYMBOL(<hist>).
-
-              IF lo_elem->absolute_name = lv_hist-type.
-                IF <hist> NE <ir_up>.
-                  lv_add = abap_on.
-                ENDIF.
-              ELSE.
-                lv_add = abap_on.
-              ENDIF.
-            ENDIF.
           ELSE.
-            READ TABLE mt_vars_hist WITH KEY name = <state>-name INTO lv_hist.
-            IF sy-subrc = 0.
-              ASSIGN lv_hist-ref->* TO <hist>.
-              IF lo_elem->absolute_name = lv_hist-type.
-                IF <hist> NE <ir_up>.
-                  lv_add = abap_on.
-                ENDIF.
-              ELSE.
-                lv_add = abap_on.
+            READ TABLE mt_vars_hist_view
+             WITH KEY name = iv_fullname
+                      program = <state>-program
+                      "eventtype = <state>-eventtype
+                      "eventname = <state>-eventname
+                      INTO lv_hist.
+          ENDIF.
+
+          IF sy-subrc NE 0.
+            lv_add_hist = lv_add = abap_on.
+          ELSE.
+            ASSIGN lv_hist-ref->* TO FIELD-SYMBOL(<hist>).
+
+            IF lo_elem->absolute_name = lv_hist-type.
+              IF <hist> NE <ir_up>.
+                lv_add_hist = lv_add = abap_on.
               ENDIF.
             ELSE.
-              lv_add = abap_on.
+              lv_add_hist = lv_add = abap_on.
             ENDIF.
-
           ENDIF.
         ELSE.
-          "lv_add = abap_on.
-        ENDIF.
+          READ TABLE mt_vars_hist_view WITH KEY name = <state>-name INTO lv_hist.
+          IF sy-subrc = 0.
+            ASSIGN lv_hist-ref->* TO <hist>.
+            IF lo_elem->absolute_name = lv_hist-type.
+              IF <hist> NE <ir_up>.
+                lv_add_hist = lv_add = abap_on.
+              ENDIF.
+            ELSE.
+              lv_add_hist = lv_add = abap_on.
+            ENDIF.
+          ELSE.
+            lv_add_hist = lv_add = abap_on.
+          ENDIF.
 
+        ENDIF.
+        IF mv_stack_changed = abap_true.
+          lv_add = abap_on.
+        ENDIF.
 
         lo_elem = cl_abap_typedescr=>describe_by_data_ref( <state>-ref ).
         <state>-type = lo_elem->absolute_name.
@@ -2472,12 +2475,15 @@
           ENDIF.
 
           <state>-cl_leaf = iv_cl_leaf.
-          INSERT <state> INTO mt_vars_hist INDEX 1.
+          INSERT <state> INTO mt_vars_hist_view INDEX 1.
 
-          IF mv_selected_var = <state>-name.
-            m_is_find = abap_true.
-
+          IF  lv_add_hist = abap_true.
+            INSERT <state> INTO mt_vars_hist INDEX 1.
+            IF mv_selected_var = <state>-name.
+              m_is_find = abap_true.
+            ENDIF.
           ENDIF.
+
         ENDIF.
       ENDIF.
     ENDMETHOD.
@@ -5327,7 +5333,7 @@
               <hist>-value = ls_vars-ref->*.
             ENDIF.
           ENDLOOP.
-          lcl_appl=>open_int_table( iv_name = 'mt_vars_hist -  History' it_tab =  lt_hist ).
+          lcl_appl=>open_int_table( iv_name = 'mt_vars_hist_view -  History' it_tab =  lt_hist ).
 
           DATA: lt_var TYPE TABLE OF lcl_appl=>var_table_temp.
 
