@@ -1974,13 +1974,13 @@
             ENDIF.
         ENDCASE.
 
-        IF mv_selected_var IS NOT INITIAL.
+        IF <var>-name = mv_selected_var.
+          "break developer.
           IF mv_stop_next = abap_true.
             rv_stop = abap_true.
             CLEAR mv_Stop_next.
-          ELSEIF <var>-name = mv_selected_var.
+          ELSE. 
             IF m_ref_val IS BOUND.
-              break developer.
               IF m_ref_val->* <> <var>-ref->*.
                 m_ref_val = <var>-ref.
                 mv_stop_next = abap_true.
@@ -2455,7 +2455,7 @@
 
           ENDIF.
         ELSE.
-          lv_add = abap_on.
+          "lv_add = abap_on.
         ENDIF.
 
 
@@ -4115,7 +4115,7 @@
 
       TRY.
           c_sel_row-option_icon = lcl_appl=>m_option_icons[ sign = c_sel_row-sign option = c_sel_row-opti ]-icon_name.
-        CATCH cx_sy_itab_line_not_found.                  "#EC NO_HANDLER
+        CATCH cx_sy_itab_line_not_found.                "#EC NO_HANDLER
       ENDTRY.
 
       IF c_sel_row-sign IS NOT INITIAL.
@@ -5510,7 +5510,7 @@
               ENDIF.
             ENDLOOP.
             lo_to->update_sel_row( CHANGING c_sel_row = <to_tab> ).
-          CATCH cx_sy_itab_line_not_found.                "#EC NO_HANDLER
+          CATCH cx_sy_itab_line_not_found.              "#EC NO_HANDLER
         ENDTRY.
       ENDIF.
 
