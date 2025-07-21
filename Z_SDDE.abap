@@ -1,5 +1,3 @@
-
-
 *  &---------------------------------------------------------------------*
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
@@ -1722,20 +1720,20 @@
 
       mo_tree_local->m_prg_info = mo_window->m_prg.
 
-      IF mo_tree_local->m_globals IS NOT INITIAL OR mo_tree_local->m_ldb IS NOT INITIAL.
+      IF mo_tree_local->m_globals IS NOT INITIAL AND mo_tree_local->m_ldb IS NOT INITIAL.
         DATA: l_name(40),
               lt_inc       TYPE TABLE OF  d010inc.
         l_name = abap_source->program( ).
 
-        CALL FUNCTION 'RS_PROGRAM_INDEX'
-          EXPORTING
-            pg_name      = l_name
-          TABLES
-            compo        = mt_compo
-            inc          = lt_inc
-          EXCEPTIONS
-            syntax_error = 1
-            OTHERS       = 2.
+*        CALL FUNCTION 'RS_PROGRAM_INDEX'
+*          EXPORTING
+*            pg_name      = l_name
+*          TABLES
+*            compo        = mt_compo
+*            inc          = lt_inc
+*          EXCEPTIONS
+*            syntax_error = 1
+*            OTHERS       = 2.
       ENDIF.
 
       IF mv_stack_changed = abap_true OR is_history = abap_true.
@@ -1743,6 +1741,10 @@
         IF mo_tree_local->m_locals IS NOT INITIAL.
           CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
 
+          IF ms_stack-eventtype = 'METHOD'.
+            APPEND INITIAL LINE TO mt_locals ASSIGNING FIELD-SYMBOL(<loc>).
+            <loc>-name = 'ME'.
+          ENDIF.
           IF ms_stack-eventtype = 'FUNCTION'.
             DATA: lv_fname              TYPE rs38l_fnam,
                   lt_exception_list     TYPE TABLE OF  rsexc,
@@ -1754,30 +1756,12 @@
             CALL FUNCTION 'FUNCTION_IMPORT_INTERFACE'
               EXPORTING
                 funcname           = lv_fname
-*               INACTIVE_VERSION   = ' '
-*               WITH_ENHANCEMENTS  = 'X'
-*               IGNORE_SWITCHES    = ' '
-*               INACTIVE_ANY       = ' '
-*          IMPORTING
-*               GLOBAL_FLAG        =
-*               REMOTE_CALL        =
-*               UPDATE_TASK        =
-*               EXCEPTION_CLASSES  =
-*               REMOTE_BASXML_SUPPORTED       =
-*               RFCSCOPE           =
-*               RFCVERS            =
               TABLES
                 exception_list     = lt_exception_list
                 export_parameter   = lt_export_parameter
                 import_parameter   = lt_import_parameter
                 changing_parameter = lt_changing_parameter
                 tables_parameter   = lt_tables_parameter
-*               P_DOCU             =
-*               ENHA_EXP_PARAMETER =
-*               ENHA_IMP_PARAMETER =
-*               ENHA_CHA_PARAMETER =
-*               ENHA_TBL_PARAMETER =
-*               ENHA_DOCU          =
               EXCEPTIONS
                 error_message      = 1
                 function_not_found = 2
@@ -1785,7 +1769,7 @@
                 OTHERS             = 4.
             IF sy-subrc = 0.
               LOOP AT lt_export_parameter INTO DATA(ls_exp).
-                APPEND INITIAL LINE TO mt_locals ASSIGNING FIELD-SYMBOL(<loc>).
+                APPEND INITIAL LINE TO mt_locals ASSIGNING <loc>.
                 <loc>-name = ls_exp-parameter.
                 <loc>-parkind = 2.
               ENDLOOP.
@@ -1823,11 +1807,11 @@
       IF mo_tree_local->m_globals IS NOT INITIAL OR mo_tree_local->m_ldb IS NOT INITIAL.
         CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
         SORT mt_globals.
-        
 
         LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
           READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
           IF sy-subrc NE 0.
+            BREAK developer.
             <global>-parisval = 'L'.
           ENDIF.
         ENDLOOP.
@@ -1868,7 +1852,7 @@
       ENDIF.
 
       IF mo_tree_local->m_globals IS NOT INITIAL.
-        LOOP AT mt_globals INTO DATA(ls_global)." WHERE parisval NE 'L'.
+        LOOP AT mt_globals INTO DATA(ls_global) WHERE parisval NE 'L'.
           transfer_variable( EXPORTING i_name =  ls_global-name iv_type = 'GLOBAL' ).
         ENDLOOP.
         IF mo_tree_local->m_syst IS NOT INITIAL.
@@ -1980,21 +1964,14 @@
         ENDCASE.
 
         IF <var>-name = mv_selected_var.
-          "
-          "IF mv_stop_next = abap_true.
-          "rv_stop = abap_true.
-          "CLEAR mv_Stop_next.
-          "ELSE.
           IF m_ref_val IS BOUND.
             IF m_ref_val->* <> <var>-ref->*.
               m_ref_val = <var>-ref.
               rv_stop = abap_true.
-              "mv_stop_next = abap_true.
             ENDIF.
           ELSE.
             m_ref_val = <var>-ref.
           ENDIF.
-          "ENDIF.
         ENDIF.
 
         CASE <var>-leaf.
@@ -2423,7 +2400,7 @@
 
         IF lv_name2+0(2) NE '{O'.
           IF lv_name2 = 'LV_RES'.
-            
+            BREAK developer.
           ENDIF.
 
           IF <state>-leaf NE 'GLOBAL'.
