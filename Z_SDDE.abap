@@ -602,7 +602,6 @@
             m_globals_key   TYPE salv_de_node_key,
             m_class_key     TYPE salv_de_node_key,
             m_ldb_key       TYPE salv_de_node_key,
-            m_debug_key     TYPE salv_de_node_key,
             m_icon          TYPE salv_de_tree_image,
             mt_vars         TYPE STANDARD TABLE OF lcl_appl=>var_table,
             mt_classes_leaf TYPE TABLE OF t_classes_leaf,
@@ -1352,8 +1351,9 @@
             lo_object ?= lo_descr.
 
             lt_attributes = lo_object->attributes( ).
+            delete lt_attributes where instantiation = 1.
             SORT lt_attributes BY acckind name.
-
+            
             DATA(lv_name) = lo_object->classname( ).
             DATA(lv_obj_ind) =  get_obj_index( <ls_symobjref>-instancename ).
 
@@ -1725,15 +1725,15 @@
               lt_inc       TYPE TABLE OF  d010inc.
         l_name = abap_source->program( ).
 
-*        CALL FUNCTION 'RS_PROGRAM_INDEX'
-*          EXPORTING
-*            pg_name      = l_name
-*          TABLES
-*            compo        = mt_compo
-*            inc          = lt_inc
-*          EXCEPTIONS
-*            syntax_error = 1
-*            OTHERS       = 2.
+        CALL FUNCTION 'RS_PROGRAM_INDEX'
+          EXPORTING
+            pg_name      = l_name
+          TABLES
+            compo        = mt_compo
+            inc          = lt_inc
+          EXCEPTIONS
+            syntax_error = 1
+            OTHERS       = 2.
       ENDIF.
 
       IF mv_stack_changed = abap_true OR is_history = abap_true.
@@ -1811,7 +1811,7 @@
         LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
           READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
           IF sy-subrc NE 0.
-            BREAK developer.
+            
             <global>-parisval = 'L'.
           ENDIF.
         ENDLOOP.
@@ -1826,7 +1826,7 @@
 
       IF mo_tree_local->m_locals IS NOT INITIAL.
         LOOP AT mt_locals INTO DATA(ls_local).
-
+          
           CHECK NOT ls_local-name CA '[]'.
 
           CASE ls_local-parkind.
@@ -2209,46 +2209,46 @@
 
       mo_tree_local->m_leaf = 'Class-data global variables'.
       IF mo_tree_local->m_class_data IS NOT INITIAL.
+         "
+*        lt_compo_tmp = mt_compo.
+*        DELETE lt_compo_tmp WHERE  type NE '+' OR exposure NE 2.
+*        SORT lt_compo_tmp BY class.
+*        LOOP AT lt_compo_tmp ASSIGNING FIELD-SYMBOL(<compo>).
+*          TRY.
+*              CALL METHOD cl_tpda_script_data_descr=>get_quick_info
+*                EXPORTING
+*                  p_var_name   = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
+*                RECEIVING
+*                  p_symb_quick = DATA(quick).
+*            CATCH cx_tpda_varname .
+*              CLEAR <compo>-type.
+*          ENDTRY.
+*        ENDLOOP.
 
-        lt_compo_tmp = mt_compo.
-        DELETE lt_compo_tmp WHERE  type NE '+' OR exposure NE 2.
-        SORT lt_compo_tmp BY class.
-        LOOP AT lt_compo_tmp ASSIGNING FIELD-SYMBOL(<compo>).
-          TRY.
-              CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-                EXPORTING
-                  p_var_name   = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
-                RECEIVING
-                  p_symb_quick = DATA(quick).
-            CATCH cx_tpda_varname .
-              CLEAR <compo>-type.
-          ENDTRY.
-        ENDLOOP.
-
-        LOOP AT lt_compo_tmp ASSIGNING <compo> WHERE type = '+'.
-          IF l_class NE <compo>-class.
-            l_class = <compo>-class.
-
-            READ TABLE mt_obj WITH KEY name = l_class TRANSPORTING NO FIELDS.
-            IF sy-subrc NE 0.
-              APPEND INITIAL LINE TO mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
-              <obj>-name = l_class.
-
-              save_hist( EXPORTING
-                      iv_fullname = CONV #( <compo>-class )
-                      iv_name = CONV #( <compo>-class )
-                      iv_parent_name = ''
-                      iv_type = 'CLASS'
-                      iv_cl_leaf = 0
-                      i_instance = CONV #(  <compo>-class ) ).
-            ENDIF.
-          ENDIF.
-
-          transfer_variable( EXPORTING i_name =  CONV #( |{ <compo>-class }=>{ <compo>-name }| )
-                                       i_shortname = CONV #( <compo>-name )
-                                       i_parent_name =  CONV #( <compo>-class )
-                                        iv_type = 'CLASS' ).
-        ENDLOOP.
+*        LOOP AT lt_compo_tmp ASSIGNING <compo> WHERE type = '+'.
+*          IF l_class NE <compo>-class.
+*            l_class = <compo>-class.
+*
+*            READ TABLE mt_obj WITH KEY name = l_class TRANSPORTING NO FIELDS.
+*            IF sy-subrc NE 0.
+*              APPEND INITIAL LINE TO mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
+*              <obj>-name = l_class.
+*
+*              save_hist( EXPORTING
+*                      iv_fullname = CONV #( <compo>-class )
+*                      iv_name = CONV #( <compo>-class )
+*                      iv_parent_name = ''
+*                      iv_type = 'CLASS'
+*                      iv_cl_leaf = 0
+*                      i_instance = CONV #(  <compo>-class ) ).
+*            ENDIF.
+*          ENDIF.
+*
+*          transfer_variable( EXPORTING i_name =  CONV #( |{ <compo>-class }=>{ <compo>-name }| )
+*                                       i_shortname = CONV #( <compo>-name )
+*                                       i_parent_name =  CONV #( <compo>-class )
+*                                        iv_type = 'CLASS' ).
+*        ENDLOOP.
 
         "global classes
         CALL METHOD cl_tpda_script_abapdescr=>get_loaded_programs
@@ -2276,7 +2276,7 @@
 
           READ TABLE mt_obj WITH KEY name = l_class TRANSPORTING NO FIELDS.
           IF sy-subrc NE 0.
-            APPEND INITIAL LINE TO mt_obj ASSIGNING <obj>.
+            APPEND INITIAL LINE TO mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
             <obj>-name = l_class.
           ENDIF.
 
@@ -2400,7 +2400,7 @@
 
         IF lv_name2+0(2) NE '{O'.
           IF lv_name2 = 'LV_RES'.
-            BREAK developer.
+            
           ENDIF.
 
           IF <state>-leaf NE 'GLOBAL'.
@@ -4651,7 +4651,6 @@
       CLEAR: m_globals_key,
              m_locals_key,
              m_ldb_key,
-             m_debug_key,
              m_class_key,
              mt_vars,
              mt_classes_leaf,
@@ -4977,7 +4976,7 @@
             lv_icon       TYPE salv_de_tree_image,
             l_key         TYPE salv_de_node_key,
             l_rel         TYPE salv_de_node_relation.
-
+ 
       READ TABLE mt_vars WITH KEY name = is_var-name INTO DATA(l_var).
       IF sy-subrc = 0.
         READ TABLE mo_debugger->mt_state WITH KEY parent = is_var-name TRANSPORTING NO FIELDS.
@@ -5199,14 +5198,12 @@
           m_ldb_key = main_node_key.
         WHEN 'Class-data global variables'.
           m_class_key = main_node_key.
-        WHEN 'Debug point'.
-          m_debug_key = main_node_key.
       ENDCASE.
 
     ENDMETHOD.
 
     METHOD add_obj_nodes.
-
+      
       DATA l_new_node TYPE salv_de_node_key.
       DATA lv_text TYPE lvc_value.
       DATA lv_node_key TYPE salv_de_node_key.
