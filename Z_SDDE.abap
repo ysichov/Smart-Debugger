@@ -1888,6 +1888,9 @@
 
     METHOD show_variables.
 
+      FIELD-SYMBOLS: <hist> type any,
+                     <new> type any.
+
       DATA: l_rel   TYPE salv_de_node_relation,
             lv_key  TYPE salv_de_node_key,
             lo_tree TYPE REF TO  lcl_rtti_tree,
@@ -1964,9 +1967,11 @@
         ENDCASE.
 
         IF <var>-name = mv_selected_var.
-         
+
           IF m_ref_val IS BOUND.
-            IF m_ref_val->* <> <var>-ref->*.
+            ASSIGN m_ref_val->* to <hist>.
+            ASSIGN <var>-ref->* to <new>.
+            IF <new> <> <hist>.
               m_ref_val = <var>-ref.
               rv_stop = abap_true.
             ENDIF.
@@ -2309,8 +2314,6 @@
             lv_add_hist   TYPE xfeld,
             lv_name2(100),
             lv_full_name  TYPE string.
-
-      "IF iv_fullname = 'Z_EXAMPLE=>MG_STATIC_PUBLIC'.break developer. endif.
 
       CHECK m_hist_step = m_step AND mo_window->m_direction IS INITIAL.
       IF ir_up IS SUPPLIED.
@@ -5363,7 +5366,7 @@
       ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
       ASSIGN COMPONENT 'FULLNAME' OF STRUCTURE <row> TO FIELD-SYMBOL(<fullname>).
       mo_debugger->mv_selected_var = <fullname>.
-      
+
       mo_debugger->mo_window->mo_toolbar->set_button_info( EXPORTING fcode =  'CLEARVAR' icon = CONV #( icon_select_detail ) text = |'Clear { mo_debugger->mv_selected_var }| ).
 
       CASE <kind>.
