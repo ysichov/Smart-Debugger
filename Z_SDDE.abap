@@ -1351,9 +1351,9 @@
             lo_object ?= lo_descr.
 
             lt_attributes = lo_object->attributes( ).
-            delete lt_attributes where instantiation = 1.
+            DELETE lt_attributes WHERE instantiation = 1.
             SORT lt_attributes BY acckind name.
-            
+
             DATA(lv_name) = lo_object->classname( ).
             DATA(lv_obj_ind) =  get_obj_index( <ls_symobjref>-instancename ).
 
@@ -1375,7 +1375,7 @@
             ELSE.
               lv_parent = i_name.
             ENDIF.
-
+            
             LOOP AT lt_attributes ASSIGNING <ls_attribute>.
 
               transfer_variable( EXPORTING
@@ -1811,7 +1811,7 @@
         LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
           READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
           IF sy-subrc NE 0.
-            
+
             <global>-parisval = 'L'.
           ENDIF.
         ENDLOOP.
@@ -1826,7 +1826,7 @@
 
       IF mo_tree_local->m_locals IS NOT INITIAL.
         LOOP AT mt_locals INTO DATA(ls_local).
-          
+
           CHECK NOT ls_local-name CA '[]'.
 
           CASE ls_local-parkind.
@@ -2209,7 +2209,7 @@
 
       mo_tree_local->m_leaf = 'Class-data global variables'.
       IF mo_tree_local->m_class_data IS NOT INITIAL.
-         "
+        "
 *        lt_compo_tmp = mt_compo.
 *        DELETE lt_compo_tmp WHERE  type NE '+' OR exposure NE 2.
 *        SORT lt_compo_tmp BY class.
@@ -2324,7 +2324,11 @@
             lv_full_name = iv_fullname.
           ENDIF.
         ELSE.
-          lv_full_name =  |{ iv_parent_name }-{ iv_name }|.
+          IF iv_fullname+0(3) = '{O:'.
+            lv_full_name = iv_fullname.
+          ELSE.
+            lv_full_name =  |{ iv_parent_name }-{ iv_name }|.
+          ENDIF.
         ENDIF.
       ENDIF.
 
@@ -2400,7 +2404,7 @@
 
         IF lv_name2+0(2) NE '{O'.
           IF lv_name2 = 'LV_RES'.
-            
+
           ENDIF.
 
           IF <state>-leaf NE 'GLOBAL'.
@@ -4976,7 +4980,7 @@
             lv_icon       TYPE salv_de_tree_image,
             l_key         TYPE salv_de_node_key,
             l_rel         TYPE salv_de_node_relation.
- 
+
       READ TABLE mt_vars WITH KEY name = is_var-name INTO DATA(l_var).
       IF sy-subrc = 0.
         READ TABLE mo_debugger->mt_state WITH KEY parent = is_var-name TRANSPORTING NO FIELDS.
@@ -5203,7 +5207,7 @@
     ENDMETHOD.
 
     METHOD add_obj_nodes.
-      
+
       DATA l_new_node TYPE salv_de_node_key.
       DATA lv_text TYPE lvc_value.
       DATA lv_node_key TYPE salv_de_node_key.
