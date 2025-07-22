@@ -1375,7 +1375,7 @@
             ELSE.
               lv_parent = i_name.
             ENDIF.
-            
+
             LOOP AT lt_attributes ASSIGNING <ls_attribute>.
 
               transfer_variable( EXPORTING
@@ -1964,6 +1964,7 @@
         ENDCASE.
 
         IF <var>-name = mv_selected_var.
+         
           IF m_ref_val IS BOUND.
             IF m_ref_val->* <> <var>-ref->*.
               m_ref_val = <var>-ref.
@@ -2309,6 +2310,8 @@
             lv_name2(100),
             lv_full_name  TYPE string.
 
+      "IF iv_fullname = 'Z_EXAMPLE=>MG_STATIC_PUBLIC'.break developer. endif.
+
       CHECK m_hist_step = m_step AND mo_window->m_direction IS INITIAL.
       IF ir_up IS SUPPLIED.
         ASSIGN ir_up->* TO FIELD-SYMBOL(<ir_up>).
@@ -2403,22 +2406,19 @@
         lv_name2 = iv_fullname.
 
         IF lv_name2+0(2) NE '{O'.
-          IF lv_name2 = 'LV_RES'.
 
-          ENDIF.
-
-          IF <state>-leaf NE 'GLOBAL'.
+          IF <state>-leaf NE 'GLOBAL' AND <state>-leaf NE 'CLASS'.
             READ TABLE mt_vars_hist_view
              WITH KEY stack = <state>-stack
                       name = iv_fullname
-                      program = <state>-program
+                      "program = <state>-program
                       eventtype = <state>-eventtype
                       eventname = <state>-eventname
                       INTO DATA(lv_hist).
           ELSE.
             READ TABLE mt_vars_hist_view
              WITH KEY name = iv_fullname
-                      program = <state>-program
+                      "program = <state>-program
                       "eventtype = <state>-eventtype
                       "eventname = <state>-eventname
                       INTO lv_hist.
@@ -4739,7 +4739,7 @@
       ENDIF.
 
       lv_text = is_var-short.
-      ls_tree-fullname = is_var-path.
+      ls_tree-fullname = is_Var-name."is_var-path.
 
       "own new method
       IF is_var-cl_leaf IS NOT INITIAL.
@@ -4867,7 +4867,7 @@
       ENDCASE.
 
       lv_text = is_var-short.
-      ls_tree-fullname = is_var-path.
+      ls_tree-fullname = is_var-name."is_var-path.
 
       "own new method
       IF is_var-cl_leaf IS NOT INITIAL.
@@ -5001,7 +5001,7 @@
 
       lv_icon = icon_oo_object.
       lv_text = is_var-short.
-      ls_tree-fullname = is_var-path.
+      ls_tree-fullname = is_var-name."is_var-path.
       ls_tree-objname = is_var-instance.
 
       "own new method
@@ -5363,7 +5363,7 @@
       ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
       ASSIGN COMPONENT 'FULLNAME' OF STRUCTURE <row> TO FIELD-SYMBOL(<fullname>).
       mo_debugger->mv_selected_var = <fullname>.
-
+      
       mo_debugger->mo_window->mo_toolbar->set_button_info( EXPORTING fcode =  'CLEARVAR' icon = CONV #( icon_select_detail ) text = |'Clear { mo_debugger->mv_selected_var }| ).
 
       CASE <kind>.
