@@ -1909,7 +1909,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF mo_tree_local->m_globals_key IS NOT INITIAL AND mo_tree_local->m_globals IS INITIAL.
       mo_tree_local->delete_node( mo_tree_local->m_globals_key ).
-      CLEAR mo_tree_local->m_globals_key.
+      "CLEAR mo_tree_local->m_globals_key.
       DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
       DELETE mt_state WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
       mo_tree_local->clear( ).
@@ -1917,7 +1917,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF mo_tree_local->m_class_key IS NOT INITIAL AND mo_tree_local->m_class_data IS INITIAL.
       mo_tree_local->delete_node( mo_tree_local->m_class_key ).
-      CLEAR mo_tree_local->m_class_key.
+      "CLEAR mo_tree_local->m_class_key.
       DELETE mo_tree_local->mt_vars WHERE leaf = 'CLASS'.
       DELETE mt_state WHERE leaf = 'CLASS'.
       mo_tree_local->clear( ).
