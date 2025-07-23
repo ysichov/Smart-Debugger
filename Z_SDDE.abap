@@ -1,3 +1,5 @@
+REPORT test.
+
 *  &---------------------------------------------------------------------*
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
@@ -482,7 +484,6 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                                          i_shortname       TYPE string OPTIONAL
                                          i_quick           TYPE tpda_scr_quick_info
                                          i_parent          TYPE string OPTIONAL
-                                         i_no_cl_twin      TYPE xfeld OPTIONAL
                                RETURNING VALUE(e_root_key) TYPE salv_de_node_key,
       show_step.
 
@@ -1334,13 +1335,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
     ASSIGN i_quick-quickdata->* TO <ls_symobjref>.
     IF <ls_symobjref>-instancename <> '{O:initial}'.
-
-      READ TABLE mt_obj WITH KEY obj = <ls_symobjref>-instancename TRANSPORTING NO FIELDS.
-      IF sy-subrc = 0.
-        IF i_no_cl_twin IS INITIAL.
-          RETURN.
-        ENDIF.
-      ENDIF.
 
       ls_obj-name = i_name.
       ls_obj-obj = <ls_symobjref>-instancename.
@@ -2288,7 +2282,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF ir_up IS SUPPLIED.
       ASSIGN ir_up->* TO FIELD-SYMBOL(<ir_up>).
     ENDIF.
-
+  break developer.
     IF i_instance IS INITIAL.
       lv_full_name = iv_fullname.
     ELSE.
@@ -2608,8 +2602,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         create_reference( EXPORTING i_name = lv_string
                                     i_type = iv_type
                                     i_shortname = ls_component-name
-                                    i_quick = l_quick
-                                    i_no_cl_twin = abap_true ).
+                                    i_quick = l_quick ).
 
         m_variable = lr_variable.
       ELSE.
