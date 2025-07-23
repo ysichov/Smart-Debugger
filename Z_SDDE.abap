@@ -1720,7 +1720,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     mo_tree_local->m_prg_info = mo_window->m_prg.
 
-    IF mo_tree_local->m_globals IS NOT INITIAL AND mo_tree_local->m_ldb IS NOT INITIAL.
+    IF mo_tree_local->m_globals IS NOT INITIAL OR mo_tree_local->m_ldb IS NOT INITIAL.
       DATA: l_name(40),
             lt_inc       TYPE TABLE OF  d010inc.
       l_name = abap_source->program( ).
@@ -1803,18 +1803,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
     ENDIF.
-
-    IF mo_tree_local->m_globals IS NOT INITIAL OR mo_tree_local->m_ldb IS NOT INITIAL.
+ 
+    IF mo_tree_local->m_globals IS NOT INITIAL OR
+       mo_tree_local->m_ldb IS NOT INITIAL.
       CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
       SORT mt_globals.
-
-*        LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
-*          READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
-*          IF sy-subrc NE 0.
-*
-*            <global>-parisval = 'L'.
-*          ENDIF.
-*        ENDLOOP.
+  
+        LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
+          READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
+          IF sy-subrc NE 0.
+            <global>-parisval = 'L'.
+          ENDIF.
+        ENDLOOP.
     ENDIF.
 
     mo_tree_imp->m_prg_info = mo_window->m_prg.
@@ -1852,7 +1852,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF mo_tree_local->m_globals IS NOT INITIAL.
-      LOOP AT mt_globals INTO DATA(ls_global). " WHERE parisval NE 'L'.
+      LOOP AT mt_globals INTO DATA(ls_global)  WHERE parisval NE 'L'.
         transfer_variable( EXPORTING i_name =  ls_global-name iv_type = 'GLOBAL' ).
       ENDLOOP.
       IF mo_tree_local->m_syst IS NOT INITIAL.
@@ -1862,7 +1862,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF mo_tree_local->m_ldb IS NOT INITIAL.
-      LOOP AT mt_globals INTO ls_global. "WHERE parisval = 'L'.
+      LOOP AT mt_globals INTO ls_global WHERE parisval = 'L'.
         transfer_variable( EXPORTING i_name =  ls_global-name iv_type = 'LDB' ).
       ENDLOOP.
     ENDIF.
