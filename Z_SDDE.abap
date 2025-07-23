@@ -2,7 +2,7 @@
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
-*  & version: beta 0.7.360
+*  & version: beta 0.7.370
 *  & Git https://github.com/ysichov/SDDE
 *  & RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *  & EN description - https://github.com/ysichov/SDDE/wiki
@@ -1803,12 +1803,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
     ENDIF.
- 
+
     IF mo_tree_local->m_globals IS NOT INITIAL OR
        mo_tree_local->m_ldb IS NOT INITIAL.
       CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
       SORT mt_globals.
-  
+
         LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
           READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
           IF sy-subrc NE 0.
@@ -1917,7 +1917,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF mo_tree_local->m_class_key IS NOT INITIAL AND mo_tree_local->m_class_data IS INITIAL.
       mo_tree_local->delete_node( mo_tree_local->m_class_key ).
-      "CLEAR mo_tree_local->m_class_key.
       DELETE mo_tree_local->mt_vars WHERE leaf = 'CLASS'.
       DELETE mt_state WHERE leaf = 'CLASS'.
       mo_tree_local->clear( ).
@@ -2224,46 +2223,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     mo_tree_local->m_leaf = 'Class-data global variables'.
     IF mo_tree_local->m_class_data IS NOT INITIAL.
-      "
-*        lt_compo_tmp = mt_compo.
-*        DELETE lt_compo_tmp WHERE  type NE '+' OR exposure NE 2.
-*        SORT lt_compo_tmp BY class.
-*        LOOP AT lt_compo_tmp ASSIGNING FIELD-SYMBOL(<compo>).
-*          TRY.
-*              CALL METHOD cl_tpda_script_data_descr=>get_quick_info
-*                EXPORTING
-*                  p_var_name   = CONV #( |{ <compo>-class }=>{ <compo>-name }| )
-*                RECEIVING
-*                  p_symb_quick = DATA(quick).
-*            CATCH cx_tpda_varname .
-*              CLEAR <compo>-type.
-*          ENDTRY.
-*        ENDLOOP.
-
-*        LOOP AT lt_compo_tmp ASSIGNING <compo> WHERE type = '+'.
-*          IF l_class NE <compo>-class.
-*            l_class = <compo>-class.
-*
-*            READ TABLE mt_obj WITH KEY name = l_class TRANSPORTING NO FIELDS.
-*            IF sy-subrc NE 0.
-*              APPEND INITIAL LINE TO mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
-*              <obj>-name = l_class.
-*
-*              save_hist( EXPORTING
-*                      iv_fullname = CONV #( <compo>-class )
-*                      iv_name = CONV #( <compo>-class )
-*                      iv_parent_name = ''
-*                      iv_type = 'CLASS'
-*                      iv_cl_leaf = 0
-*                      i_instance = CONV #(  <compo>-class ) ).
-*            ENDIF.
-*          ENDIF.
-*
-*          transfer_variable( EXPORTING i_name =  CONV #( |{ <compo>-class }=>{ <compo>-name }| )
-*                                       i_shortname = CONV #( <compo>-name )
-*                                       i_parent_name =  CONV #( <compo>-class )
-*                                        iv_type = 'CLASS' ).
-*        ENDLOOP.
 
       "global classes
       CALL METHOD cl_tpda_script_abapdescr=>get_loaded_programs
@@ -2302,6 +2261,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         iv_type = 'CLASS'
         iv_cl_leaf = 0
         i_instance = CONV #(  ls_prog-name ) ).
+
 
         LOOP AT REFc->attributes INTO DATA(ls_atr).
           transfer_variable( EXPORTING i_name =  CONV #( |{ ls_prog-name }=>{ ls_Atr-name }| )
@@ -5231,11 +5191,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         lv_icon = icon_led_green.
         lv_text = 'Public'.
       WHEN 2.
-        lv_icon = icon_led_yellow.
-        lv_text = 'Protected'.
-      WHEN 3.
         lv_icon = icon_led_red.
         lv_text = 'Private'.
+      WHEN 3.
+        lv_icon = icon_led_yellow.
+        lv_text = 'Protected'.
     ENDCASE.
 
     READ TABLE mt_classes_leaf WITH KEY name = is_var-parent type = is_var-cl_leaf ASSIGNING FIELD-SYMBOL(<class>).
