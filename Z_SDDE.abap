@@ -1,5 +1,3 @@
-REPORT test.
-
 *  &---------------------------------------------------------------------*
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
@@ -2282,7 +2280,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF ir_up IS SUPPLIED.
       ASSIGN ir_up->* TO FIELD-SYMBOL(<ir_up>).
     ENDIF.
-  break developer.
+
     IF i_instance IS INITIAL.
       lv_full_name = iv_fullname.
     ELSE.
@@ -5172,6 +5170,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD add_obj_nodes.
+
+    FIND FIRST OCCURRENCE OF '-' in is_var-name. "Only first level of instance should be here
+    check sy-subrc <> 0.
 
     DATA l_new_node TYPE salv_de_node_key.
     DATA lv_text TYPE lvc_value.
