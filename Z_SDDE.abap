@@ -2,7 +2,7 @@
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
-*  & version: beta 0.7.370
+*  & version: beta 0.7.405
 *  & Git https://github.com/ysichov/SDDE
 *  & RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *  & EN description - https://github.com/ysichov/SDDE/wiki
@@ -1801,12 +1801,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
       SORT mt_globals.
 
-        LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
-          READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
-          IF sy-subrc NE 0.
-            <global>-parisval = 'L'.
-          ENDIF.
-        ENDLOOP.
+      LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
+        READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
+        IF sy-subrc NE 0.
+          <global>-parisval = 'L'.
+        ENDIF.
+      ENDLOOP.
     ENDIF.
 
     mo_tree_imp->m_prg_info = mo_window->m_prg.
@@ -5170,9 +5170,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD add_obj_nodes.
-
-    FIND FIRST OCCURRENCE OF '-' in is_var-name. "Only first level of instance should be here
-    check sy-subrc <> 0.
+    DATA lt_match TYPE match_result_tab.
+    FIND ALL OCCURRENCES OF  '-' IN is_var-name RESULTS lt_match. "Only first level of instance should be here
+    IF lines( lt_match ) > 1.
+      RETURN.
+    ENDIF.
 
     DATA l_new_node TYPE salv_de_node_key.
     DATA lv_text TYPE lvc_value.
