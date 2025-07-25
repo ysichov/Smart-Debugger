@@ -1,8 +1,10 @@
+REPORT test.
+
 *  &---------------------------------------------------------------------*
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
-*  & version: beta 0.7.405
+*  & version: beta 0.7.370
 *  & Git https://github.com/ysichov/SDDE
 *  & RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *  & EN description - https://github.com/ysichov/SDDE/wiki
@@ -592,6 +594,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
           m_variable      TYPE REF TO data,
           m_object        TYPE REF TO object,
           m_hide          TYPE x,
+          m_clear         TYPE flag,
           m_locals        TYPE x,
           m_globals       TYPE x,
           m_syst          TYPE x,
@@ -1888,6 +1891,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lo_tree TYPE REF TO  lcl_rtti_tree,
           is_skip TYPE xfeld.
 
+    IF mo_tree_local->m_clear = abap_true.
+      mo_tree_local->clear( ).
+      CLEAR mo_tree_local->m_clear.
+    ENDIF.
+
     mo_tree_imp->m_leaf   =  'IMP'.
     mo_tree_exp->m_leaf =  'EXP'.
 
@@ -1901,7 +1909,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF mo_tree_local->m_globals_key IS NOT INITIAL AND mo_tree_local->m_globals IS INITIAL.
       mo_tree_local->delete_node( mo_tree_local->m_globals_key ).
-      "CLEAR mo_tree_local->m_globals_key.
+      CLEAR mo_tree_local->m_globals_key.
       DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
       DELETE mt_state WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
       mo_tree_local->clear( ).
@@ -5258,6 +5266,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         mo_debugger->hndl_script_buttons( mo_debugger->mv_stack_changed ).
       WHEN 'INITIALS'."Show/hide empty variables
         m_hide = m_hide BIT-XOR c_mask.
+        m_clear = abap_true.
       WHEN 'LOCALS'."Show/hide locals variables
         m_locals = m_locals BIT-XOR c_mask.
       WHEN 'GLOBALS'."Show/hide global variables
