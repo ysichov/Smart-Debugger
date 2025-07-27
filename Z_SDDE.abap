@@ -741,7 +741,9 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           mt_stack               TYPE TABLE OF lcl_appl=>t_stack,
           mo_toolbar             TYPE REF TO cl_gui_toolbar,
           mo_salv_stack          TYPE REF TO cl_salv_table,
-          mt_breaks              TYPE tpda_bp_persistent_it.
+          mt_breaks              TYPE tpda_bp_persistent_it,
+          m_hist_depth           TYPE i,
+          m_start_Stack          TYPE i.
 
     METHODS: constructor IMPORTING i_debugger TYPE REF TO lcl_debugger_script i_additional_name TYPE string OPTIONAL,
       add_toolbar_buttons,
@@ -2095,7 +2097,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           me->break( ).
         ELSE.
           IF mo_window->m_history IS NOT INITIAL.
-            f5( ).
+            IF ms_Stack-stacklevel = mo_window->m_hist_depth +  mo_window->m_start_stack.
+              f6( ).
+            ELSE.
+              f5( ).
+            ENDIF.
           ENDIF.
         ENDIF.
       ENDIF.
@@ -2805,6 +2811,7 @@ CLASS lcl_window IMPLEMENTATION.
     lt_button  = VALUE #(
      ( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization Off' text = 'Visualization Off' )
      ( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'History On' text = 'History On' )
+     ( function = 'DEPTH' icon = CONV #( icon_next_hierarchy_level ) quickinfo = 'History depth level' text = 'Depth 0' )
      ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
      ( butn_type = 3  )
      ( function = 'F5' icon = CONV #( icon_debugger_step_into ) quickinfo = 'Step into' text = 'Step into' )
@@ -2935,6 +2942,14 @@ CLASS lcl_window IMPLEMENTATION.
 
         ENDIF.
 
+      WHEN 'DEPTH'.
+        IF m_hist_depth < 3.
+          ADD 1 TO m_hist_depth.
+        ELSE.
+          CLEAR m_hist_depth.
+        ENDIF.
+        mo_toolbar->set_button_info( EXPORTING fcode =  'DEPTH'  text = |Depth { m_hist_depth }|  ).
+
       WHEN 'HIST'.
         m_history = m_history BIT-XOR c_mask.
         IF m_history IS INITIAL.
@@ -2962,8 +2977,8 @@ CLASS lcl_window IMPLEMENTATION.
     ENDCASE.
 
     IF m_direction IS INITIAL AND mo_debugger->m_hist_step = mo_debugger->m_step.
+      READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
       CASE fcode.
-
         WHEN 'F5' OR 'F6END' OR 'F6BEG'.
           mo_debugger->f5( ).
 
@@ -2971,7 +2986,7 @@ CLASS lcl_window IMPLEMENTATION.
           IF m_history IS INITIAL.
             mo_debugger->f6( ).
           ELSE.
-            READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
+
             mo_debugger->m_f6_level = ls_stack-stacklevel.
             mo_debugger->f5( ).
           ENDIF.
@@ -2988,7 +3003,12 @@ CLASS lcl_window IMPLEMENTATION.
           IF m_history IS INITIAL.
             mo_debugger->f8( ).
           ELSE.
-            mo_debugger->f5( ).
+            m_start_stack = ls_stack-stacklevel.
+            IF ls_stack-stacklevel = m_start_stack + m_hist_depth.
+              mo_debugger->f6( ).
+            ELSE.
+              mo_debugger->f5( ).
+            ENDIF.
           ENDIF.
 
       ENDCASE.
