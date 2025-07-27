@@ -1473,7 +1473,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     READ TABLE mt_steps INTO ls_step INDEX m_hist_step.
     IF mo_window->m_visualization IS NOT INITIAL.
-      mo_window->set_program( CONV #( ls_step-include ) ).
       mo_window->set_program_line( ls_step-line ).
     ENDIF.
 
@@ -2150,11 +2149,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       hndl_script_buttons( mv_stack_changed ).
       m_is_find = abap_true.
     ENDIF.
-    IF m_counter < 100.
+    IF m_counter < 1000."very deep history - to stop
       me->run_script_new( ).
       hndl_script_buttons( mv_stack_changed ).
     ELSE.
       CLEAR m_counter.
+      show_step( ).
     ENDIF.
   ENDMETHOD.
 
@@ -2206,7 +2206,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD show_step.
-
+    
     show_variables( CHANGING it_var = mt_state ).
     mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
     mo_window->set_program_line( mo_window->m_prg-line ).
