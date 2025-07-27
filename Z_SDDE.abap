@@ -1816,7 +1816,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF mo_window->m_visualization IS NOT INITIAL.
       mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
       mo_window->set_program_line( mo_window->m_prg-line ).
-      mo_window->show_stack( ).
+      IF mv_stack_changed = abap_true.
+        mo_window->show_stack( ).
+      ENDIF.
     ENDIF.
 
     IF mo_tree_local->m_locals IS NOT INITIAL.
