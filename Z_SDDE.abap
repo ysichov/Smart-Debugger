@@ -602,6 +602,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
           m_locals_key    TYPE salv_de_node_key,
           m_globals_key   TYPE salv_de_node_key,
           m_class_key     TYPE salv_de_node_key,
+          m_SYST_key      TYPE salv_de_node_key,
           m_ldb_key       TYPE salv_de_node_key,
           m_icon          TYPE salv_de_tree_image,
           mt_vars         TYPE STANDARD TABLE OF lcl_appl=>var_table,
@@ -1705,7 +1706,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           mo_tree_local->clear( ).
           mo_tree_exp->clear( ).
           mo_tree_imp->clear( ).
-          DELETE mt_state WHERE leaf NE 'GLOBAL' AND leaf NE 'SYST'.
+          DELETE mt_state WHERE leaf NE 'GLOBAL'. "AND leaf NE 'SYST'.
 
         ELSE.
           CLEAR mv_stack_changed.
@@ -1855,13 +1856,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDLOOP.
       IF sy-subrc <> 0.
         CLEAR mo_tree_local->m_globals_key.
-        DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
-        DELETE mt_state WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
+        DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL'.
+        DELETE mt_state WHERE leaf = 'GLOBAL'.
         mo_tree_local->clear( ).
       ENDIF.
     ENDIF.
     IF mo_tree_local->m_syst IS NOT INITIAL.
+      
       transfer_variable( EXPORTING i_name =  'SYST' iv_type = 'SYST' ).
+    ELSE.
+      DELETE mo_tree_local->mt_vars WHERE leaf = 'SYST'.
+      DELETE mt_state WHERE leaf = 'SYST'.
+      mo_tree_local->clear( ).
     ENDIF.
 
 
@@ -1919,8 +1925,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF mo_tree_local->m_globals_key IS NOT INITIAL AND mo_tree_local->m_globals IS INITIAL.
       mo_tree_local->delete_node( mo_tree_local->m_globals_key ).
       CLEAR mo_tree_local->m_globals_key.
-      DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
-      DELETE mt_state WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
+      DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL'. "OR leaf = 'SYST'.
+      DELETE mt_state WHERE leaf = 'GLOBAL'. "OR leaf = 'SYST'.
       mo_tree_local->clear( ).
     ENDIF.
 
@@ -1976,6 +1982,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
         WHEN 'SYST'.
           mo_tree_local->m_leaf =  'SYST'.
+          IF mo_tree_local->m_syst_key IS INITIAL.
+            mo_tree_local->add_node( iv_name = 'System variables' iv_icon = CONV #( icon_life_events ) ).
+          ENDIF.
         WHEN 'CLASS'.
           mo_tree_local->m_leaf =  'CLASS'.
           IF mo_tree_local->m_class_key IS INITIAL.
@@ -2501,9 +2510,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     DATA td TYPE sydes_desc.
     DESCRIBE FIELD ir_up INTO td.
-*      IF td-types[ 1 ]-type = 'r'.
-*        "m_object = ir_up.
-*      ENDIF.
 
     m_variable = lr_new.
 
@@ -4655,6 +4661,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     CLEAR: m_globals_key,
            m_locals_key,
+           m_syst_key,
            m_ldb_key,
            m_class_key,
            mt_vars,
@@ -5190,6 +5197,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         m_ldb_key = main_node_key.
       WHEN 'Class-data global variables'.
         m_class_key = main_node_key.
+      WHEN 'System variables'.
+        m_syst_key = main_node_key.
     ENDCASE.
 
   ENDMETHOD.
