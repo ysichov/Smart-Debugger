@@ -1853,11 +1853,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       LOOP AT mt_globals INTO DATA(ls_global)  WHERE parisval NE 'L'.
         transfer_variable( EXPORTING i_name =  ls_global-name iv_type = 'GLOBAL' ).
       ENDLOOP.
-      IF mo_tree_local->m_syst IS NOT INITIAL.
-        transfer_variable( EXPORTING i_name =  'SYST' iv_type = 'SYST' ).
+      IF sy-subrc <> 0.
+        CLEAR mo_tree_local->m_globals_key.
+        DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
+        DELETE mt_state WHERE leaf = 'GLOBAL' OR leaf = 'SYST'.
+        mo_tree_local->clear( ).
       ENDIF.
-
     ENDIF.
+    IF mo_tree_local->m_syst IS NOT INITIAL.
+      transfer_variable( EXPORTING i_name =  'SYST' iv_type = 'SYST' ).
+    ENDIF.
+
 
     IF mo_tree_local->m_ldb IS NOT INITIAL.
       LOOP AT mt_globals INTO ls_global WHERE parisval = 'L'.
@@ -4913,18 +4919,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     ENDIF.
 
-*    try.
-*       tree->get_nodes( )->add_node( EXPORTING
-*         related_node   = l_key
-*         relationship   = l_rel
-*         data_row       = ls_tree
-*         collapsed_icon = lv_icon
-*         expanded_icon  = lv_icon
-*         text           = lv_text
-*         folder         = abap_false
-*         RECEIVING node = data(lo_node)
-*
-*          ).
     lo_nodes = tree->get_nodes( ).
 
     TRY.
