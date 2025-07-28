@@ -2209,7 +2209,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD show_step.
-
+    break developer.
     show_variables( CHANGING it_var = mt_state ).
     mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
     mo_window->set_program_line( mo_window->m_prg-line ).
@@ -2317,9 +2317,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     READ TABLE mt_state
          WITH KEY name = lv_full_name
                   program = mo_window->mt_stack[ 1 ]-program
-                         eventtype = mo_window->mt_stack[ 1 ]-eventtype
-                         eventname = mo_window->mt_stack[ 1 ]-eventname
-                  stack = mo_window->mt_stack[ 1 ]-stacklevel
+                         "eventtype = mo_window->mt_stack[ 1 ]-eventtype
+                         "eventname = mo_window->mt_stack[ 1 ]-eventname
+                  "stack = mo_window->mt_stack[ 1 ]-stacklevel
          ASSIGNING FIELD-SYMBOL(<state>).
 
     IF sy-subrc <> 0.
