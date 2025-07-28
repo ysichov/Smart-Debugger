@@ -262,7 +262,7 @@ CLASS lcl_popup IMPLEMENTATION.
           l_left TYPE i.
 
     ADD 1 TO m_counter.
-    l_top  = l_left = 5 + 5 * ( m_counter DIV 5 ) +  ( m_counter MOD 5 ) * 50.
+    l_top  = l_left = 1 + 2 * ( m_counter DIV 5 ) +  ( m_counter MOD 5 ) * 10.
 
     CREATE OBJECT ro_box
       EXPORTING
@@ -271,6 +271,7 @@ CLASS lcl_popup IMPLEMENTATION.
         top                         = l_top
         left                        = l_left
         caption                     = i_name
+        lifetime                    = 2
       EXCEPTIONS
         cntl_error                  = 1
         cntl_system_error           = 2
@@ -2209,7 +2210,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD show_step.
-    break developer.
+
     show_variables( CHANGING it_var = mt_state ).
     mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
     mo_window->set_program_line( mo_window->m_prg-line ).
@@ -2703,7 +2704,7 @@ CLASS lcl_window IMPLEMENTATION.
     m_history = '01'.
     m_zcode = '01'.
 
-    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.7' i_width = 1200 i_hight = 400 ).
+    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.7' i_width = 1400 i_hight = 400 ).
     CREATE OBJECT mo_splitter ##FM_SUBRC_OK
       EXPORTING
         parent  = mo_box
@@ -5302,9 +5303,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
         lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
 
-        DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
-        MOVE-CORRESPONDING  mo_debugger->mt_state TO lt_hist2.
-        lcl_appl=>open_int_table( iv_name = 'State' it_tab =  lt_hist2 ).
+*        DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
+*        MOVE-CORRESPONDING  mo_debugger->mt_state TO lt_hist2.
+*        lcl_appl=>open_int_table( iv_name = 'State' it_tab =  lt_hist2 ).
 
         DATA: lt_hist TYPE TABLE OF lcl_appl=>var_table_temp.
         LOOP AT  mo_debugger->mt_vars_hist INTO DATA(ls_vars).
@@ -5325,12 +5326,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         ENDLOOP.
         lcl_appl=>open_int_table( iv_name = 'mt_vars_hist_view -  History' it_tab =  lt_hist ).
 
-        DATA: lt_var TYPE TABLE OF lcl_appl=>var_table_temp.
+        "DATA: lt_var TYPE TABLE OF lcl_appl=>var_table_temp.
 
-        MOVE-CORRESPONDING mo_debugger->mo_tree_local->mt_vars TO lt_var.
+        "MOVE-CORRESPONDING mo_debugger->mo_tree_local->mt_vars TO lt_var.
 
-
-        lcl_appl=>open_int_table( iv_name = 'tree' it_tab =  lt_var ).
+        "lcl_appl=>open_int_table( iv_name = 'tree' it_tab =  lt_var ).
 
     ENDCASE.
 
