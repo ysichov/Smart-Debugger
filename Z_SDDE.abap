@@ -1983,6 +1983,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ASSIGN m_ref_val->* TO <hist>.
           ASSIGN <var>-ref->* TO <new>.
           IF <new> <> <hist>.
+
             m_ref_val = <var>-ref.
             rv_stop = abap_true.
           ENDIF.
@@ -2409,13 +2410,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ELSE.
           ASSIGN lv_hist-ref->* TO FIELD-SYMBOL(<hist>).
 
-          IF lo_elem->absolute_name = lv_hist-type.
+          "IF lo_elem->absolute_name = lv_hist-type.
             IF <hist> NE <ir_up>.
               lv_add_hist = lv_add = abap_on.
             ENDIF.
-          ELSE.
-            lv_add_hist = lv_add = abap_on.
-          ENDIF.
+          "ELSE.
+            "lv_add_hist = lv_add = abap_on.
+          "ENDIF.
         ENDIF.
       ELSE.
         READ TABLE mt_vars_hist_view WITH KEY name = <state>-name INTO lv_hist.
@@ -2971,7 +2972,8 @@ CLASS lcl_window IMPLEMENTATION.
         ENDIF.
 
       WHEN 'CLEARVAR'.
-        CLEAR mo_debugger->mv_selected_var.
+        CLEAR: mo_debugger->mv_selected_var,
+               mo_debugger->m_ref_val.
         mo_toolbar->set_button_info( EXPORTING icon = CONV #( icon_select_detail ) fcode =  'CLEARVAR'  text = 'Select variable to scan' ).
 
       WHEN 'INFO'.
@@ -5085,7 +5087,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       lv_text = ls_tree-typename.
     ENDIF.
 
-
     l_rel = iv_rel.
     ASSIGN ir_up->* TO FIELD-SYMBOL(<new_value>).
     READ TABLE mt_vars WITH KEY name = is_var-name INTO DATA(l_var).
@@ -5303,9 +5304,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
         lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
 
-*        DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
-*        MOVE-CORRESPONDING  mo_debugger->mt_state TO lt_hist2.
-*        lcl_appl=>open_int_table( iv_name = 'State' it_tab =  lt_hist2 ).
+        DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
+        MOVE-CORRESPONDING  mo_debugger->mt_state TO lt_hist2.
+        lcl_appl=>open_int_table( iv_name = 'State' it_tab =  lt_hist2 ).
 
         DATA: lt_hist TYPE TABLE OF lcl_appl=>var_table_temp.
         LOOP AT  mo_debugger->mt_vars_hist INTO DATA(ls_vars).
@@ -5326,11 +5327,12 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         ENDLOOP.
         lcl_appl=>open_int_table( iv_name = 'mt_vars_hist_view -  History' it_tab =  lt_hist ).
 
-        "DATA: lt_var TYPE TABLE OF lcl_appl=>var_table_temp.
+        DATA: lt_var TYPE TABLE OF lcl_appl=>var_table_temp.
 
-        "MOVE-CORRESPONDING mo_debugger->mo_tree_local->mt_vars TO lt_var.
+        MOVE-CORRESPONDING mo_debugger->mo_tree_local->mt_vars TO lt_var.
 
-        "lcl_appl=>open_int_table( iv_name = 'tree' it_tab =  lt_var ).
+
+        lcl_appl=>open_int_table( iv_name = 'tree' it_tab =  lt_var ).
 
     ENDCASE.
 
