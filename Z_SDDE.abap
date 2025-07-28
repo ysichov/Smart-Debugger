@@ -2411,11 +2411,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ASSIGN lv_hist-ref->* TO FIELD-SYMBOL(<hist>).
 
           "IF lo_elem->absolute_name = lv_hist-type.
-            IF <hist> NE <ir_up>.
-              lv_add_hist = lv_add = abap_on.
-            ENDIF.
+          IF <hist> NE <ir_up>.
+            lv_add_hist = lv_add = abap_on.
+          ENDIF.
           "ELSE.
-            "lv_add_hist = lv_add = abap_on.
+          "lv_add_hist = lv_add = abap_on.
           "ENDIF.
         ENDIF.
       ELSE.
@@ -5304,9 +5304,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
         lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
 
-        DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
-        MOVE-CORRESPONDING  mo_debugger->mt_state TO lt_hist2.
-        lcl_appl=>open_int_table( iv_name = 'State' it_tab =  lt_hist2 ).
+*        DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
+*        MOVE-CORRESPONDING  mo_debugger->mt_state TO lt_hist2.
+*        lcl_appl=>open_int_table( iv_name = 'State' it_tab =  lt_hist2 ).
 
         DATA: lt_hist TYPE TABLE OF lcl_appl=>var_table_temp.
         LOOP AT  mo_debugger->mt_vars_hist INTO DATA(ls_vars).
@@ -5327,12 +5327,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         ENDLOOP.
         lcl_appl=>open_int_table( iv_name = 'mt_vars_hist_view -  History' it_tab =  lt_hist ).
 
-        DATA: lt_var TYPE TABLE OF lcl_appl=>var_table_temp.
-
-        MOVE-CORRESPONDING mo_debugger->mo_tree_local->mt_vars TO lt_var.
-
-
-        lcl_appl=>open_int_table( iv_name = 'tree' it_tab =  lt_var ).
+*        DATA: lt_var TYPE TABLE OF lcl_appl=>var_table_temp.
+*
+*        MOVE-CORRESPONDING mo_debugger->mo_tree_local->mt_vars TO lt_var.
+*        lcl_appl=>open_int_table( iv_name = 'tree' it_tab =  lt_var ).
 
     ENDCASE.
 
@@ -5363,6 +5361,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
     ASSIGN COMPONENT 'FULLNAME' OF STRUCTURE <row> TO FIELD-SYMBOL(<fullname>).
     mo_debugger->mv_selected_var = <fullname>.
+    CLEAR mo_debugger->m_ref_val.
 
     mo_debugger->mo_window->mo_toolbar->set_button_info( EXPORTING fcode =  'CLEARVAR' icon = CONV #( icon_select_detail ) text = |'Clear { mo_debugger->mv_selected_var }| ).
 
