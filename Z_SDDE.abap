@@ -1,8 +1,8 @@
 *  &---------------------------------------------------------------------*
-*  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
+*  & Smart Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
-*  & version: beta 0.7.370
+*  & version: beta 0.8.410
 *  & Git https://github.com/ysichov/SDDE
 *  & RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *  & EN description - https://github.com/ysichov/SDDE/wiki
@@ -1627,7 +1627,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     LOOP AT mt_state ASSIGNING FIELD-SYMBOL(<state>).
       CLEAR <state>-done.
     ENDLOOP.
-
     es_stop = show_variables( CHANGING it_var = mt_state ).
 
     IF mo_window->m_debug_button = 'F5'.
@@ -1862,7 +1861,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
     ENDIF.
     IF mo_tree_local->m_syst IS NOT INITIAL.
-      
+
       transfer_variable( EXPORTING i_name =  'SYST' iv_type = 'SYST' ).
     ELSE.
       DELETE mo_tree_local->mt_vars WHERE leaf = 'SYST'.
@@ -2717,7 +2716,7 @@ CLASS lcl_window IMPLEMENTATION.
     m_history = '01'.
     m_zcode = '01'.
 
-    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.7' i_width = 1400 i_hight = 400 ).
+    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.8' i_width = 1400 i_hight = 400 ).
     CREATE OBJECT mo_splitter ##FM_SUBRC_OK
       EXPORTING
         parent  = mo_box
@@ -4787,6 +4786,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
               ENDIF.
 
             CATCH cx_root.
+              DELETE mt_vars WHERE name = is_var-name.
           ENDTRY.
 
         ENDIF.
@@ -4903,23 +4903,23 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
           ASSIGN l_var-ref->* TO FIELD-SYMBOL(<old_value>).
 
-          IF is_var-type = l_var-type.
+          "IF is_var-type = l_var-type.
             IF <old_value> NE <new_value>.
               l_key = l_var-key.
               l_rel = if_salv_c_node_relation=>next_sibling.
               DELETE mt_vars WHERE name = is_var-name.
             ELSE.
               IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
-*                  me->del_variable( iv_full_name = iv_fullname iv_del_in_tree = abap_true ).
+                  "me->del_variable( iv_full_name = iv_fullname iv_del_in_tree = abap_true ).
               ELSE.
                 RETURN.
               ENDIF.
             ENDIF.
-          ELSE.
-            l_key = l_var-key.
-            l_rel = if_salv_c_node_relation=>next_sibling.
-            DELETE mt_vars WHERE name = is_var-name.
-          ENDIF.
+          "ELSE.
+          "  l_key = l_var-key.
+          "  l_rel = if_salv_c_node_relation=>next_sibling.
+          "  DELETE mt_vars WHERE name = is_var-name.
+          "ENDIF.
 
         CATCH cx_root.
       ENDTRY.
@@ -5312,7 +5312,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 *        lcl_appl=>open_int_table( iv_name = 'State' it_tab =  lt_hist2 ).
 
         DATA: lt_hist TYPE TABLE OF lcl_appl=>var_table_temp.
-        LOOP AT  mo_debugger->mt_vars_hist INTO DATA(ls_vars).
+        LOOP AT  mo_debugger->mt_vars_hist_View INTO DATA(ls_vars).
           APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
           MOVE-CORRESPONDING ls_vars TO <hist>.
 
