@@ -1,8 +1,8 @@
 *  &---------------------------------------------------------------------*
-*  & Smart Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
+*  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
-*  & version: beta 0.8.410
+*  & version: beta 0.7.370
 *  & Git https://github.com/ysichov/SDDE
 *  & RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *  & EN description - https://github.com/ysichov/SDDE/wiki
@@ -421,6 +421,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           m_step            TYPE i,
           m_is_find         TYPE xfeld,
           m_stop_stack      TYPE i,
+          m_debug           TYPE x,
           is_step           TYPE xfeld,
 
           ms_stack_prev     TYPE   lcl_appl=>t_stack,
@@ -727,7 +728,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           m_zcode                TYPE x,
           m_direction            TYPE x,
           m_prg                  TYPE tpda_scr_prg_info,
-          m_debug_button         LIKE sy-ucomm,
+          m_debug_button         TYPE x,
           m_show_step            TYPE xfeld,
           mo_debugger            TYPE REF TO lcl_debugger_script,
           mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
@@ -1446,8 +1447,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lt_hist      LIKE mt_vars_hist_view,
           lt_del       LIKE mt_vars_hist_view..
 
+
     is_history = abap_true.
     lv_prev_step = m_hist_step.
+
+    IF m_debug IS NOT INITIAL.
+      BREAK-POINT.
+    ENDIF.
 
     IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack IS INITIAL.
       READ TABLE mt_steps INTO DATA(ls_step) INDEX m_hist_step.
@@ -1627,6 +1633,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     LOOP AT mt_state ASSIGNING FIELD-SYMBOL(<state>).
       CLEAR <state>-done.
     ENDLOOP.
+    IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
     es_stop = show_variables( CHANGING it_var = mt_state ).
 
     IF mo_window->m_debug_button = 'F5'.
@@ -1652,6 +1659,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD run_script_new.
+
+    IF m_debug IS NOT INITIAL.
+      BREAK-POINT.
+    ENDIF.
 
     DATA: lv_type TYPE string.
     ADD 1 TO m_counter.
@@ -2716,7 +2727,7 @@ CLASS lcl_window IMPLEMENTATION.
     m_history = '01'.
     m_zcode = '01'.
 
-    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.8' i_width = 1400 i_hight = 400 ).
+    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.7' i_width = 1400 i_hight = 400 ).
     CREATE OBJECT mo_splitter ##FM_SUBRC_OK
       EXPORTING
         parent  = mo_box
@@ -2840,6 +2851,7 @@ CLASS lcl_window IMPLEMENTATION.
      ( butn_type = 3  )
      ( function = 'DIRECTION' icon = CONV #( icon_column_right ) quickinfo = 'Forward' text = 'Forward' )
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Select variable to scan' text = 'Select variable to scan' )
+     ( function = 'DEBUG' icon = CONV #( icon_tools ) quickinfo = 'Debug' text = 'Debug' )
      ( function = 'INFO' icon = CONV #( icon_information ) quickinfo = 'Documentation' text = '' )
                      ).
     mo_toolbar->add_button_group( lt_button ).
@@ -2986,6 +2998,9 @@ CLASS lcl_window IMPLEMENTATION.
         CLEAR: mo_debugger->mv_selected_var,
                mo_debugger->m_ref_val.
         mo_toolbar->set_button_info( EXPORTING icon = CONV #( icon_select_detail ) fcode =  'CLEARVAR'  text = 'Select variable to scan' ).
+
+      WHEN 'DEBUG'."activate break_points
+        mo_debugger->m_debug = mo_debugger->m_debug BIT-XOR c_mask.
 
       WHEN 'INFO'.
         DATA(l_url) = 'https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/'.
@@ -4643,6 +4658,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
              text     = 'Steps'
              tooltip  = 'Steps'
              position = if_salv_c_function_position=>right_of_salv_functions ).
+
+      lo_functions->add_function(
+            name     = 'DEBUG'
+            icon     = CONV #( icon_tools )
+            text     = 'Debug'
+            tooltip  = 'Debug on/off'
+            position = if_salv_c_function_position=>right_of_salv_functions ).
     ENDIF.
 
     lo_functions->add_function(
@@ -4904,17 +4926,17 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           ASSIGN l_var-ref->* TO FIELD-SYMBOL(<old_value>).
 
           "IF is_var-type = l_var-type.
-            IF <old_value> NE <new_value>.
-              l_key = l_var-key.
-              l_rel = if_salv_c_node_relation=>next_sibling.
-              DELETE mt_vars WHERE name = is_var-name.
+          IF <old_value> NE <new_value>.
+            l_key = l_var-key.
+            l_rel = if_salv_c_node_relation=>next_sibling.
+            DELETE mt_vars WHERE name = is_var-name.
+          ELSE.
+            IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
+              "me->del_variable( iv_full_name = iv_fullname iv_del_in_tree = abap_true ).
             ELSE.
-              IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
-                  "me->del_variable( iv_full_name = iv_fullname iv_del_in_tree = abap_true ).
-              ELSE.
-                RETURN.
-              ENDIF.
+              RETURN.
             ENDIF.
+          ENDIF.
           "ELSE.
           "  l_key = l_var-key.
           "  l_rel = if_salv_c_node_relation=>next_sibling.
@@ -4922,6 +4944,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           "ENDIF.
 
         CATCH cx_root.
+          DELETE mt_vars WHERE name = is_var-name.
       ENDTRY.
 
     ENDIF.
@@ -5116,6 +5139,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             RETURN.
           ENDIF.
         CATCH cx_root.
+           me->del_variable( CONV #( is_var-name )  ).
       ENDTRY.
     ELSE.
 
@@ -5251,6 +5275,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD delete_node.
+    IF mo_debugger->m_debug  IS NOT INITIAL.
+      BREAK-POINT.
+    ENDIF.
     DATA(lo_nodes) = tree->get_nodes( ).
     DATA(l_node) =  lo_nodes->get_node( iv_key ).
     IF l_node IS NOT INITIAL.
