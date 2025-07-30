@@ -728,7 +728,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           m_zcode                TYPE x,
           m_direction            TYPE x,
           m_prg                  TYPE tpda_scr_prg_info,
-          m_debug_button         like sy-ucomm,
+          m_debug_button         TYPE x,
           m_show_step            TYPE xfeld,
           mo_debugger            TYPE REF TO lcl_debugger_script,
           mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
@@ -1650,6 +1650,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       es_Stop = abap_true.
     ENDIF.
 
+    READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = ls_step-include linesrc = ls_step-line INTO DATA(ls_break).
+    IF sy-subrc = 0.
+      es_Stop = abap_true.
+    ENDIF.
+
     mo_tree_local->m_no_refresh = 'X'.
     mo_tree_exp->m_no_refresh = 'X'.
     mo_tree_imp->m_no_refresh = 'X'.
@@ -1658,7 +1663,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD run_script_new.
 
-    IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
+    IF m_debug IS NOT INITIAL.
+      BREAK-POINT.
+    ENDIF.
 
     DATA: lv_type TYPE string.
     ADD 1 TO m_counter.
@@ -2070,6 +2077,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD hndl_script_buttons.
+    IF m_debug = abap_true. BREAK-POINT. ENDIF.
 
     IF m_is_find = abap_true.
       show_step( ).
@@ -5135,7 +5143,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             RETURN.
           ENDIF.
         CATCH cx_root.
-           me->del_variable( CONV #( is_var-name )  ).
+          me->del_variable( CONV #( is_var-name )  ).
       ENDTRY.
     ELSE.
 
@@ -5271,7 +5279,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD delete_node.
-    IF mo_debugger->m_debug  IS NOT INITIAL. BREAK-POINT.ENDIF.
+    IF mo_debugger->m_debug  IS NOT INITIAL.
+      BREAK-POINT.
+    ENDIF.
     DATA(lo_nodes) = tree->get_nodes( ).
     DATA(l_node) =  lo_nodes->get_node( iv_key ).
     IF l_node IS NOT INITIAL.
