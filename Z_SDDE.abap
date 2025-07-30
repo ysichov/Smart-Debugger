@@ -2,7 +2,7 @@
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
-*  & version: beta 0.7.370
+*  & version: beta 0.8.400
 *  & Git https://github.com/ysichov/SDDE
 *  & RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *  & EN description - https://github.com/ysichov/SDDE/wiki
@@ -2716,7 +2716,7 @@ CLASS lcl_window IMPLEMENTATION.
     m_history = '01'.
     m_zcode = '01'.
 
-    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.7' i_width = 1400 i_hight = 400 ).
+    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.8' i_width = 1400 i_hight = 400 ).
     CREATE OBJECT mo_splitter ##FM_SUBRC_OK
       EXPORTING
         parent  = mo_box
