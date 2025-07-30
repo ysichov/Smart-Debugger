@@ -728,7 +728,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           m_zcode                TYPE x,
           m_direction            TYPE x,
           m_prg                  TYPE tpda_scr_prg_info,
-          m_debug_button         lyke sy-ucomm,
+          m_debug_button         like sy-ucomm,
           m_show_step            TYPE xfeld,
           mo_debugger            TYPE REF TO lcl_debugger_script,
           mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
