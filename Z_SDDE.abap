@@ -728,7 +728,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           m_zcode                TYPE x,
           m_direction            TYPE x,
           m_prg                  TYPE tpda_scr_prg_info,
-          m_debug_button         TYPE x,
+          m_debug_button         lyke sy-ucomm,
           m_show_step            TYPE xfeld,
           mo_debugger            TYPE REF TO lcl_debugger_script,
           mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
@@ -1663,9 +1663,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD run_script_new.
 
-    IF m_debug IS NOT INITIAL.
-      BREAK-POINT.
-    ENDIF.
+    IF m_debug IS NOT INITIAL.  BREAK-POINT.  ENDIF.
 
     DATA: lv_type TYPE string.
     ADD 1 TO m_counter.
@@ -5279,9 +5277,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD delete_node.
-    IF mo_debugger->m_debug  IS NOT INITIAL.
-      BREAK-POINT.
-    ENDIF.
+    IF mo_debugger->m_debug  IS NOT INITIAL. BREAK-POINT. ENDIF.
     DATA(lo_nodes) = tree->get_nodes( ).
     DATA(l_node) =  lo_nodes->get_node( iv_key ).
     IF l_node IS NOT INITIAL.
