@@ -1,3 +1,4 @@
+REPORT test.
 *  &---------------------------------------------------------------------*
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
@@ -5366,11 +5367,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
     ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
     ASSIGN COMPONENT 'FULLNAME' OF STRUCTURE <row> TO FIELD-SYMBOL(<fullname>).
-    "ASSIGN COMPONENT 'PATH' OF STRUCTURE <row> TO FIELD-SYMBOL(<path>).
+    ASSIGN COMPONENT 'PATH' OF STRUCTURE <row> TO FIELD-SYMBOL(<path>).
     mo_debugger->mv_selected_var = <fullname>.
     CLEAR mo_debugger->m_ref_val.
 
-    mo_debugger->mo_window->mo_toolbar->set_button_info( EXPORTING fcode =  'CLEARVAR' icon = CONV #( icon_select_detail ) text = |'Clear { <fullname> }| ).
+    mo_debugger->mo_window->mo_toolbar->set_button_info( EXPORTING fcode =  'CLEARVAR' icon = CONV #( icon_select_detail ) text = |'Clear { <path> }| ).
 
     CASE <kind>.
       WHEN cl_abap_datadescr=>typekind_table.
