@@ -148,20 +148,21 @@ CLASS lcl_appl DEFINITION.
              program(40)   TYPE c,
              eventtype(30) TYPE c,
              eventname(61) TYPE c,
-             first         TYPE xfeld,
-             is_appear     TYPE xfeld,
+             "first         TYPE xfeld,
+             "is_appear     TYPE xfeld,
              leaf          TYPE string,
              name          TYPE string,
              path          TYPE string,
-             short         TYPE string,
-             key           TYPE salv_de_node_key,
-             parent        TYPE string,
-             cl_leaf       TYPE int4,
+             "short         TYPE string,
+             "key           TYPE salv_de_node_key,
+             "parent        TYPE string,
+             "cl_leaf       TYPE int4,
              type          TYPE string,
              instance      TYPE string,
              objname       TYPE string,
-             done          TYPE xfeld,
+             "done          TYPE xfeld,
              value         TYPE string,
+             ref           TYPE REF TO data,
            END OF var_table_temp,
 
            BEGIN OF var_table_h,
@@ -583,6 +584,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
              value    TYPE string,
              typename TYPE abap_abstypename,
              fullname TYPE string,
+             path     type string,
              objname  TYPE string,
            END OF ts_table.
 
@@ -2998,7 +3000,7 @@ CLASS lcl_window IMPLEMENTATION.
         DATA(l_url) = 'https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/'.
         CALL FUNCTION 'CALL_BROWSER' EXPORTING url = l_url.
 
-WHEN 'STEPS'.
+      WHEN 'STEPS'.
 
         lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
 
@@ -3793,9 +3795,12 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     CHECK es_row_no-row_id IS NOT INITIAL.
     ASSIGN mr_table->* TO  <f_tab>.
     READ TABLE <f_tab> INDEX es_row_no-row_id ASSIGNING FIELD-SYMBOL(<tab>).
-    ASSIGN COMPONENT |{ e_column-fieldname }_REF| OF STRUCTURE <tab> TO FIELD-SYMBOL(<ref>).
+    ASSIGN COMPONENT e_column-fieldname  OF STRUCTURE <tab> TO FIELD-SYMBOL(<val>).
     IF sy-subrc = 0.
-      lcl_appl=>open_int_table( EXPORTING iv_name = CONV #( e_column-fieldname ) it_ref = <ref> ).
+      IF <val> = 'Table'.
+        ASSIGN COMPONENT 'REF'  OF STRUCTURE <tab> TO FIELD-SYMBOL(<ref>).
+        lcl_appl=>open_int_table( EXPORTING iv_name = CONV #( e_column-fieldname ) it_ref = <ref> ).
+      ENDIF.
     ELSE.
       TRY.
           lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| ).
@@ -4611,6 +4616,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     SET HANDLER hndl_double_click
                 hndl_user_command FOR lo_event.
 
+    m_globals = '01'.
     tree->display( ).
   ENDMETHOD.
 
@@ -4661,18 +4667,18 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
        position = if_salv_c_function_position=>right_of_salv_functions ).
 
     lo_functions->add_function(
-           name     = 'LDB'
-           icon     = CONV #( icon_biw_report_view )
-           text     = 'LDB'
-           tooltip  = 'Show/hide Local Data Base variables (global)'
-           position = if_salv_c_function_position=>right_of_salv_functions ).
+       name     = 'LDB'
+       icon     = CONV #( icon_biw_report_view )
+       text     = 'LDB'
+       tooltip  = 'Show/hide Local Data Base variables (global)'
+       position = if_salv_c_function_position=>right_of_salv_functions ).
 
-     lo_functions->add_function(
-     name     = 'REFRESH'
-     icon     = CONV #( icon_refresh )
-     text     = ''
-     tooltip  = 'Refresh'
-     position = if_salv_c_function_position=>left_of_salv_functions ).
+    lo_functions->add_function(
+       name     = 'REFRESH'
+       icon     = CONV #( icon_refresh )
+       text     = ''
+       tooltip  = 'Refresh'
+       position = if_salv_c_function_position=>left_of_salv_functions ).
 
   ENDMETHOD.
 
@@ -4768,7 +4774,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDIF.
 
     lv_text = is_var-short.
-    ls_tree-fullname = is_Var-name."is_var-path.
+    ls_tree-fullname = is_Var-name.
+    ls_tree-path = is_var-path.
 
     "own new method
     IF is_var-cl_leaf IS NOT INITIAL.
@@ -4898,6 +4905,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     lv_text = is_var-short.
     ls_tree-fullname = is_var-name."is_var-path.
+    ls_tree-path = is_var-path.
 
     "own new method
     IF is_var-cl_leaf IS NOT INITIAL.
@@ -5020,7 +5028,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     lv_icon = icon_oo_object.
     lv_text = is_var-short.
-    ls_tree-fullname = is_var-name."is_var-path.
+    ls_tree-fullname = is_var-name.
+    ls_tree-path = is_var-path.
     ls_tree-objname = is_var-instance.
 
     "own new method
@@ -5357,10 +5366,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ASSIGN COMPONENT 'REF' OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
     ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
     ASSIGN COMPONENT 'FULLNAME' OF STRUCTURE <row> TO FIELD-SYMBOL(<fullname>).
+    "ASSIGN COMPONENT 'PATH' OF STRUCTURE <row> TO FIELD-SYMBOL(<path>).
     mo_debugger->mv_selected_var = <fullname>.
     CLEAR mo_debugger->m_ref_val.
 
-    mo_debugger->mo_window->mo_toolbar->set_button_info( EXPORTING fcode =  'CLEARVAR' icon = CONV #( icon_select_detail ) text = |'Clear { mo_debugger->mv_selected_var }| ).
+    mo_debugger->mo_window->mo_toolbar->set_button_info( EXPORTING fcode =  'CLEARVAR' icon = CONV #( icon_select_detail ) text = |'Clear { <fullname> }| ).
 
     CASE <kind>.
       WHEN cl_abap_datadescr=>typekind_table.
