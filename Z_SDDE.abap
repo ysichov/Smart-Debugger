@@ -2841,8 +2841,11 @@ CLASS lcl_window IMPLEMENTATION.
      ( function = 'DIRECTION' icon = CONV #( icon_column_right ) quickinfo = 'Forward' text = 'Forward' )
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Select variable to scan' text = 'Select variable to scan' )
      ( function = 'DEBUG' icon = CONV #( icon_tools ) quickinfo = 'Debug' text = 'Debug' )
+     ( function = 'STEPS' icon = CONV #( icon_next_step ) quickinfo = 'Steps' text = 'Steps' )
+     ( function = 'HISTORY' icon = CONV #( icon_history ) quickinfo = 'Variables history' text = 'History' )
      ( function = 'INFO' icon = CONV #( icon_information ) quickinfo = 'Documentation' text = '' )
-                     ).
+                    ).
+
     mo_toolbar->add_button_group( lt_button ).
 
 *   Register events
@@ -2994,6 +2997,30 @@ CLASS lcl_window IMPLEMENTATION.
       WHEN 'INFO'.
         DATA(l_url) = 'https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/'.
         CALL FUNCTION 'CALL_BROWSER' EXPORTING url = l_url.
+
+WHEN 'STEPS'.
+
+        lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
+
+      WHEN 'HISTORY'.
+        DATA: lt_hist TYPE TABLE OF lcl_appl=>var_table_temp.
+        LOOP AT  mo_debugger->mt_vars_hist INTO DATA(ls_vars).
+          APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
+          MOVE-CORRESPONDING ls_vars TO <hist>.
+
+          DATA(lo_descr) = cl_abap_typedescr=>describe_by_data_ref( ls_vars-ref ).
+
+          IF lo_descr->type_kind = cl_abap_typedescr=>typekind_table.
+            <hist>-value = 'Table'.
+          ELSEIF lo_descr->type_kind = cl_abap_typedescr=>typekind_struct1."structure
+            <hist>-value = 'Structure'.
+          ELSEIF lo_descr->type_kind = cl_abap_typedescr=>typekind_struct2."deep structure
+            <hist>-value = 'Deep Structure'.
+          ELSE.
+            <hist>-value = ls_vars-ref->*.
+          ENDIF.
+        ENDLOOP.
+        lcl_appl=>open_int_table( iv_name = |mt_vars_hist - History({ lines( lt_hist ) })| it_tab =  lt_hist ).
 
     ENDCASE.
 
@@ -4640,23 +4667,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
            tooltip  = 'Show/hide Local Data Base variables (global)'
            position = if_salv_c_function_position=>right_of_salv_functions ).
 
-    IF sy-uname = 'DEVELOPER'.
-      lo_functions->add_function(
-             name     = 'TEST'
-             icon     = CONV #( icon_test )
-             text     = 'Steps'
-             tooltip  = 'Steps'
-             position = if_salv_c_function_position=>right_of_salv_functions ).
-
-      lo_functions->add_function(
-            name     = 'DEBUG'
-            icon     = CONV #( icon_tools )
-            text     = 'Debug'
-            tooltip  = 'Debug on/off'
-            position = if_salv_c_function_position=>right_of_salv_functions ).
-    ENDIF.
-
-    lo_functions->add_function(
+     lo_functions->add_function(
      name     = 'REFRESH'
      icon     = CONV #( icon_refresh )
      text     = ''
@@ -5317,36 +5328,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         m_class_data = m_class_data BIT-XOR c_mask.
       WHEN 'LDB'."Show/hide LDB variables (globals)
         m_ldb = m_ldb BIT-XOR c_mask.
-      WHEN 'TEST'.
-
-        lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
-
-*        DATA: lt_hist2 TYPE TABLE OF lcl_appl=>var_table_temp.
-*        MOVE-CORRESPONDING  mo_debugger->mt_state TO lt_hist2.
-*        lcl_appl=>open_int_table( iv_name = 'State' it_tab =  lt_hist2 ).
-
-        DATA: lt_hist TYPE TABLE OF lcl_appl=>var_table_temp.
-        LOOP AT  mo_debugger->mt_vars_hist INTO DATA(ls_vars).
-          APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
-          MOVE-CORRESPONDING ls_vars TO <hist>.
-
-          DATA(lo_descr) = cl_abap_typedescr=>describe_by_data_ref( ls_vars-ref ).
-
-          IF lo_descr->type_kind = cl_abap_typedescr=>typekind_table.
-            <hist>-value = 'Table'.
-          ELSEIF lo_descr->type_kind = cl_abap_typedescr=>typekind_struct1."structure
-            <hist>-value = 'Structure'.
-          ELSEIF lo_descr->type_kind = cl_abap_typedescr=>typekind_struct2."deep structure
-            <hist>-value = 'Deep Structure'.
-          ELSE.
-            <hist>-value = ls_vars-ref->*.
-          ENDIF.
-        ENDLOOP.
-        lcl_appl=>open_int_table( iv_name = |mt_vars_hist - History({ lines( lt_hist ) })| it_tab =  lt_hist ).
-
-*        DATA: lt_var TYPE TABLE OF lcl_appl=>var_table_temp.
-*        MOVE-CORRESPONDING mo_debugger->mo_tree_local->mt_vars TO lt_var.
-*        lcl_appl=>open_int_table( iv_name = 'tree' it_tab =  lt_var ).
 
     ENDCASE.
 
