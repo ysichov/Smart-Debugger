@@ -145,13 +145,14 @@ CLASS lcl_appl DEFINITION.
            BEGIN OF var_table_temp,
              step          TYPE i,
              stack         TYPE i,
-             program(40)   TYPE c,
              eventtype(30) TYPE c,
              eventname(61) TYPE c,
+             name          TYPE string,
+             value         TYPE string,
+             program(40)   TYPE c,
              "first         TYPE xfeld,
              "is_appear     TYPE xfeld,
              leaf          TYPE string,
-             name          TYPE string,
              path          TYPE string,
              "short         TYPE string,
              "key           TYPE salv_de_node_key,
@@ -161,7 +162,6 @@ CLASS lcl_appl DEFINITION.
              instance      TYPE string,
              objname       TYPE string,
              "done          TYPE xfeld,
-             value         TYPE string,
              ref           TYPE REF TO data,
            END OF var_table_temp,
 
@@ -210,13 +210,14 @@ CLASS lcl_appl DEFINITION.
            BEGIN OF t_step_counter,
              step       TYPE i,
              stacklevel TYPE tpda_stack_level,
+             line       TYPE tpda_sc_line,
+             eventtype  TYPE tpda_event_type,
+             eventname  TYPE tpda_event,
              first      TYPE xfeld,
              last       TYPE xfeld,
              program    TYPE tpda_program,
              include    TYPE tpda_include,
-             line       TYPE tpda_sc_line,
-             eventtype  TYPE tpda_event_type,
-             eventname  TYPE tpda_event,
+
            END OF t_step_counter.
 
     CLASS-DATA: m_option_icons     TYPE TABLE OF sign_option_icon_s,
@@ -230,7 +231,8 @@ CLASS lcl_appl DEFINITION.
       init_lang,
       open_int_table IMPORTING it_tab  TYPE ANY TABLE OPTIONAL
                                it_ref  TYPE REF TO data OPTIONAL
-                               iv_name TYPE string.
+                               iv_name TYPE string
+                               io_window type ref to lcl_window.
 ENDCLASS.
 
 CLASS lcl_popup DEFINITION.
@@ -463,7 +465,9 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
       end     REDEFINITION,
 
       run_script_new,
-      run_script_hist EXPORTING es_stop TYPE xfeld,
+      run_script_hist IMPORTING iv_step TYPE i OPTIONAL
+                      EXPORTING es_stop TYPE xfeld
+                      ,
       show_variables CHANGING it_var TYPE lcl_appl=>t_var_table RETURNING VALUE(rv_stop) TYPE xfeld,
       save_hist IMPORTING
                   iv_name        TYPE clike
@@ -584,7 +588,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
              value    TYPE string,
              typename TYPE abap_abstypename,
              fullname TYPE string,
-             path     type string,
+             path     TYPE string,
              objname  TYPE string,
            END OF ts_table.
 
@@ -1447,39 +1451,47 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     DATA: lv_prev_step TYPE i,
           lt_hist      LIKE mt_vars_hist_view,
-          lt_del       LIKE mt_vars_hist_view..
+          lt_del       LIKE mt_vars_hist_view,
+          lv_hist_step TYPE i.
+
 
 
     is_history = abap_true.
-    lv_prev_step = m_hist_step.
 
-    IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
+    IF iv_step IS INITIAL.
+      lv_hist_step = m_hist_step.
+      lv_prev_step = m_hist_step.
 
-    IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack IS INITIAL.
-      READ TABLE mt_steps INTO DATA(ls_step) INDEX m_hist_step.
-      m_target_stack = ls_Step-stacklevel.
+      IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
 
+      IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack IS INITIAL.
+        READ TABLE mt_steps INTO DATA(ls_step) INDEX m_hist_step.
+        m_target_stack = ls_Step-stacklevel.
+
+      ENDIF.
+
+      IF mo_window->m_direction IS NOT INITIAL AND m_hist_step = 1 AND mo_window->m_debug_button IS NOT INITIAL.
+        es_stop = abap_true.
+        RETURN.
+      ENDIF.
+
+      IF mo_window->m_direction IS INITIAL AND m_hist_step = m_step AND mo_window->m_debug_button IS NOT INITIAL.
+        es_stop = abap_true.
+        RETURN.
+      ENDIF.
+
+      IF mo_window->m_direction IS NOT INITIAL AND m_hist_step > 1 AND mo_window->m_debug_button IS NOT INITIAL.
+        SUBTRACT 1 FROM m_hist_step.
+      ENDIF.
+
+      IF mo_window->m_direction IS INITIAL AND m_hist_step < m_step AND mo_window->m_debug_button IS NOT INITIAL.
+        ADD 1  TO m_hist_step.
+      ENDIF.
+    ELSE.
+      lv_hist_step = iv_step.
     ENDIF.
 
-    IF mo_window->m_direction IS NOT INITIAL AND m_hist_step = 1 AND mo_window->m_debug_button IS NOT INITIAL.
-      es_stop = abap_true.
-      RETURN.
-    ENDIF.
-
-    IF mo_window->m_direction IS INITIAL AND m_hist_step = m_step AND mo_window->m_debug_button IS NOT INITIAL.
-      es_stop = abap_true.
-      RETURN.
-    ENDIF.
-
-    IF mo_window->m_direction IS NOT INITIAL AND m_hist_step > 1 AND mo_window->m_debug_button IS NOT INITIAL.
-      SUBTRACT 1 FROM m_hist_step.
-    ENDIF.
-
-    IF mo_window->m_direction IS INITIAL AND m_hist_step < m_step AND mo_window->m_debug_button IS NOT INITIAL.
-      ADD 1  TO m_hist_step.
-    ENDIF.
-
-    READ TABLE mt_steps INTO ls_step INDEX m_hist_step.
+    READ TABLE mt_steps INTO ls_step INDEX lv_hist_step.
     IF mo_window->m_visualization IS NOT INITIAL.
       mo_window->set_program( CONV #( ls_step-include ) ).
       mo_window->set_program_line( ls_step-line ).
@@ -1499,19 +1511,19 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       m_stop_stack = ls_stack-stacklevel.
     ENDIF.
 
-    LOOP AT mt_vars_hist_view INTO DATA(ls_hist) WHERE step =  m_hist_step AND first = 'X'. "OR is_appear = 'X'.
+    LOOP AT mt_vars_hist_view INTO DATA(ls_hist) WHERE step =  lv_hist_step AND first = 'X'. "OR is_appear = 'X'.
       APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
       <hist> = ls_hist.
     ENDLOOP.
 
     IF mo_window->m_direction IS NOT INITIAL.
-      LOOP AT mt_vars_hist_view INTO ls_hist WHERE step =  m_hist_step AND first = abap_false AND is_appear = abap_true.
+      LOOP AT mt_vars_hist_view INTO ls_hist WHERE step =  lv_hist_step AND first = abap_false AND is_appear = abap_true.
         APPEND INITIAL LINE TO lt_del ASSIGNING <hist>.
         <hist> = ls_hist.
       ENDLOOP.
     ENDIF.
 
-    LOOP AT mt_del_vars INTO ls_hist WHERE step = m_hist_step.
+    LOOP AT mt_del_vars INTO ls_hist WHERE step = lv_hist_step.
       APPEND INITIAL LINE TO lt_del ASSIGNING <hist>.
       <hist> = ls_hist.
     ENDLOOP.
@@ -1543,7 +1555,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF mo_window->m_direction IS INITIAL.
 
-      LOOP AT mt_var_step INTO DATA(step) WHERE step = m_hist_step.
+      LOOP AT mt_var_step INTO DATA(step) WHERE step = lv_hist_step.
         READ TABLE lt_hist
          WITH KEY program = step-program
                   eventtype = step-eventtype
@@ -1564,7 +1576,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
       "find deleted variables to del it
-      LOOP AT mt_del_vars INTO ls_hist WHERE step = m_hist_step.
+      LOOP AT mt_del_vars INTO ls_hist WHERE step = lv_hist_step.
 
         mo_tree_local->del_variable( CONV #( ls_hist-name ) ).
       ENDLOOP.
@@ -1572,7 +1584,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF mo_window->m_direction IS NOT INITIAL.
 
-      LOOP AT mt_var_step INTO step WHERE step = m_hist_step.
+      LOOP AT mt_var_step INTO step WHERE step = lv_hist_step.
         READ TABLE lt_hist
          WITH KEY program = step-program
                   eventtype = step-eventtype
@@ -1587,7 +1599,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDLOOP.
 
       IF sy-subrc NE 0.
-        LOOP AT mt_vars_hist_view INTO ls_hist WHERE step = m_hist_step.
+        LOOP AT mt_vars_hist_view INTO ls_hist WHERE step = lv_hist_step.
 
           LOOP AT mt_vars_hist_view
              INTO DATA(ls_var)
@@ -1623,7 +1635,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDLOOP.
 
       "find apeeared variable to delete it
-      LOOP AT mt_vars_hist_view INTO ls_hist WHERE step = m_hist_step  AND is_appear = abap_true AND first IS INITIAL .
+      LOOP AT mt_vars_hist_view INTO ls_hist WHERE step = lv_hist_step  AND is_appear = abap_true AND first IS INITIAL .
         mo_tree_local->del_variable( EXPORTING iv_full_name = CONV #( ls_hist-name ) i_state = abap_true ).
       ENDLOOP.
 
@@ -1656,8 +1668,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF sy-subrc = 0.
       IF m_debug IS NOT INITIAL.BREAK-POINT.ENDIF.
       es_Stop = abap_true.
-      "show_step( ).
-      "me->break( ).
+    ENDIF.
+
+    IF iv_step IS NOT INITIAL.
+      es_Stop = abap_true.
     ENDIF.
 
     mo_tree_local->m_no_refresh = 'X'.
@@ -3002,7 +3016,7 @@ CLASS lcl_window IMPLEMENTATION.
 
       WHEN 'STEPS'.
 
-        lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps ).
+        lcl_appl=>open_int_table( iv_name = 'Steps'   it_tab =  mo_debugger->mt_steps io_window = mo_debugger->mo_window ).
 
       WHEN 'HISTORY'.
         DATA: lt_hist TYPE TABLE OF lcl_appl=>var_table_temp.
@@ -3022,7 +3036,7 @@ CLASS lcl_window IMPLEMENTATION.
             <hist>-value = ls_vars-ref->*.
           ENDIF.
         ENDLOOP.
-        lcl_appl=>open_int_table( iv_name = |mt_vars_hist - History({ lines( lt_hist ) })| it_tab =  lt_hist ).
+        lcl_appl=>open_int_table( iv_name = |mt_vars_hist - History({ lines( lt_hist ) })| it_tab =  lt_hist io_window = mo_debugger->mo_window  ).
 
     ENDCASE.
 
@@ -3210,12 +3224,14 @@ CLASS lcl_table_viewer DEFINITION INHERITING FROM lcl_popup.
           mo_sel_width       TYPE i,
           m_visible,
           m_std_tbar         TYPE x,
-          m_show_empty       TYPE i.
+          m_show_empty       TYPE i,
+          mo_window          TYPE REF TO lcl_window.
 
     METHODS:
       constructor IMPORTING i_tname           TYPE any OPTIONAL
                             i_additional_name TYPE string OPTIONAL
-                            ir_tab            TYPE REF TO data OPTIONAL,
+                            ir_tab            TYPE REF TO data OPTIONAL
+                            io_window         TYPE REF to lcl_window,
       refresh_table FOR EVENT selection_done OF lcl_sel_opt.
 
   PRIVATE SECTION.
@@ -3439,6 +3455,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
                    <temptab> TYPE ANY TABLE.
 
     super->constructor( i_additional_name = i_additional_name ).
+    mo_window = io_window.
     m_lang = sy-langu.
     mo_sel_width = 0.
     m_tabname = i_tname.
@@ -3796,19 +3813,32 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     ASSIGN mr_table->* TO  <f_tab>.
     READ TABLE <f_tab> INDEX es_row_no-row_id ASSIGNING FIELD-SYMBOL(<tab>).
     ASSIGN COMPONENT e_column-fieldname  OF STRUCTURE <tab> TO FIELD-SYMBOL(<val>).
-    IF sy-subrc = 0.
-      IF <val> = 'Table'.
-        ASSIGN COMPONENT 'REF'  OF STRUCTURE <tab> TO FIELD-SYMBOL(<ref>).
-        lcl_appl=>open_int_table( EXPORTING iv_name = CONV #( e_column-fieldname ) it_ref = <ref> ).
-      ENDIF.
-    ELSE.
-      TRY.
-          lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| ).
-          table_clone = lo_table_descr->elem_clone( ).
-          lcl_appl=>open_int_table( EXPORTING iv_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone ).
-        CATCH cx_sy_move_cast_error.
-      ENDTRY.
-    ENDIF.
+    CASE e_column-fieldname.
+      WHEN 'VALUE'.
+        IF sy-subrc = 0.
+          IF <val> = 'Table'.
+            ASSIGN COMPONENT 'REF'  OF STRUCTURE <tab> TO FIELD-SYMBOL(<ref>).
+            lcl_appl=>open_int_table( EXPORTING iv_name = CONV #( e_column-fieldname ) it_ref = <ref> io_window = mo_window ).
+          ENDIF.
+        ELSE.
+          TRY.
+              lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| ).
+              table_clone = lo_table_descr->elem_clone( ).
+              lcl_appl=>open_int_table( EXPORTING iv_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone io_window = mo_window ).
+            CATCH cx_sy_move_cast_error.
+          ENDTRY.
+        ENDIF.
+      WHEN 'STEP'.
+        ASSIGN COMPONENT 'STEP' OF STRUCTURE <tab> TO FIELD-SYMBOL(<step>).
+        mo_window->mo_debugger->run_script_hist( <step> ).
+        READ TABLE   mo_window->mo_debugger->mt_steps INTO DATA(ls_step) with key step = <step>."INDEX  mo_window->mo_debugger->m_hist_step.
+        mo_window->set_program( CONV #( ls_Step-include ) ).
+        mo_window->set_program_line( ls_Step-line ).
+
+        mo_window->mo_Debugger->mo_tree_imp->display( ).
+        mo_window->mo_Debugger->mo_tree_local->display( ).
+        mo_window->mo_Debugger->mo_tree_exp->display( ).
+    ENDCASE.
   ENDMETHOD.
 
   METHOD before_user_command.
@@ -4572,7 +4602,7 @@ CLASS lcl_appl IMPLEMENTATION.
       GET REFERENCE OF it_tab INTO r_tab.
     ENDIF.
     APPEND INITIAL LINE TO lcl_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
-    <obj>-alv_viewer = NEW #(  i_additional_name = iv_name ir_tab = r_tab ).
+    <obj>-alv_viewer = NEW #(  i_additional_name = iv_name ir_tab = r_tab io_window = io_window ).
     <obj>-alv_viewer->mo_sel->raise_selection_done( ).
 
   ENDMETHOD.
@@ -5374,10 +5404,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     CASE <kind>.
       WHEN cl_abap_datadescr=>typekind_table.
-        lcl_appl=>open_int_table( iv_name = <fullname> it_ref = <ref> ).
+        lcl_appl=>open_int_table( iv_name = <fullname> it_ref = <ref> io_window = mo_debugger->mo_window ).
       WHEN cl_abap_datadescr=>typekind_string.
         NEW lcl_text_viewer( <ref> ).
     ENDCASE.
+
   ENDMETHOD.
 
   METHOD del_variable.
