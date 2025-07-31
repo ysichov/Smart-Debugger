@@ -2713,11 +2713,11 @@ CLASS lcl_window IMPLEMENTATION.
   METHOD constructor.
     super->constructor( ).
     mo_debugger = i_debugger.
-    m_history = '01'.
-    m_zcode = '01'.
+    m_history =  m_zcode = m_visualization = '01'.
+    m_hist_depth = 9.
 
     mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.8' i_width = 1400 i_hight = 400 ).
-    CREATE OBJECT mo_splitter ##FM_SUBRC_OK
+    CREATE OBJECT mo_splitter
       EXPORTING
         parent  = mo_box
         rows    = 3
@@ -2825,9 +2825,9 @@ CLASS lcl_window IMPLEMENTATION.
           ls_events LIKE LINE OF lt_events.
 
     lt_button  = VALUE #(
-     ( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization Off' text = 'Visualization Off' )
+     ( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization ON' text = 'Visualization ON' )
      ( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'History On' text = 'History On' )
-     ( function = 'DEPTH' icon = CONV #( icon_next_hierarchy_level ) quickinfo = 'History depth level' text = 'Depth 0' )
+     ( function = 'DEPTH' icon = CONV #( icon_next_hierarchy_level ) quickinfo = 'History depth level' text = |Depth { m_hist_depth }| )
      ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
      ( butn_type = 3  )
      ( function = 'F5' icon = CONV #( icon_debugger_step_into ) quickinfo = 'Step into' text = 'Step into' )
@@ -2960,7 +2960,7 @@ CLASS lcl_window IMPLEMENTATION.
         ENDIF.
 
       WHEN 'DEPTH'.
-        IF m_hist_depth < 3.
+        IF m_hist_depth < 9.
           ADD 1 TO m_hist_depth.
         ELSE.
           CLEAR m_hist_depth.
