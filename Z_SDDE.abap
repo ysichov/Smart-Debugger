@@ -1638,7 +1638,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
     ELSE."history state find refactoring
-      SORT mt_vars_hist BY step ASCENDING.
+      data(lt_vars_hist) = mt_vars_hist.
+      SORT lt_vars_hist BY step ASCENDING FIRST DESCENDING.
       lv_hist_step = iv_step.
 
       mo_tree_local->clear( ).
@@ -1648,7 +1649,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CLEAR lt_hist.
       READ TABLE mt_steps WITH KEY step = iv_step INTO DATA(ls_Steps).
 
-      LOOP AT mt_vars_hist INTO ls_hist
+      LOOP AT lt_vars_hist INTO ls_hist
          WHERE ( leaf = 'LOCAL' OR leaf = 'IMP' OR leaf = 'EXP' )
            AND program = ls_Steps-program
            AND stack = ls_steps-stacklevel
@@ -1666,7 +1667,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDLOOP.
 
       IF  mo_tree_local->m_globals IS NOT INITIAL.
-        LOOP AT mt_vars_hist INTO ls_hist
+        LOOP AT lt_vars_hist INTO ls_hist
            WHERE leaf = 'GLOBAL'
              AND program = ls_Steps-program
              AND step <= lv_hist_step.
@@ -1683,7 +1684,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDLOOP.
       ENDIF.
       IF  mo_tree_local->m_class_data IS NOT INITIAL.
-        LOOP AT mt_vars_hist INTO ls_hist
+        LOOP AT lt_vars_hist INTO ls_hist
           WHERE leaf = 'CLASS'
             AND step <= lv_hist_step.
           IF ls_hist-step = lv_hist_step AND ls_hist-first IS INITIAL.
@@ -1706,7 +1707,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CLEAR <state>-done.
     ENDLOOP.
     IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
-    es_stop = show_variables( CHANGING it_var = mt_state ).
+    IF mt_state IS NOT INITIAL.
+      es_stop = show_variables( CHANGING it_var = mt_state ).
+    ELSE.
+      es_stop = abap_true.
+    ENDIF.
 
     IF mo_window->m_debug_button = 'F5'.
       es_Stop = abap_true.
