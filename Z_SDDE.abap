@@ -1487,7 +1487,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
 
-      READ TABLE mt_steps INTO ls_step INDEX lv_hist_step.
+      READ TABLE mt_steps INTO ls_step INDEX m_hist_step.
       IF mo_window->m_visualization IS NOT INITIAL.
         mo_window->set_program( CONV #( ls_step-include ) ).
         mo_window->set_program_line( ls_step-line ).
@@ -1637,9 +1637,50 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       ENDIF.
 
+LOOP AT mt_state ASSIGNING FIELD-SYMBOL(<state>).
+      CLEAR <state>-done.
+    ENDLOOP.
+    IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
+    IF mt_state IS NOT INITIAL.
+      es_stop = show_variables( CHANGING it_var = mt_state ).
+*    ELSE.
+*      es_stop = abap_true.
+    ENDIF.
+
+    IF mo_window->m_debug_button = 'F5'.
+      es_Stop = abap_true.
+    ENDIF.
+
+    IF mo_window->m_debug_button = 'F6' AND m_stop_stack = ls_stack-stacklevel.
+
+      es_Stop = abap_true.
+      CLEAR m_stop_stack.
+    ENDIF.
+
+    IF ( mo_window->m_debug_button = 'F6BEG' AND ls_step-first = abap_true AND m_target_stack = ls_stack-stacklevel ) OR
+       ( mo_window->m_debug_button = 'F6END' AND ls_step-last = abap_true  AND m_target_stack = ls_stack-stacklevel ).
+      CLEAR m_target_stack.
+      es_Stop = abap_true.
+    ENDIF.
+
+    READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = ls_step-include linesrc = ls_step-line INTO DATA(ls_break).
+    IF sy-subrc = 0.
+      IF m_debug IS NOT INITIAL.BREAK-POINT.ENDIF.
+      es_Stop = abap_true.
+    ENDIF.
+
+    IF iv_step IS NOT INITIAL.
+      es_Stop = abap_true.
+    ENDIF.
+
+    mo_tree_local->m_no_refresh = 'X'.
+    mo_tree_exp->m_no_refresh = 'X'.
+    mo_tree_imp->m_no_refresh = 'X'.
+    IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
+
     ELSE."history state find refactoring
-      data(lt_vars_hist) = mt_vars_hist.
-      SORT lt_vars_hist BY step ASCENDING FIRST DESCENDING.
+      DATA(lt_vars_hist) = mt_vars_hist.
+      SORT lt_vars_hist BY step ASCENDING first DESCENDING.
       lv_hist_step = iv_step.
 
       mo_tree_local->clear( ).
@@ -1700,43 +1741,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDLOOP.
       ENDIF.
       SORT lt_hist BY name.
-    ENDIF.
-    mt_state = lt_hist.
 
-    LOOP AT mt_state ASSIGNING FIELD-SYMBOL(<state>).
-      CLEAR <state>-done.
-    ENDLOOP.
-    IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
-    IF mt_state IS NOT INITIAL.
-      es_stop = show_variables( CHANGING it_var = mt_state ).
-    ELSE.
-      es_stop = abap_true.
-    ENDIF.
+      LOOP AT lt_hist ASSIGNING <state>.
+        CLEAR <state>-done.
+      ENDLOOP.
+      IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
+      IF lt_hist IS NOT INITIAL.
+        es_stop = show_variables( CHANGING it_var = lt_hist ).
+      ELSE.
+        es_stop = abap_true.
+      ENDIF.
 
-    IF mo_window->m_debug_button = 'F5'.
-      es_Stop = abap_true.
-    ENDIF.
-
-    IF mo_window->m_debug_button = 'F6' AND m_stop_stack = ls_stack-stacklevel.
-
-      es_Stop = abap_true.
-      CLEAR m_stop_stack.
-    ENDIF.
-
-    IF ( mo_window->m_debug_button = 'F6BEG' AND ls_step-first = abap_true AND m_target_stack = ls_stack-stacklevel ) OR
-       ( mo_window->m_debug_button = 'F6END' AND ls_step-last = abap_true  AND m_target_stack = ls_stack-stacklevel ).
-      CLEAR m_target_stack.
-      es_Stop = abap_true.
-    ENDIF.
-
-    READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = ls_step-include linesrc = ls_step-line INTO DATA(ls_break).
-    IF sy-subrc = 0.
-      IF m_debug IS NOT INITIAL.BREAK-POINT.ENDIF.
-      es_Stop = abap_true.
-    ENDIF.
-
-    IF iv_step IS NOT INITIAL.
-      es_Stop = abap_true.
     ENDIF.
 
     mo_tree_local->m_no_refresh = 'X'.
