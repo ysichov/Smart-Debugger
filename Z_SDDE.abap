@@ -156,14 +156,9 @@ CLASS lcl_appl DEFINITION.
              program(40)   TYPE c,
              leaf          TYPE string,
              path          TYPE string,
-             "short         TYPE string,
-             "key           TYPE salv_de_node_key,
-             "parent        TYPE string,
-             "cl_leaf       TYPE int4,
              type          TYPE string,
              instance      TYPE string,
              objname       TYPE string,
-             "done          TYPE xfeld,
              ref           TYPE REF TO data,
            END OF var_table_temp,
 
@@ -230,7 +225,7 @@ CLASS lcl_appl DEFINITION.
 
     CLASS-METHODS:
       init_icons_table,
-      init_lang,
+    
       open_int_table IMPORTING it_tab    TYPE ANY TABLE OPTIONAL
                                it_ref    TYPE REF TO data OPTIONAL
                                iv_name   TYPE string
@@ -441,21 +436,17 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mt_state          TYPE STANDARD TABLE OF lcl_appl=>var_table,
 
           mt_classes_types  TYPE TABLE OF lcl_appl=>t_classes_types,
-          m_classname       TYPE string,
 
           mo_window         TYPE REF TO lcl_window,
           mv_f7_stop        TYPE xfeld,
           m_f6_level        TYPE i,
           m_target_stack    TYPE i,
-          "m_f7_level       TYPE i,
-          "m_end_level      TYPE i,
 
           mo_tree_imp       TYPE REF TO lcl_rtti_tree,
           mo_tree_local     TYPE REF TO lcl_rtti_tree,
           mo_tree_exp       TYPE REF TO lcl_rtti_tree,
           mv_selected_var   TYPE string,
           m_ref_val         TYPE REF TO data,
-          mv_stop_next      TYPE flag,
           mv_stack_changed  TYPE xfeld,
           m_variable        TYPE REF TO data,
           mt_new_string     TYPE TABLE OF  string,
@@ -599,8 +590,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
 
     DATA: main_node_key   TYPE salv_de_node_key,
           m_leaf          TYPE string,
-          m_variable      TYPE REF TO data,
-          m_object        TYPE REF TO object,
           m_hide          TYPE x,
           m_clear         TYPE flag,
           m_locals        TYPE x,
@@ -616,7 +605,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
           m_icon          TYPE salv_de_tree_image,
           mt_vars         TYPE STANDARD TABLE OF lcl_appl=>var_table,
           mt_classes_leaf TYPE TABLE OF t_classes_leaf,
-          m_new_node      TYPE salv_de_node_key,
           m_no_refresh    TYPE xfeld,
           m_prg_info      TYPE tpda_scr_prg_info,
           mo_debugger     TYPE REF TO lcl_debugger_script,
@@ -775,7 +763,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     CONSTANTS: c_mask TYPE x VALUE '01'.
 
     is_step = abap_on.
-    lcl_appl=>init_lang( ).
     lcl_appl=>init_icons_table( ).
 
     mo_window = NEW lcl_window( me ).
@@ -1119,12 +1106,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           r_header       TYPE REF TO data,
           r_elem         TYPE REF TO data.
 
-    DATA: lr_new TYPE REF TO data,
-          lv_len TYPE i.
-
-    FIELD-SYMBOLS: <new>      TYPE any,
-                   <tab_from> TYPE ANY TABLE,
-                   <tab_to>   TYPE STANDARD TABLE.
+    DATA: lv_len TYPE i.
 
     FIELD-SYMBOLS: <lv_value> TYPE any.
 
@@ -1337,9 +1319,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     DATA: ls_obj         LIKE LINE OF mt_obj,
           lr_struc       TYPE REF TO data,
-          lv_node_key    TYPE salv_de_node_key,
-          lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
-          table_clone    TYPE REF TO data,
           lo_object      TYPE REF TO cl_tpda_script_objectdescr,
           lo_descr       TYPE REF TO cl_tpda_script_data_descr,
           lt_attributes  TYPE tpda_script_object_attribut_it.
@@ -1452,7 +1431,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD run_script_hist.
 
     DATA: lt_hist      LIKE mt_vars_hist_view,
-          lt_del       LIKE mt_vars_hist_view,
           lv_hist_step TYPE i.
     IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
     is_history = abap_true.
@@ -2174,8 +2152,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD show_step.
-
-    show_variables( CHANGING it_var = mt_state ).
+    run_Script_hist( m_hist_step ).
     mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
     mo_window->set_program_line( mo_window->m_prg-line ).
     mo_window->show_stack( ).
@@ -2337,7 +2314,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     <state>-step = m_step - m_step_delta.
     <state>-instance = i_instance.
 
-
     IF ir_up IS SUPPLIED.
       <state>-ref = ir_up.
 
@@ -2420,9 +2396,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     "create new data
     DATA: lr_new   TYPE REF TO data,
-          lr_struc TYPE REF TO data,
-          l_name   TYPE string,
-          lv_len   TYPE i.
+          lr_struc TYPE REF TO data.
 
     FIELD-SYMBOLS: <new>      TYPE any,
                    <tab_from> TYPE ANY TABLE,
@@ -2497,11 +2471,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD traverse_struct.
     DATA: lt_component    TYPE abap_component_tab,
           ls_component    LIKE LINE OF lt_component,
-          deep_ref        TYPE REF TO cl_abap_typedescr,
           lo_struct_descr TYPE REF TO cl_abap_structdescr,
-          lo_deep_handle  TYPE REF TO cl_abap_datadescr,
           lv_string       TYPE string,
-          lv_icon         TYPE salv_de_tree_image,
           lv_parent       TYPE string.
 
     lo_struct_descr ?= io_type_descr.
@@ -2758,7 +2729,6 @@ CLASS lcl_window IMPLEMENTATION.
 
   METHOD add_toolbar_buttons.
     DATA: lt_button TYPE ttb_button,
-          ls_button LIKE LINE OF lt_button,
           lt_events TYPE cntl_simple_events,
           ls_events LIKE LINE OF lt_events.
 
@@ -3011,7 +2981,6 @@ CLASS lcl_window IMPLEMENTATION.
               READ TABLE  mo_debugger->mt_steps INTO DATA(ls_step) INDEX mo_debugger->m_hist_step.
               set_program( CONV #( ls_step-include ) ).
               set_program_line( ls_step-line ).
-
               mo_Debugger->mo_tree_imp->display( ).
               mo_Debugger->mo_tree_local->display( ).
               mo_Debugger->mo_tree_exp->display( ).
@@ -3639,14 +3608,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
        ( function = 'SEL_ON' icon = icon_arrow_left quickinfo = 'Show Select-Options'  butn_type = 0 )
        ( butn_type = 3 ) ).
     ENDIF.
-    "APPEND VALUE #( function = 'TECH' icon = icon_wd_caption quickinfo = 'Tech names'  butn_type = 0 ) TO lt_toolbar.
-
-*      LOOP AT lcl_appl=>mt_lang INTO DATA(lang).
-*        IF sy-tabix > 10.
-*          EXIT.
-*        ENDIF.
-*        APPEND VALUE #( function = lang-spras icon = icon_foreign_trade quickinfo = lang-sptxt butn_type = 0 text = lang-sptxt ) TO lt_toolbar.
-*      ENDLOOP.
 
     lt_toolbar = VALUE ttb_button( BASE lt_toolbar
      ( function = 'SHOW'  icon = icon_list  quickinfo = 'Show empty columns'   butn_type = 0  )
@@ -3666,7 +3627,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
           lr_table_descr TYPE REF TO cl_abap_structdescr,
           lr_data_descr  TYPE REF TO cl_abap_datadescr,
           it_tabdescr    TYPE abap_compdescr_tab,
-          l_replace      TYPE string,
           l_texttab      TYPE tabname,
           lr_temp        TYPE REF TO data,
           l_name         TYPE string,
@@ -3688,7 +3648,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
 
     it_tabdescr[] = lr_table_descr->components[].
     lcl_ddic=>get_text_table( EXPORTING i_tname = i_tname IMPORTING e_tab = l_texttab ).
-    l_replace = l_texttab && '_'.
 
     LOOP AT it_tabdescr INTO DATA(ls)
        WHERE type_kind NE 'h'
@@ -4508,16 +4467,7 @@ CLASS lcl_appl IMPLEMENTATION.
      ( sign = 'E'   option = 'NB'   icon_name = icon_interval_exclude_red ) ).
   ENDMETHOD.
 
-  METHOD init_lang.
-*      SELECT c~spras t~sptxt INTO CORRESPONDING FIELDS OF TABLE mt_lang
-*        FROM t002c AS c
-*        INNER JOIN t002t AS t
-*        ON c~spras = t~sprsl
-*        WHERE t~spras = sy-langu
-*        ORDER BY c~ladatum DESCENDING c~lauzeit DESCENDING.
-  ENDMETHOD.
-
-  METHOD open_int_table.
+    METHOD open_int_table.
 
     DATA r_tab TYPE REF TO data.
     IF it_ref IS BOUND.
@@ -4552,13 +4502,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lo_columns->set_optimize( abap_true ).
 
     lo_columns->get_column( 'VALUE' )->set_short_text( 'Value' ).
-    "lo_columns->get_column( 'FULLNAME' )->set_short_text( 'Full name' ).
-
-    "IF i_type NE 'L'.
-    lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
-    "ENDIF.
-
-    lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
+      lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
+      lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
     lo_columns->get_column( 'TYPENAME' )->set_medium_text( 'Absolute Type' ).
     lo_columns->get_column( 'OBJNAME' )->set_short_text( 'Int. obj.' ).
     lo_columns->get_column( 'OBJNAME' )->set_medium_text( 'Int. obj. name' ).
@@ -4697,14 +4642,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
   METHOD traverse_struct.
     DATA: lt_component    TYPE abap_component_tab,
-          ls_component    LIKE LINE OF lt_component,
           lo_struct_descr TYPE REF TO cl_abap_structdescr,
           ls_tree         TYPE ts_table,
           lv_text         TYPE lvc_value,
-          lv_string       TYPE string,
           l_key           TYPE salv_de_node_key,
           l_rel           TYPE salv_de_node_relation,
-          lv_node_key     TYPE salv_de_node_key,
           lv_icon         TYPE salv_de_tree_image.
 
     ASSIGN is_var-ref->* TO FIELD-SYMBOL(<new_value>).
@@ -4894,17 +4836,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
             DELETE mt_vars WHERE name = is_var-name.
           ELSE.
             IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
-              "me->del_variable( iv_full_name = iv_fullname iv_del_in_tree = abap_true ).
             ELSE.
               RETURN.
             ENDIF.
           ENDIF.
-          "ELSE.
-          "  l_key = l_var-key.
-          "  l_rel = if_salv_c_node_relation=>next_sibling.
-          "  DELETE mt_vars WHERE name = is_var-name.
-          "ENDIF.
-
+  
         CATCH cx_root.
           DELETE mt_vars WHERE name = is_var-name.
       ENDTRY.
@@ -4955,8 +4891,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD traverse_obj.
-    DATA: lo_elem_descr TYPE REF TO cl_abap_elemdescr,
-          ls_tree       TYPE ts_table,
+    DATA: ls_tree       TYPE ts_table,
           lv_text       TYPE lvc_value,
           lv_icon       TYPE salv_de_tree_image,
           l_key         TYPE salv_de_node_key,
@@ -5197,11 +5132,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    DATA l_new_node TYPE salv_de_node_key.
     DATA lv_text TYPE lvc_value.
     DATA lv_node_key TYPE salv_de_node_key.
     DATA lv_icon TYPE salv_de_tree_image.
-    DATA ls_tree TYPE ts_table.
 
     CASE is_var-cl_leaf.
       WHEN 1.
@@ -5271,9 +5204,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD hndl_user_command.
-    DATA: lv_step TYPE i.
 
     CONSTANTS: c_mask TYPE x VALUE '01'.
+
     CASE e_salv_function.
       WHEN 'REFRESH'."
         mo_debugger->run_script_new( ).
@@ -5336,18 +5269,16 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD del_variable.
-    DATA lv_len   TYPE i.
     DATA(lt_hist) = mo_debugger->mt_vars_hist.
     SORT lt_hist BY step DESCENDING.
     LOOP AT lt_hist INTO DATA(ls_hist) WHERE name = iv_full_name.
       IF ls_hist-del IS INITIAL.
         CLEAR: ls_hist-ref, ls_hist-first.
-        ls_hist-del = abap_true. 
+        ls_hist-del = abap_true.
         ls_hist-step = mo_debugger->m_hist_step - 1.
         INSERT ls_hist INTO mo_debugger->mt_vars_hist INDEX 1.
       ENDIF.
     ENDLOOP.
-
 
     READ TABLE mt_vars WITH KEY name = iv_full_name ASSIGNING FIELD-SYMBOL(<var>).
     IF sy-subrc = 0.
@@ -5373,7 +5304,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDIF.
 
       DATA(l_nam) = iv_full_name && '-'.
-      lv_len = strlen( l_nam ).
       DELETE mt_vars WHERE name CS l_nam.
       DELETE mt_classes_leaf WHERE name  CS l_nam.
       IF i_state = abap_true.
