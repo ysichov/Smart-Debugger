@@ -1680,18 +1680,19 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           <hist> = ls_hist.
         ENDIF.
       ENDLOOP.
-*IF mo_tree_local->m_class_key IS NOT INITIAL AND mo_tree_local->m_class_data IS INITIAL.
-*       LOOP AT mt_vars_hist INTO ls_hist
-*         WHERE leaf = 'CLASS'
-*           AND step < lv_source_step.
-*        READ TABLE lt_hist WITH KEY name = ls_hist-name ASSIGNING <hist>.
-*        IF sy-subrc = 0.
-*          <hist> = ls_hist.
-*        ELSE.
-*          APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
-*          <hist> = ls_hist.
-*        ENDIF.
-*      ENDLOOP.
+      IF  mo_tree_local->m_class_data IS NOT INITIAL.
+        LOOP AT mt_vars_hist INTO ls_hist
+          WHERE leaf = 'CLASS'
+            AND step < lv_source_step.
+          READ TABLE lt_hist WITH KEY name = ls_hist-name ASSIGNING <hist>.
+          IF sy-subrc = 0.
+            <hist> = ls_hist.
+          ELSE.
+            APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+            <hist> = ls_hist.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
       SORT lt_hist BY name.
     ENDIF.
     mt_state = lt_hist.
