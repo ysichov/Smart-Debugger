@@ -149,9 +149,9 @@ CLASS lcl_appl DEFINITION.
              eventname(61) TYPE c,
              name          TYPE string,
              value         TYPE string,
+             first         TYPE xfeld,
+             is_appear     TYPE xfeld,
              program(40)   TYPE c,
-             "first         TYPE xfeld,
-             "is_appear     TYPE xfeld,
              leaf          TYPE string,
              path          TYPE string,
              "short         TYPE string,
@@ -229,10 +229,10 @@ CLASS lcl_appl DEFINITION.
     CLASS-METHODS:
       init_icons_table,
       init_lang,
-      open_int_table IMPORTING it_tab  TYPE ANY TABLE OPTIONAL
-                               it_ref  TYPE REF TO data OPTIONAL
-                               iv_name TYPE string
-                               io_window type ref to lcl_window.
+      open_int_table IMPORTING it_tab    TYPE ANY TABLE OPTIONAL
+                               it_ref    TYPE REF TO data OPTIONAL
+                               iv_name   TYPE string
+                               io_window TYPE REF TO lcl_window.
 ENDCLASS.
 
 CLASS lcl_popup DEFINITION.
@@ -1487,122 +1487,138 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       IF mo_window->m_direction IS INITIAL AND m_hist_step < m_step AND mo_window->m_debug_button IS NOT INITIAL.
         ADD 1  TO m_hist_step.
       ENDIF.
-    ELSE.
-      lv_hist_step = iv_step.
-    ENDIF.
 
-    READ TABLE mt_steps INTO ls_step INDEX lv_hist_step.
-    IF mo_window->m_visualization IS NOT INITIAL.
-      mo_window->set_program( CONV #( ls_step-include ) ).
-      mo_window->set_program_line( ls_step-line ).
-    ENDIF.
 
-    IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack =  ls_step-stacklevel.
-      CLEAR m_target_stack.
-      es_stop = abap_true.
-    ENDIF.
+      READ TABLE mt_steps INTO ls_step INDEX lv_hist_step.
+      IF mo_window->m_visualization IS NOT INITIAL.
+        mo_window->set_program( CONV #( ls_step-include ) ).
+        mo_window->set_program_line( ls_step-line ).
+      ENDIF.
 
-    READ TABLE mo_window->mt_stack INTO DATA(ls_stack) INDEX 1.
+      IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack =  ls_step-stacklevel.
+        CLEAR m_target_stack.
+        es_stop = abap_true.
+      ENDIF.
 
-    MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
+      READ TABLE mo_window->mt_stack INTO DATA(ls_stack) INDEX 1.
 
-    IF mo_window->m_debug_button = 'F6' AND m_stop_stack IS INITIAL.
+      MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
 
-      m_stop_stack = ls_stack-stacklevel.
-    ENDIF.
+      IF mo_window->m_debug_button = 'F6' AND m_stop_stack IS INITIAL.
 
-    LOOP AT mt_vars_hist_view INTO DATA(ls_hist) WHERE step =  lv_hist_step AND first = 'X'. "OR is_appear = 'X'.
-      APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
-      <hist> = ls_hist.
-    ENDLOOP.
+        m_stop_stack = ls_stack-stacklevel.
+      ENDIF.
 
-    IF mo_window->m_direction IS NOT INITIAL.
-      LOOP AT mt_vars_hist_view INTO ls_hist WHERE step =  lv_hist_step AND first = abap_false AND is_appear = abap_true.
-        APPEND INITIAL LINE TO lt_del ASSIGNING <hist>.
+      LOOP AT mt_vars_hist_view INTO DATA(ls_hist) WHERE step =  lv_hist_step AND first = 'X'. "OR is_appear = 'X'.
+        APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
         <hist> = ls_hist.
       ENDLOOP.
-    ENDIF.
 
-    LOOP AT mt_del_vars INTO ls_hist WHERE step = lv_hist_step.
-      APPEND INITIAL LINE TO lt_del ASSIGNING <hist>.
-      <hist> = ls_hist.
-    ENDLOOP.
-
-    IF ls_stack-stacklevel NE ls_step-stacklevel.
-
-      CLEAR: m_step_delta,
-       mt_ret_exp,
-       mt_obj,
-       mt_state,
-       mt_ret_exp.
-
-      mo_tree_local->clear( ).
-      mo_tree_exp->clear( ).
-      mo_tree_imp->clear( ).
-
-      IF ls_stack-stacklevel < ls_step-stacklevel.
-        MOVE-CORRESPONDING ls_step TO ls_stack.
-
-        CLEAR mo_window->mt_stack[ 1 ]-stackpointer.
-        INSERT ls_stack INTO mo_window->mt_stack INDEX 1.
-      ELSE.
-        DELETE mo_window->mt_stack WHERE stacklevel > ls_step-stacklevel.
-      ENDIF.
-      READ TABLE mo_window->mt_stack INTO ls_stack INDEX 1.
-      MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
-      mo_window->show_stack( ).
-    ENDIF.
-
-    IF mo_window->m_direction IS INITIAL.
-
-      LOOP AT mt_var_step INTO DATA(step) WHERE step = lv_hist_step.
-        READ TABLE lt_hist
-         WITH KEY program = step-program
-                  eventtype = step-eventtype
-                  eventname = step-eventname
-                  name      = step-name
-                   TRANSPORTING NO FIELDS.
-
-        IF sy-subrc NE 0.
-          APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
-          MOVE-CORRESPONDING step TO <hist> .
-        ENDIF.
-      ENDLOOP.
-      IF sy-subrc NE 0.
-        LOOP AT mt_vars_hist_view INTO ls_hist WHERE step = lv_prev_step  AND first NE 'X' .
-          APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+      IF mo_window->m_direction IS NOT INITIAL.
+        LOOP AT mt_vars_hist_view INTO ls_hist WHERE step =  lv_hist_step AND first = abap_false AND is_appear = abap_true.
+          APPEND INITIAL LINE TO lt_del ASSIGNING <hist>.
           <hist> = ls_hist.
         ENDLOOP.
       ENDIF.
 
-      "find deleted variables to del it
       LOOP AT mt_del_vars INTO ls_hist WHERE step = lv_hist_step.
-
-        mo_tree_local->del_variable( CONV #( ls_hist-name ) ).
+        APPEND INITIAL LINE TO lt_del ASSIGNING <hist>.
+        <hist> = ls_hist.
       ENDLOOP.
-    ENDIF.
 
-    IF mo_window->m_direction IS NOT INITIAL.
+      IF ls_stack-stacklevel NE ls_step-stacklevel.
 
-      LOOP AT mt_var_step INTO step WHERE step = lv_hist_step.
-        READ TABLE lt_hist
-         WITH KEY program = step-program
-                  eventtype = step-eventtype
-                  eventname = step-eventname
-                  name      = step-name
-                  TRANSPORTING NO FIELDS.
+        CLEAR: m_step_delta,
+         mt_ret_exp,
+         mt_obj,
+         mt_state,
+         mt_ret_exp.
+
+        mo_tree_local->clear( ).
+        mo_tree_exp->clear( ).
+        mo_tree_imp->clear( ).
+
+        IF ls_stack-stacklevel < ls_step-stacklevel.
+          MOVE-CORRESPONDING ls_step TO ls_stack.
+
+          CLEAR mo_window->mt_stack[ 1 ]-stackpointer.
+          INSERT ls_stack INTO mo_window->mt_stack INDEX 1.
+        ELSE.
+          DELETE mo_window->mt_stack WHERE stacklevel > ls_step-stacklevel.
+        ENDIF.
+        READ TABLE mo_window->mt_stack INTO ls_stack INDEX 1.
+        MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
+        mo_window->show_stack( ).
+      ENDIF.
+
+      IF mo_window->m_direction IS INITIAL.
+
+        LOOP AT mt_var_step INTO DATA(step) WHERE step = lv_hist_step.
+          READ TABLE lt_hist
+           WITH KEY program = step-program
+                    eventtype = step-eventtype
+                    eventname = step-eventname
+                    name      = step-name
+                     TRANSPORTING NO FIELDS.
+
+          IF sy-subrc NE 0.
+            APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+            MOVE-CORRESPONDING step TO <hist> .
+          ENDIF.
+        ENDLOOP.
+        IF sy-subrc NE 0.
+          LOOP AT mt_vars_hist_view INTO ls_hist WHERE step = lv_prev_step  AND first NE 'X' .
+            APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+            <hist> = ls_hist.
+          ENDLOOP.
+        ENDIF.
+
+        "find deleted variables to del it
+        LOOP AT mt_del_vars INTO ls_hist WHERE step = lv_hist_step.
+
+          mo_tree_local->del_variable( CONV #( ls_hist-name ) ).
+        ENDLOOP.
+      ENDIF.
+
+      IF mo_window->m_direction IS NOT INITIAL.
+
+        LOOP AT mt_var_step INTO step WHERE step = lv_hist_step.
+          READ TABLE lt_hist
+           WITH KEY program = step-program
+                    eventtype = step-eventtype
+                    eventname = step-eventname
+                    name      = step-name
+                    TRANSPORTING NO FIELDS.
+
+          IF sy-subrc NE 0.
+            APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+            MOVE-CORRESPONDING step TO <hist> .
+          ENDIF.
+        ENDLOOP.
 
         IF sy-subrc NE 0.
-          APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
-          MOVE-CORRESPONDING step TO <hist> .
-        ENDIF.
-      ENDLOOP.
+          LOOP AT mt_vars_hist_view INTO ls_hist WHERE step = lv_hist_step.
 
-      IF sy-subrc NE 0.
-        LOOP AT mt_vars_hist_view INTO ls_hist WHERE step = lv_hist_step.
+            LOOP AT mt_vars_hist_view
+               INTO DATA(ls_var)
+               WHERE step < ls_hist-step
+                 AND name = ls_hist-name.
+
+              READ TABLE lt_hist ASSIGNING <hist> WITH KEY name = ls_var-name.
+              IF sy-subrc NE 0.
+                APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+              ENDIF.
+              <hist> = ls_var.
+              EXIT.
+            ENDLOOP.
+          ENDLOOP.
+        ENDIF.
+
+        "find deleted variables to restore it
+        LOOP AT mt_del_vars INTO ls_hist WHERE step = lv_prev_step.
 
           LOOP AT mt_vars_hist_view
-             INTO DATA(ls_var)
+             INTO ls_var
              WHERE step < ls_hist-step
                AND name = ls_hist-name.
 
@@ -1611,34 +1627,74 @@ CLASS lcl_debugger_script IMPLEMENTATION.
               APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
             ENDIF.
             <hist> = ls_var.
+            CLEAR <hist>-key.
             EXIT.
           ENDLOOP.
         ENDLOOP.
+
+        "find apeeared variable to delete it
+        LOOP AT mt_vars_hist_view INTO ls_hist WHERE step = lv_hist_step  AND is_appear = abap_true AND first IS INITIAL .
+          mo_tree_local->del_variable( EXPORTING iv_full_name = CONV #( ls_hist-name ) i_state = abap_true ).
+        ENDLOOP.
+
       ENDIF.
 
-      "find deleted variables to restore it
-      LOOP AT mt_del_vars INTO ls_hist WHERE step = lv_prev_step.
+    ELSE."history state find refactoring
+      SORT mt_vars_hist BY step ASCENDING.
+      lv_hist_step = iv_step.
 
-        LOOP AT mt_vars_hist_view
-           INTO ls_var
-           WHERE step < ls_hist-step
-             AND name = ls_hist-name.
+      "IF lv_hist_step > 2.
+      "DATA(lv_source_step) = lv_hist_step - 1.
+      "ELSE.
+        data(lv_source_step) = lv_hist_step.
+      "ENDIF.
 
-          READ TABLE lt_hist ASSIGNING <hist> WITH KEY name = ls_var-name.
-          IF sy-subrc NE 0.
-            APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
-          ENDIF.
-          <hist> = ls_var.
-          CLEAR <hist>-key.
-          EXIT.
-        ENDLOOP.
+      Clear mo_tree_local->m_clear.
+      mo_tree_exp->clear( ).
+      mo_tree_imp->clear( ).
+
+      CLEAR lt_hist.
+      READ TABLE mt_steps with key step = iv_step into data(ls_Steps).
+
+      LOOP AT mt_vars_hist INTO ls_hist
+         WHERE ( leaf = 'LOCAL' OR leaf = 'IMP' OR leaf = 'EXP' )
+           "AND program = ls_Steps-program
+           AND stack = ls_steps-stacklevel
+           AND step <= lv_source_step.
+        READ TABLE lt_hist WITH KEY name = ls_hist-name ASSIGNING <hist>.
+        IF sy-subrc = 0.
+          <hist> = ls_hist.
+        ELSE.
+          APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+          <hist> = ls_hist.
+        ENDIF.
       ENDLOOP.
 
-      "find apeeared variable to delete it
-      LOOP AT mt_vars_hist_view INTO ls_hist WHERE step = lv_hist_step  AND is_appear = abap_true AND first IS INITIAL .
-        mo_tree_local->del_variable( EXPORTING iv_full_name = CONV #( ls_hist-name ) i_state = abap_true ).
+      LOOP AT mt_vars_hist INTO ls_hist
+         WHERE leaf = 'GLOBAL'
+           AND program = ls_Steps-program
+           AND step <= lv_source_step.
+        READ TABLE lt_hist WITH KEY name = ls_hist-name ASSIGNING <hist>.
+        IF sy-subrc = 0.
+          <hist> = ls_hist.
+        ELSE.
+          APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+          <hist> = ls_hist.
+        ENDIF.
       ENDLOOP.
 
+*       LOOP AT mt_vars_hist INTO ls_hist
+*         WHERE leaf = 'CLASS'
+*           AND step < lv_source_step.
+*        READ TABLE lt_hist WITH KEY name = ls_hist-name ASSIGNING <hist>.
+*        IF sy-subrc = 0.
+*          <hist> = ls_hist.
+*        ELSE.
+*          APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+*          <hist> = ls_hist.
+*        ENDIF.
+*      ENDLOOP.
+    SORT lt_hist by name.
     ENDIF.
     mt_state = lt_hist.
 
@@ -1986,7 +2042,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     l_rel = if_salv_c_node_relation=>last_child.
 
     LOOP AT it_var ASSIGNING FIELD-SYMBOL(<var>) WHERE done = abap_false.
-
+      IF m_debug IS NOT INITIAL. BREAK-POINT.ENDIF.
       CASE <var>-leaf.
         WHEN 'LOCAL'.
           mo_tree_local->m_leaf =  'LOCAL'.
@@ -3231,7 +3287,7 @@ CLASS lcl_table_viewer DEFINITION INHERITING FROM lcl_popup.
       constructor IMPORTING i_tname           TYPE any OPTIONAL
                             i_additional_name TYPE string OPTIONAL
                             ir_tab            TYPE REF TO data OPTIONAL
-                            io_window         TYPE REF to lcl_window,
+                            io_window         TYPE REF TO lcl_window,
       refresh_table FOR EVENT selection_done OF lcl_sel_opt.
 
   PRIVATE SECTION.
@@ -3831,7 +3887,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       WHEN 'STEP'.
         ASSIGN COMPONENT 'STEP' OF STRUCTURE <tab> TO FIELD-SYMBOL(<step>).
         mo_window->mo_debugger->run_script_hist( <step> ).
-        READ TABLE   mo_window->mo_debugger->mt_steps INTO DATA(ls_step) with key step = <step>."INDEX  mo_window->mo_debugger->m_hist_step.
+        READ TABLE   mo_window->mo_debugger->mt_steps INTO DATA(ls_step) WITH KEY step = <step>."INDEX  mo_window->mo_debugger->m_hist_step.
         mo_window->set_program( CONV #( ls_Step-include ) ).
         mo_window->set_program_line( ls_Step-line ).
 
