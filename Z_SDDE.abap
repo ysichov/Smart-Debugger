@@ -1690,11 +1690,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CLEAR lt_hist.
       READ TABLE mt_steps WITH KEY step = iv_step INTO DATA(ls_Steps).
 
-      LOOP AT lt_vars_hist INTO ls_hist
-         WHERE ( leaf = 'LOCAL' OR leaf = 'IMP' OR leaf = 'EXP' )
-           AND program = ls_Steps-program
-           AND stack = ls_steps-stacklevel
-           AND step <= lv_hist_step.
+      LOOP AT lt_vars_hist INTO ls_hist WHERE step <= lv_hist_step.
+        IF  mo_tree_local->m_globals IS INITIAL and ls_hist-leaf = 'GLOBAL' OR ls_hist-program <> ls_Steps-program.
+          CONTINUE.
+        ENDIF.
+         IF  mo_tree_local->m_class_data IS INITIAL and ls_hist-leaf = 'CLASS'.
+          CONTINUE.
+        ENDIF.
+         IF ( ls_hist-leaf = 'LOCAL' OR ls_hist-leaf = 'IMP' OR ls_hist-leaf = 'EXP' ) AND ls_hist-stack <> ls_steps-stacklevel.
+          CONTINUE.
+        ENDIF.
+
         IF ls_hist-step = lv_hist_step AND ls_hist-first IS INITIAL.
           CONTINUE.
         ENDIF.
@@ -1711,39 +1717,39 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDIF.
       ENDLOOP.
 
-      IF  mo_tree_local->m_globals IS NOT INITIAL.
-        LOOP AT lt_vars_hist INTO ls_hist
-           WHERE leaf = 'GLOBAL'
-             AND program = ls_Steps-program
-             AND step <= lv_hist_step.
-          IF ls_hist-step = lv_hist_step AND ls_hist-first IS INITIAL.
-            CONTINUE.
-          ENDIF.
-          READ TABLE lt_hist WITH KEY name = ls_hist-name ASSIGNING <hist>.
-          IF sy-subrc = 0.
-            <hist> = ls_hist.
-          ELSE.
-            APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
-            <hist> = ls_hist.
-          ENDIF.
-        ENDLOOP.
-      ENDIF.
-      IF  mo_tree_local->m_class_data IS NOT INITIAL.
-        LOOP AT lt_vars_hist INTO ls_hist
-          WHERE leaf = 'CLASS'
-            AND step <= lv_hist_step.
-          IF ls_hist-step = lv_hist_step AND ls_hist-first IS INITIAL.
-            CONTINUE.
-          ENDIF.
-          READ TABLE lt_hist WITH KEY name = ls_hist-name ASSIGNING <hist>.
-          IF sy-subrc = 0.
-            <hist> = ls_hist.
-          ELSE.
-            APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
-            <hist> = ls_hist.
-          ENDIF.
-        ENDLOOP.
-      ENDIF.
+*      IF  mo_tree_local->m_globals IS NOT INITIAL.
+*        LOOP AT lt_vars_hist INTO ls_hist
+*           WHERE leaf = 'GLOBAL'
+*             AND program = ls_Steps-program
+*             AND step <= lv_hist_step.
+*          IF ls_hist-step = lv_hist_step AND ls_hist-first IS INITIAL.
+*            CONTINUE.
+*          ENDIF.
+*          READ TABLE lt_hist WITH KEY name = ls_hist-name ASSIGNING <hist>.
+*          IF sy-subrc = 0.
+*            <hist> = ls_hist.
+*          ELSE.
+*            APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+*            <hist> = ls_hist.
+*          ENDIF.
+*        ENDLOOP.
+*      ENDIF.
+*      IF  mo_tree_local->m_class_data IS NOT INITIAL.
+*        LOOP AT lt_vars_hist INTO ls_hist
+*          WHERE leaf = 'CLASS'
+*            AND step <= lv_hist_step.
+*          IF ls_hist-step = lv_hist_step AND ls_hist-first IS INITIAL.
+*            CONTINUE.
+*          ENDIF.
+*          READ TABLE lt_hist WITH KEY name = ls_hist-name ASSIGNING <hist>.
+*          IF sy-subrc = 0.
+*            <hist> = ls_hist.
+*          ELSE.
+*            APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+*            <hist> = ls_hist.
+*          ENDIF.
+*        ENDLOOP.
+*      ENDIF.
       SORT lt_hist BY name.
 
       LOOP AT lt_hist ASSIGNING <state>.
