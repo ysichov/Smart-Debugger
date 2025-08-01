@@ -126,6 +126,7 @@ CLASS lcl_appl DEFINITION.
              eventname(61) TYPE c,
              first         TYPE xfeld,
              is_appear     TYPE xfeld,
+             del           TYPE xfeld,
              leaf          TYPE string,
              name(1000)               ,
              path          TYPE string,
@@ -151,6 +152,7 @@ CLASS lcl_appl DEFINITION.
              value         TYPE string,
              first         TYPE xfeld,
              is_appear     TYPE xfeld,
+             del           TYPE xfeld,
              program(40)   TYPE c,
              leaf          TYPE string,
              path          TYPE string,
@@ -1637,46 +1639,44 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       ENDIF.
 
-LOOP AT mt_state ASSIGNING FIELD-SYMBOL(<state>).
-      CLEAR <state>-done.
-    ENDLOOP.
-    IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
-    IF mt_state IS NOT INITIAL.
-      es_stop = show_variables( CHANGING it_var = mt_state ).
-*    ELSE.
-*      es_stop = abap_true.
-    ENDIF.
+      LOOP AT mt_state ASSIGNING FIELD-SYMBOL(<state>).
+        CLEAR <state>-done.
+      ENDLOOP.
+      IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
+      IF mt_state IS NOT INITIAL.
+        es_stop = show_variables( CHANGING it_var = mt_state ).
+      ENDIF.
 
-    IF mo_window->m_debug_button = 'F5'.
-      es_Stop = abap_true.
-    ENDIF.
+      IF mo_window->m_debug_button = 'F5'.
+        es_Stop = abap_true.
+      ENDIF.
 
-    IF mo_window->m_debug_button = 'F6' AND m_stop_stack = ls_stack-stacklevel.
+      IF mo_window->m_debug_button = 'F6' AND m_stop_stack = ls_stack-stacklevel.
 
-      es_Stop = abap_true.
-      CLEAR m_stop_stack.
-    ENDIF.
+        es_Stop = abap_true.
+        CLEAR m_stop_stack.
+      ENDIF.
 
-    IF ( mo_window->m_debug_button = 'F6BEG' AND ls_step-first = abap_true AND m_target_stack = ls_stack-stacklevel ) OR
-       ( mo_window->m_debug_button = 'F6END' AND ls_step-last = abap_true  AND m_target_stack = ls_stack-stacklevel ).
-      CLEAR m_target_stack.
-      es_Stop = abap_true.
-    ENDIF.
+      IF ( mo_window->m_debug_button = 'F6BEG' AND ls_step-first = abap_true AND m_target_stack = ls_stack-stacklevel ) OR
+         ( mo_window->m_debug_button = 'F6END' AND ls_step-last = abap_true  AND m_target_stack = ls_stack-stacklevel ).
+        CLEAR m_target_stack.
+        es_Stop = abap_true.
+      ENDIF.
 
-    READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = ls_step-include linesrc = ls_step-line INTO DATA(ls_break).
-    IF sy-subrc = 0.
-      IF m_debug IS NOT INITIAL.BREAK-POINT.ENDIF.
-      es_Stop = abap_true.
-    ENDIF.
+      READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = ls_step-include linesrc = ls_step-line INTO DATA(ls_break).
+      IF sy-subrc = 0.
+        IF m_debug IS NOT INITIAL.BREAK-POINT.ENDIF.
+        es_Stop = abap_true.
+      ENDIF.
 
-    IF iv_step IS NOT INITIAL.
-      es_Stop = abap_true.
-    ENDIF.
+      IF iv_step IS NOT INITIAL.
+        es_Stop = abap_true.
+      ENDIF.
 
-    mo_tree_local->m_no_refresh = 'X'.
-    mo_tree_exp->m_no_refresh = 'X'.
-    mo_tree_imp->m_no_refresh = 'X'.
-    IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
+      mo_tree_local->m_no_refresh = 'X'.
+      mo_tree_exp->m_no_refresh = 'X'.
+      mo_tree_imp->m_no_refresh = 'X'.
+      IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
 
     ELSE."history state find refactoring
       DATA(lt_vars_hist) = mt_vars_hist.
@@ -1698,12 +1698,16 @@ LOOP AT mt_state ASSIGNING FIELD-SYMBOL(<state>).
         IF ls_hist-step = lv_hist_step AND ls_hist-first IS INITIAL.
           CONTINUE.
         ENDIF.
-        READ TABLE lt_hist WITH KEY name = ls_hist-name ASSIGNING <hist>.
-        IF sy-subrc = 0.
-          <hist> = ls_hist.
+        IF ls_hist-del IS INITIAL.
+          READ TABLE lt_hist WITH KEY name = ls_hist-name ASSIGNING <hist>.
+          IF sy-subrc = 0.
+            <hist> = ls_hist.
+          ELSE.
+            APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+            <hist> = ls_hist.
+          ENDIF.
         ELSE.
-          APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
-          <hist> = ls_hist.
+          DELETE lt_hist WHERE name = ls_hist-name.
         ENDIF.
       ENDLOOP.
 
@@ -5500,6 +5504,17 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
   METHOD del_variable.
     DATA lv_len   TYPE i.
+    DATA(lt_hist) = mo_debugger->mt_vars_hist.
+    SORT lt_hist BY step DESCENDING.
+    LOOP AT lt_hist INTO DATA(ls_hist) WHERE name = iv_full_name.
+      IF ls_hist-del IS INITIAL.
+        CLEAR ls_hist-ref.
+        ls_hist-del = abap_true.
+        ls_hist-step = mo_debugger->m_hist_step - 1.
+        INSERT ls_hist INTO mo_debugger->mt_vars_hist INDEX 1.
+      ENDIF.
+    ENDLOOP.
+
 
     READ TABLE mt_vars WITH KEY name = iv_full_name ASSIGNING FIELD-SYMBOL(<var>).
     IF sy-subrc = 0.
@@ -5515,6 +5530,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
         <var>-step = mo_debugger->m_step.
         APPEND <var> TO mo_debugger->mt_del_vars.
+
       ENDIF.
 
       DELETE mt_vars WHERE name = iv_full_name.
