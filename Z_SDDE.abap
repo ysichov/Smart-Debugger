@@ -225,7 +225,7 @@ CLASS lcl_appl DEFINITION.
 
     CLASS-METHODS:
       init_icons_table,
-    
+
       open_int_table IMPORTING it_tab    TYPE ANY TABLE OPTIONAL
                                it_ref    TYPE REF TO data OPTIONAL
                                iv_name   TYPE string
@@ -1160,15 +1160,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                 lo_struc ?= lo_tabl->get_table_line_type( ).
                 CREATE DATA r_header TYPE HANDLE lo_struc.
                 ASSIGN r_header->* TO FIELD-SYMBOL(<header>).
-                LOOP AT td-names INTO l_names.
-                  CLEAR r_elem.
-                  r_elem = create_simple_var( EXPORTING i_name = |{ i_name }-{ l_names-name }| ).
-                  IF r_elem IS NOT INITIAL.
-                    ASSIGN r_elem->* TO FIELD-SYMBOL(<elem>).
-                    ASSIGN COMPONENT l_names-name OF STRUCTURE <header> TO FIELD-SYMBOL(<to>).
-                    <to> = <elem>.
-                  ENDIF.
-                ENDLOOP.
+*                TRY.
+*                    LOOP AT td-names INTO l_names.
+*                      CLEAR r_elem.
+*                      r_elem = create_simple_var( EXPORTING i_name = |{ i_name }-{ l_names-name }| ).
+*                      IF r_elem IS NOT INITIAL.
+*                        ASSIGN r_elem->* TO FIELD-SYMBOL(<elem>).
+*                        ASSIGN COMPONENT l_names-name OF STRUCTURE <header> TO FIELD-SYMBOL(<to>).
+*                        <to> = <elem>.
+*                      ENDIF.
+*                    ENDLOOP.
+*                  CATCH cx_root.
+*                ENDTRY.
 
                 traverse( io_type_descr = cl_abap_typedescr=>describe_by_data_ref( r_header )
                           iv_name = l_name
@@ -1317,11 +1320,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD create_reference.
 
-    DATA: ls_obj         LIKE LINE OF mt_obj,
-          lr_struc       TYPE REF TO data,
-          lo_object      TYPE REF TO cl_tpda_script_objectdescr,
-          lo_descr       TYPE REF TO cl_tpda_script_data_descr,
-          lt_attributes  TYPE tpda_script_object_attribut_it.
+    DATA: ls_obj        LIKE LINE OF mt_obj,
+          lr_struc      TYPE REF TO data,
+          lo_object     TYPE REF TO cl_tpda_script_objectdescr,
+          lo_descr      TYPE REF TO cl_tpda_script_data_descr,
+          lt_attributes TYPE tpda_script_object_attribut_it.
 
     FIELD-SYMBOLS: <ls_symobjref> TYPE tpda_sys_symbobjref.
     ASSIGN i_quick-quickdata->* TO <ls_symobjref>.
@@ -1662,7 +1665,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       IF mo_tree_local->m_locals IS NOT INITIAL.
         CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
-
+       
         IF ms_stack-eventtype = 'METHOD'.
           APPEND INITIAL LINE TO mt_locals ASSIGNING FIELD-SYMBOL(<loc>).
           <loc>-name = 'ME'.
@@ -1751,7 +1754,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF mo_tree_local->m_locals IS NOT INITIAL.
       LOOP AT mt_locals INTO DATA(ls_local).
 
-        CHECK NOT ls_local-name CA '[]'.
+        "CHECK NOT ls_local-name CA '[]'.
 
         CASE ls_local-parkind.
           WHEN 0.
@@ -4467,7 +4470,7 @@ CLASS lcl_appl IMPLEMENTATION.
      ( sign = 'E'   option = 'NB'   icon_name = icon_interval_exclude_red ) ).
   ENDMETHOD.
 
-    METHOD open_int_table.
+  METHOD open_int_table.
 
     DATA r_tab TYPE REF TO data.
     IF it_ref IS BOUND.
@@ -4502,8 +4505,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lo_columns->set_optimize( abap_true ).
 
     lo_columns->get_column( 'VALUE' )->set_short_text( 'Value' ).
-      lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
-      lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
+    lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
+    lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
     lo_columns->get_column( 'TYPENAME' )->set_medium_text( 'Absolute Type' ).
     lo_columns->get_column( 'OBJNAME' )->set_short_text( 'Int. obj.' ).
     lo_columns->get_column( 'OBJNAME' )->set_medium_text( 'Int. obj. name' ).
@@ -4840,7 +4843,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
               RETURN.
             ENDIF.
           ENDIF.
-  
+
         CATCH cx_root.
           DELETE mt_vars WHERE name = is_var-name.
       ENDTRY.
@@ -4891,11 +4894,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD traverse_obj.
-    DATA: ls_tree       TYPE ts_table,
-          lv_text       TYPE lvc_value,
-          lv_icon       TYPE salv_de_tree_image,
-          l_key         TYPE salv_de_node_key,
-          l_rel         TYPE salv_de_node_relation.
+    DATA: ls_tree TYPE ts_table,
+          lv_text TYPE lvc_value,
+          lv_icon TYPE salv_de_tree_image,
+          l_key   TYPE salv_de_node_key,
+          l_rel   TYPE salv_de_node_relation.
 
     READ TABLE mt_vars WITH KEY name = is_var-name INTO DATA(l_var).
     IF sy-subrc = 0.
