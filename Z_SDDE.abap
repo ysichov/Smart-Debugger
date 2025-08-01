@@ -1454,18 +1454,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     DATA: lt_hist      LIKE mt_vars_hist_view,
           lt_del       LIKE mt_vars_hist_view,
           lv_hist_step TYPE i.
-
+    IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
     is_history = abap_true.
- IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
+
     IF iv_step IS NOT INITIAL.
       lv_hist_step = iv_step.
-      READ TABLE mt_steps WITH KEY step = iv_step INTO data(ls_Steps).
+      READ TABLE mt_steps WITH KEY step = iv_step INTO DATA(ls_Steps).
 
     ELSE.
-      lv_hist_step = m_hist_step.
-
-      IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
-
       IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack IS INITIAL.
         READ TABLE mt_steps INTO ls_steps INDEX m_hist_step.
         m_target_stack = ls_Steps-stacklevel.
@@ -1487,7 +1483,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ADD 1  TO m_hist_step.
       ENDIF.
 
-        READ TABLE mt_steps INTO ls_steps WITH KEY step =  m_hist_step.
+      lv_hist_step = m_hist_step.
+
+
+      READ TABLE mt_steps INTO ls_steps WITH KEY step =  m_hist_step.
       IF mo_window->m_visualization IS NOT INITIAL.
         mo_window->set_program( CONV #( ls_steps-include ) ).
         mo_window->set_program_line( ls_steps-line ).
@@ -1503,9 +1502,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       MOVE-CORRESPONDING ls_stack TO mo_window->m_prg.
 
       IF mo_window->m_debug_button = 'F6' AND m_stop_stack IS INITIAL.
-
         m_stop_stack = ls_stack-stacklevel.
-
       ENDIF.
 
     ENDIF.
@@ -1553,8 +1550,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       mo_tree_imp->clear( ).
 
       CLEAR lt_hist.
+      IF m_debug IS NOT INITIAL.BREAK-POINT.ENDIF.
 
       LOOP AT lt_vars_hist INTO DATA(ls_hist) WHERE step <= lv_hist_step.
+        IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
         IF  mo_tree_local->m_globals IS INITIAL AND ls_hist-leaf = 'GLOBAL' OR ls_hist-program <> ls_Steps-program.
           CONTINUE.
         ENDIF.
@@ -1902,9 +1901,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     l_rel = if_salv_c_node_relation=>last_child.
-
+    IF m_debug IS NOT INITIAL. BREAK-POINT.ENDIF.
     LOOP AT it_var ASSIGNING FIELD-SYMBOL(<var>) WHERE done = abap_false.
-      IF m_debug IS NOT INITIAL. BREAK-POINT.ENDIF.
+
       CASE <var>-leaf.
         WHEN 'LOCAL'.
           mo_tree_local->m_leaf =  'LOCAL'.
@@ -5342,8 +5341,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     SORT lt_hist BY step DESCENDING.
     LOOP AT lt_hist INTO DATA(ls_hist) WHERE name = iv_full_name.
       IF ls_hist-del IS INITIAL.
-        CLEAR ls_hist-ref.
-        ls_hist-del = abap_true.
+        CLEAR: ls_hist-ref, ls_hist-first.
+        ls_hist-del = abap_true. 
         ls_hist-step = mo_debugger->m_hist_step - 1.
         INSERT ls_hist INTO mo_debugger->mt_vars_hist INDEX 1.
       ENDIF.
