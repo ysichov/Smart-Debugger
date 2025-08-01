@@ -1454,8 +1454,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lt_del       LIKE mt_vars_hist_view,
           lv_hist_step TYPE i.
 
-
-
     is_history = abap_true.
 
     IF iv_step IS INITIAL.
@@ -1646,15 +1644,15 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       "IF lv_hist_step > 2.
       "DATA(lv_source_step) = lv_hist_step - 1.
       "ELSE.
-        data(lv_source_step) = lv_hist_step.
+      DATA(lv_source_step) = lv_hist_step.
       "ENDIF.
 
-      Clear mo_tree_local->m_clear.
+      mo_tree_local->clear( ).
       mo_tree_exp->clear( ).
       mo_tree_imp->clear( ).
 
       CLEAR lt_hist.
-      READ TABLE mt_steps with key step = iv_step into data(ls_Steps).
+      READ TABLE mt_steps WITH KEY step = iv_step INTO DATA(ls_Steps).
 
       LOOP AT mt_vars_hist INTO ls_hist
          WHERE ( leaf = 'LOCAL' OR leaf = 'IMP' OR leaf = 'EXP' )
@@ -1682,7 +1680,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           <hist> = ls_hist.
         ENDIF.
       ENDLOOP.
-
+*IF mo_tree_local->m_class_key IS NOT INITIAL AND mo_tree_local->m_class_data IS INITIAL.
 *       LOOP AT mt_vars_hist INTO ls_hist
 *         WHERE leaf = 'CLASS'
 *           AND step < lv_source_step.
@@ -1694,7 +1692,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 *          <hist> = ls_hist.
 *        ENDIF.
 *      ENDLOOP.
-    SORT lt_hist by name.
+      SORT lt_hist BY name.
     ENDIF.
     mt_state = lt_hist.
 
@@ -1733,7 +1731,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     mo_tree_local->m_no_refresh = 'X'.
     mo_tree_exp->m_no_refresh = 'X'.
     mo_tree_imp->m_no_refresh = 'X'.
-
+    IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
   ENDMETHOD.
 
   METHOD run_script_new.
@@ -2547,6 +2545,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDIF.
 
       ENDIF.
+    ELSE. "main node without data
+      READ TABLE mt_vars_hist WITH KEY name = <state>-name INTO lv_hist.
+      IF sy-subrc <> 0.
+        INSERT <state> INTO mt_vars_hist INDEX 1.
+      ENDIF.
     ENDIF.
   ENDMETHOD.
 
@@ -3080,16 +3083,18 @@ CLASS lcl_window IMPLEMENTATION.
           APPEND INITIAL LINE TO lt_hist ASSIGNING FIELD-SYMBOL(<hist>).
           MOVE-CORRESPONDING ls_vars TO <hist>.
 
-          DATA(lo_descr) = cl_abap_typedescr=>describe_by_data_ref( ls_vars-ref ).
+          IF ls_vars-ref IS BOUND.
+            DATA(lo_descr) = cl_abap_typedescr=>describe_by_data_ref( ls_vars-ref ).
 
-          IF lo_descr->type_kind = cl_abap_typedescr=>typekind_table.
-            <hist>-value = 'Table'.
-          ELSEIF lo_descr->type_kind = cl_abap_typedescr=>typekind_struct1."structure
-            <hist>-value = 'Structure'.
-          ELSEIF lo_descr->type_kind = cl_abap_typedescr=>typekind_struct2."deep structure
-            <hist>-value = 'Deep Structure'.
-          ELSE.
-            <hist>-value = ls_vars-ref->*.
+            IF lo_descr->type_kind = cl_abap_typedescr=>typekind_table.
+              <hist>-value = 'Table'.
+            ELSEIF lo_descr->type_kind = cl_abap_typedescr=>typekind_struct1."structure
+              <hist>-value = 'Structure'.
+            ELSEIF lo_descr->type_kind = cl_abap_typedescr=>typekind_struct2."deep structure
+              <hist>-value = 'Deep Structure'.
+            ELSE.
+              <hist>-value = ls_vars-ref->*.
+            ENDIF.
           ENDIF.
         ENDLOOP.
         lcl_appl=>open_int_table( iv_name = |mt_vars_hist - History({ lines( lt_hist ) })| it_tab =  lt_hist io_window = mo_debugger->mo_window  ).
@@ -3887,7 +3892,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       WHEN 'STEP'.
         ASSIGN COMPONENT 'STEP' OF STRUCTURE <tab> TO FIELD-SYMBOL(<step>).
         mo_window->mo_debugger->run_script_hist( <step> ).
-        READ TABLE   mo_window->mo_debugger->mt_steps INTO DATA(ls_step) WITH KEY step = <step>."INDEX  mo_window->mo_debugger->m_hist_step.
+        READ TABLE   mo_window->mo_debugger->mt_steps INTO DATA(ls_step) WITH KEY step = <step>.
         mo_window->set_program( CONV #( ls_Step-include ) ).
         mo_window->set_program_line( ls_Step-line ).
 
