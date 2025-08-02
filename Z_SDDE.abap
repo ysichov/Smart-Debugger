@@ -5389,7 +5389,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDIF.
     ENDLOOP.
 
-    READ TABLE mt_vars WITH KEY name = iv_full_name ASSIGNING FIELD-SYMBOL(<var>).
+    READ TABLE mo_Debugger->mt_state WITH KEY name = iv_full_name ASSIGNING FIELD-SYMBOL(<var>).
     IF sy-subrc = 0.
 
       DATA(lo_nodes) = tree->get_nodes( ).
