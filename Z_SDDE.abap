@@ -1442,7 +1442,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD run_script_hist.
 
     DATA: lt_hist      LIKE mt_vars_hist_view,
-          lv_hist_step TYPE i.
+          lv_hist_step TYPE i,
+          lv_old_step  TYPE i.
     IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
     is_history = abap_true.
 
@@ -1464,6 +1465,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         es_stop = abap_true.
       ENDIF.
 
+      lv_old_step = m_hist_step.
       IF mo_window->m_direction IS NOT INITIAL AND m_hist_step > 1 AND mo_window->m_debug_button IS NOT INITIAL.
         SUBTRACT 1 FROM m_hist_step.
       ENDIF.
@@ -1474,8 +1476,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       lv_hist_step = m_hist_step.
 
-
       READ TABLE mt_steps INTO ls_steps WITH KEY step =  m_hist_step.
+      READ TABLE mt_steps INTO DATA(ls_step_old) WITH KEY step =  lv_old_step.
       IF mo_window->m_visualization IS NOT INITIAL.
         mo_window->set_program( CONV #( ls_steps-include ) ).
         mo_window->set_program_line( ls_steps-line ).
@@ -1534,39 +1536,49 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       DATA(lt_vars_hist) = mt_vars_hist.
       SORT lt_vars_hist BY step ASCENDING first DESCENDING.
 
-      mo_tree_local->clear( ).
-      mo_tree_exp->clear( ).
-      mo_tree_imp->clear( ).
+      IF ls_step_old-stacklevel <> ls_steps-stacklevel.
+        mo_tree_local->clear( ).
+        mo_tree_exp->clear( ).
+        mo_tree_imp->clear( ).
+      ENDIF.
 
       CLEAR lt_hist.
       IF m_debug IS NOT INITIAL.BREAK-POINT.ENDIF.
 
-      LOOP AT lt_vars_hist INTO DATA(ls_hist) WHERE step <= lv_hist_step.
-        IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
-        IF  mo_tree_local->m_globals IS INITIAL AND ls_hist-leaf = 'GLOBAL' OR ls_hist-program <> ls_Steps-program.
-          CONTINUE.
+      LOOP AT mt_steps INTO DATA(ls_hist_step) WHERE step <= lv_hist_step.
+        IF ls_hist_step-stacklevel < ls_steps-stacklevel.
+          DELETE lt_hist where leaf = 'LOCAL'.
         ENDIF.
-        IF  mo_tree_local->m_class_data IS INITIAL AND ls_hist-leaf = 'CLASS'.
-          CONTINUE.
-        ENDIF.
-        IF ( ls_hist-leaf = 'LOCAL' OR ls_hist-leaf = 'IMP' OR ls_hist-leaf = 'EXP' ) AND ls_hist-stack <> ls_steps-stacklevel.
-          CONTINUE.
-        ENDIF.
+        LOOP AT lt_vars_hist INTO DATA(ls_hist) WHERE step = ls_hist_step-step.
+          IF ls_hist-stack <> ls_steps-stacklevel.
 
-        IF ls_hist-step = lv_hist_step AND ls_hist-first IS INITIAL.
-          CONTINUE.
-        ENDIF.
-        IF ls_hist-del IS INITIAL.
-          READ TABLE lt_hist WITH KEY name = ls_hist-name ASSIGNING FIELD-SYMBOL(<hist>).
-          IF sy-subrc = 0.
-            <hist> = ls_hist.
-          ELSE.
-            APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
-            <hist> = ls_hist.
           ENDIF.
-        ELSE.
-          DELETE lt_hist WHERE name = ls_hist-name.
-        ENDIF.
+          IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
+          IF  mo_tree_local->m_globals IS INITIAL AND ls_hist-leaf = 'GLOBAL' OR ls_hist-program <> ls_Steps-program.
+            CONTINUE.
+          ENDIF.
+          IF  mo_tree_local->m_class_data IS INITIAL AND ls_hist-leaf = 'CLASS'.
+            CONTINUE.
+          ENDIF.
+          IF ( ls_hist-leaf = 'LOCAL' OR ls_hist-leaf = 'IMP' OR ls_hist-leaf = 'EXP' ) AND ls_hist-stack <> ls_steps-stacklevel.
+            CONTINUE.
+          ENDIF.
+
+          IF ls_hist-step = lv_hist_step AND ls_hist-first IS INITIAL.
+            CONTINUE.
+          ENDIF.
+          IF ls_hist-del IS INITIAL.
+            READ TABLE lt_hist WITH KEY name = ls_hist-name ASSIGNING FIELD-SYMBOL(<hist>).
+            IF sy-subrc = 0.
+              <hist> = ls_hist.
+            ELSE.
+              APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+              <hist> = ls_hist.
+            ENDIF.
+          ELSE.
+            DELETE lt_hist WHERE name = ls_hist-name.
+          ENDIF.
+        ENDLOOP.
       ENDLOOP.
 
       SORT lt_hist BY name.
