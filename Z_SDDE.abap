@@ -1803,7 +1803,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSE.
       DELETE mo_tree_local->mt_vars WHERE leaf = 'SYST'.
       DELETE mt_state WHERE leaf = 'SYST'.
-      mo_tree_local->clear( ).
+      "mo_tree_local->clear( ).
     ENDIF.
 
 
@@ -1813,7 +1813,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDLOOP.
     ENDIF.
 
-    read_class_globals( ).
+    IF mo_tree_local->m_class_data IS NOT INITIAL.
+      read_class_globals( ).
+    ENDIF.
 
     IF mv_stack_changed = abap_true.
       mo_tree_local->save_stack_vars( m_step ).
@@ -1863,14 +1865,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CLEAR mo_tree_local->m_globals_key.
       DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL'. "OR leaf = 'SYST'.
       DELETE mt_state WHERE leaf = 'GLOBAL'. "OR leaf = 'SYST'.
-      mo_tree_local->clear( ).
+      "mo_tree_local->clear( ).
     ENDIF.
 
     IF mo_tree_local->m_class_key IS NOT INITIAL AND mo_tree_local->m_class_data IS INITIAL.
       mo_tree_local->delete_node( mo_tree_local->m_class_key ).
       DELETE mo_tree_local->mt_vars WHERE leaf = 'CLASS'.
       DELETE mt_state WHERE leaf = 'CLASS'.
-      mo_tree_local->clear( ).
+      "mo_tree_local->clear( ).
     ENDIF.
 
     IF mo_tree_local->m_syst IS INITIAL.
@@ -2163,7 +2165,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD show_step.
-    run_Script_hist( m_hist_step ).
+    "run_Script_hist( m_hist_step ).
+    show_variables( CHANGING it_var = mt_state ).
     mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
     mo_window->set_program_line( mo_window->m_prg-line ).
     mo_window->show_stack( ).
@@ -4930,16 +4933,21 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
           ASSIGN l_var-ref->* TO FIELD-SYMBOL(<old_value>).
 
-          "IF is_var-type = l_var-type.
-          IF <old_value> NE <new_value>.
+          IF is_var-type = l_var-type.
+            IF <old_value> NE <new_value>.
+              l_key = l_var-key.
+              l_rel = if_salv_c_node_relation=>next_sibling.
+              DELETE mt_vars WHERE name = is_var-name.
+            ELSE.
+              IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
+              ELSE.
+                RETURN.
+              ENDIF.
+            ENDIF.
+          ELSE.
             l_key = l_var-key.
             l_rel = if_salv_c_node_relation=>next_sibling.
             DELETE mt_vars WHERE name = is_var-name.
-          ELSE.
-            IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
-            ELSE.
-              RETURN.
-            ENDIF.
           ENDIF.
 
         CATCH cx_root.
