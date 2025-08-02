@@ -2,7 +2,7 @@
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
-*  & version: beta 0.8.400
+*  & version: beta 0.9.400
 *  & Git https://github.com/ysichov/SDDE
 *  & RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *  & EN description - https://github.com/ysichov/SDDE/wiki
@@ -238,7 +238,9 @@ CLASS lcl_popup DEFINITION.
     DATA: m_additional_name      TYPE string,
           mo_box                 TYPE REF TO cl_gui_dialogbox_container,
           mo_splitter            TYPE REF TO cl_gui_splitter_container,
-          mo_variables_container TYPE REF TO cl_gui_container.
+          mo_splitter_imp_exp    TYPE REF TO cl_gui_splitter_container,
+          mo_variables_container TYPE REF TO cl_gui_container,
+          mo_tables_container    TYPE REF TO cl_gui_container.
 
     METHODS: "constructor,
       create IMPORTING i_width       TYPE i
@@ -734,6 +736,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           mo_locals_container    TYPE REF TO cl_gui_container,
           mo_exporting_container TYPE REF TO cl_gui_container,
           mo_code_container      TYPE REF TO cl_gui_container,
+          mo_imp_exp_container   TYPE REF TO cl_gui_container,
           mo_editor_container    TYPE REF TO cl_gui_container,
           mo_stack_container     TYPE REF TO cl_gui_container,
           mo_code_viewer         TYPE REF TO cl_gui_abapedit,
@@ -1665,7 +1668,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       IF mo_tree_local->m_locals IS NOT INITIAL.
         CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
-       
+
         IF ms_stack-eventtype = 'METHOD'.
           APPEND INITIAL LINE TO mt_locals ASSIGNING FIELD-SYMBOL(<loc>).
           <loc>-name = 'ME'.
@@ -2652,6 +2655,7 @@ CLASS lcl_window IMPLEMENTATION.
         container = mo_toolbar_container ).
 
     mo_splitter->set_row_height( id = 1  height = '3' ).
+    mo_splitter->set_row_height( id = 2  height = '70' ).
 
     mo_splitter->set_row_sash( id    = 1
                                type  = 0
@@ -2662,7 +2666,14 @@ CLASS lcl_window IMPLEMENTATION.
         row       = 3
         column    = 1
       RECEIVING
-        container = mo_variables_container ).
+        container = mo_tables_container ).
+
+    mo_splitter->get_container(
+      EXPORTING
+        row       = 3
+        column    = 1
+      RECEIVING
+        container = mo_stack_container ).
 
     CREATE OBJECT mo_splitter_code ##FM_SUBRC_OK
       EXPORTING
@@ -2680,44 +2691,61 @@ CLASS lcl_window IMPLEMENTATION.
            container = mo_editor_container ).
 
     mo_splitter_code->get_container(
-         EXPORTING
-           row       = 1
-           column    = 2
-         RECEIVING
-           container = mo_stack_container ).
+             EXPORTING
+               row       = 1
+               column    = 2
+             RECEIVING
+               container = mo_variables_container ).
 
-    mo_splitter_code->set_column_width( EXPORTING id = 1 width = '67' ).
+    mo_splitter_code->set_column_width( EXPORTING id = 1 width = '60' ).
+    "mo_splitter_code->set_row_height( EXPORTING id = 2 height = '50' ).
 
     CREATE OBJECT mo_splitter_var ##FM_SUBRC_OK
       EXPORTING
         parent  = mo_variables_container
-        rows    = 1
-        columns = 3
+        rows    = 2
+        columns = 1
       EXCEPTIONS
         OTHERS  = 1.
 
-    mo_splitter_var->set_column_width( EXPORTING id = 1 width = '25' ).
-    mo_splitter_var->set_column_width( EXPORTING id = 2 width = '50' ).
-    mo_splitter_var->set_column_width( EXPORTING id = 3 width = '25' ).
+mo_splitter_var->set_row_height( id = 1  height = '66' ).
+*    mo_splitter_var->set_column_width( EXPORTING id = 1 width = '25' ).
+*    mo_splitter_var->set_column_width( EXPORTING id = 2 width = '50' ).
+*    mo_splitter_var->set_column_width( EXPORTING id = 3 width = '25' ).
 
     mo_splitter_var->get_container(
+         EXPORTING
+           row       = 1
+           column    = 1
+         RECEIVING
+           container = mo_locals_container ).
+
+    mo_splitter_var->get_container(
+                 EXPORTING
+                   row       = 2
+                   column    = 1
+                 RECEIVING
+                   container = mo_imp_exp_container ).
+
+    CREATE OBJECT mo_splitter_imp_exp
+      EXPORTING
+        parent  = mo_imp_exp_container
+        rows    = 1
+        columns = 2
+      EXCEPTIONS
+        OTHERS  = 1.
+
+    mo_splitter_imp_exp->get_container(
              EXPORTING
                row       = 1
                column    = 1
              RECEIVING
                container = mo_importing_container ).
 
-    mo_splitter_var->get_container(
-         EXPORTING
-           row       = 1
-           column    = 2
-         RECEIVING
-           container = mo_locals_container ).
-
-    mo_splitter_var->get_container(
+    mo_splitter_imp_exp->get_container(
              EXPORTING
                row       = 1
-               column    = 3
+               column    = 2
              RECEIVING
                container = mo_exporting_container ).
 
