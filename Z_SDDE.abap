@@ -731,6 +731,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           mo_debugger            TYPE REF TO lcl_debugger_script,
           mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
           mo_splitter_var        TYPE REF TO cl_gui_splitter_container,
+          mo_splitter_steps      TYPE REF TO cl_gui_splitter_container,
           mo_toolbar_container   TYPE REF TO cl_gui_container,
           mo_importing_container TYPE REF TO cl_gui_container,
           mo_locals_container    TYPE REF TO cl_gui_container,
@@ -738,11 +739,15 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           mo_code_container      TYPE REF TO cl_gui_container,
           mo_imp_exp_container   TYPE REF TO cl_gui_container,
           mo_editor_container    TYPE REF TO cl_gui_container,
+          mo_steps_container     TYPE REF TO cl_gui_container,
           mo_stack_container     TYPE REF TO cl_gui_container,
+          mo_hist_container      TYPE REF TO cl_gui_container,
           mo_code_viewer         TYPE REF TO cl_gui_abapedit,
           mt_stack               TYPE TABLE OF lcl_appl=>t_stack,
           mo_toolbar             TYPE REF TO cl_gui_toolbar,
           mo_salv_stack          TYPE REF TO cl_salv_table,
+          mo_salv_steps          TYPE REF TO cl_salv_table,
+          mo_salv_hist           TYPE REF TO cl_salv_table,
           mt_breaks              TYPE tpda_bp_persistent_it,
           m_hist_depth           TYPE i,
           m_start_Stack          TYPE i.
@@ -2673,7 +2678,44 @@ CLASS lcl_window IMPLEMENTATION.
         row       = 3
         column    = 1
       RECEIVING
-        container = mo_stack_container ).
+        container = mo_tables_container ).
+
+*    CREATE OBJECT mo_splitter_steps ##FM_SUBRC_OK
+*      EXPORTING
+*        parent  = mo_tables_container
+*        rows    = 1
+*        columns = 3
+*      EXCEPTIONS
+*        OTHERS  = 1.
+
+    "mo_splitter_steps->set_column_width( EXPORTING id = 1 width = '40' ).
+
+*    mo_splitter_steps->get_container(
+*            EXPORTING
+*              row       = 1
+*              column    = 1
+*            RECEIVING
+*              container = mo_stack_container ).
+
+*    mo_splitter_steps->get_container(
+*         EXPORTING
+*           row       = 1
+*           column    = 2
+*         RECEIVING
+*           container = mo_steps_container ).
+*
+*    mo_splitter_steps->get_container(
+*         EXPORTING
+*           row       = 1
+*           column    = 3
+*         RECEIVING
+*           container = mo_hist_container ).
+*
+*mo_steps_container->set_visible( abap_false ).
+*mo_steps_container->set_enable( abap_false ).
+*
+*mo_hist_container->set_visible( abap_false ).
+*mo_hist_container->set_enable( abap_false ).
 
     CREATE OBJECT mo_splitter_code ##FM_SUBRC_OK
       EXPORTING
@@ -2698,7 +2740,6 @@ CLASS lcl_window IMPLEMENTATION.
                container = mo_variables_container ).
 
     mo_splitter_code->set_column_width( EXPORTING id = 1 width = '60' ).
-    "mo_splitter_code->set_row_height( EXPORTING id = 2 height = '50' ).
 
     CREATE OBJECT mo_splitter_var ##FM_SUBRC_OK
       EXPORTING
@@ -2708,10 +2749,7 @@ CLASS lcl_window IMPLEMENTATION.
       EXCEPTIONS
         OTHERS  = 1.
 
-mo_splitter_var->set_row_height( id = 1  height = '66' ).
-*    mo_splitter_var->set_column_width( EXPORTING id = 1 width = '25' ).
-*    mo_splitter_var->set_column_width( EXPORTING id = 2 width = '50' ).
-*    mo_splitter_var->set_column_width( EXPORTING id = 3 width = '25' ).
+    mo_splitter_var->set_row_height( id = 1  height = '66' ).
 
     mo_splitter_var->get_container(
          EXPORTING
@@ -2847,9 +2885,10 @@ mo_splitter_var->set_row_height( id = 1  height = '66' ).
 
   METHOD show_stack.
     IF mo_salv_stack IS INITIAL.
+
       cl_salv_table=>factory(
   EXPORTING
-    r_container = mo_stack_container
+    r_container = mo_tables_container
   IMPORTING
   r_salv_table = mo_salv_stack
   CHANGING
@@ -2869,6 +2908,37 @@ mo_splitter_var->set_row_height( id = 1  height = '66' ).
     ELSE.
       mo_salv_stack->refresh( ).
     ENDIF.
+
+*    IF mo_salv_steps IS INITIAL.
+*
+*      cl_salv_table=>factory(
+*  EXPORTING
+*    r_container = mo_steps_container
+*  IMPORTING
+*  r_salv_table = mo_salv_steps
+*  CHANGING
+*  t_table = mo_debugger->mt_steps ).
+*
+*      mo_salv_steps->display( ).
+*    ELSE.
+*      mo_salv_steps->refresh( ).
+*    ENDIF.
+*
+*    IF mo_salv_hist IS INITIAL.
+*
+*      cl_salv_table=>factory(
+*  EXPORTING
+*    r_container = mo_hist_container
+*  IMPORTING
+*  r_salv_table = mo_salv_hist
+*  CHANGING
+*  t_table = mo_debugger->mt_vars_hist ).
+*
+*      mo_salv_hist->display( ).
+*    ELSE.
+*      mo_salv_hist->refresh( ).
+*    ENDIF.
+
   ENDMETHOD.
 
   METHOD hnd_toolbar.
