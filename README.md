@@ -22,11 +22,13 @@ the script will define all your local and global variables, and show them in a s
  - button 'CLASS-DATA' will show Static(Global) variables from active classes.
  - button 'LDB' will show all mess of LDB global variables whuch by default is hidden here. In standard debugger we see all the mess and can't avoid it.
 
-The Next Big Thing - is hierarchiсal trees for structures, deep structures and class instance objects. We have a 'helicopter view' for all variables at any step!
+The Next Big Thing - is a hierarchiсal trees for structures, deep structures and class instance objects. We have a 'helicopter view' for all variables at any step!
 
 Tables wih header lines and defined with 'OCCURS' are shown as variable_name[] next to its header structure variable.
-
 Double-click on any table variable will show it in separate window! And we don't have no limitations for windows quantity. If you have a big display you can open more then 10 tables simultaneously and analyse it!
+
+<img width="1686" height="654" alt="image" src="https://github.com/user-attachments/assets/0f3bebe8-14cc-42ac-9c21-751ce5cbfcfd" />
+
 
 Sometimes we don't want to see empty or Initial variables. Just press button 'Initials" and all empty variables will disappear. Button works as On/Of switch.
 
@@ -43,6 +45,10 @@ So for direction 'Forward' we have the same 4 debug button as in classic debugge
  - to the previous stop condition - to the first break or watch point in the past
 
  It is very easy to create watchpointes. Just double click on any variable. It will be added to the watchpoint table. To delete watchpoint - again press double click on the variable. With button 'Clear vars' we can  delete all watchpoints.
+
+ <img width="906" height="438" alt="image" src="https://github.com/user-attachments/assets/7731bab7-49b2-4133-b3b5-63cca1561d4b" />
+
+ 
 
  By default we have first button state 'Visualisation ON' - with this option we can see live program run for every step!!!
  
