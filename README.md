@@ -58,8 +58,5 @@ So for direction 'Forward' we have the same 4 debug button as in classic debugge
 
  Button 'Only Z' means that we are saving history by default only for Z code. We can switch it to 'Z & Standard' state and save changes in Standard code also.
  
-Old description in Russian - will be revised soon
-- https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
-- https://ysychov.wordpress.com/2020/09/08/sdde2/
 
 
