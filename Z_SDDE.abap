@@ -429,6 +429,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           m_is_find         TYPE xfeld,
           m_stop_stack      TYPE i,
           m_debug           TYPE x,
+          m_refresh         TYPE xfeld,
           is_step           TYPE xfeld,
 
           ms_stack_prev     TYPE   lcl_appl=>t_stack,
@@ -452,9 +453,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mo_tree_imp       TYPE REF TO lcl_rtti_tree,
           mo_tree_local     TYPE REF TO lcl_rtti_tree,
           mo_tree_exp       TYPE REF TO lcl_rtti_tree,
-          "mv_selected_var   TYPE string,
           mt_selected_var   TYPE TABLE OF t_sel_var,
-          "m_ref_val         TYPE REF TO data,
           mv_stack_changed  TYPE xfeld,
           m_variable        TYPE REF TO data,
           mt_new_string     TYPE TABLE OF  string,
@@ -1483,6 +1482,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       READ TABLE mt_steps INTO ls_steps WITH KEY step =  m_hist_step.
       READ TABLE mt_steps INTO DATA(ls_step_old) WITH KEY step =  lv_old_step.
+      
+      IF ls_Steps-stacklevel <> ls_Step_old-stacklevel.
+        m_refresh = abap_true.
+      ENDIF.
+        
       IF mo_window->m_visualization IS NOT INITIAL.
         mo_window->set_program( CONV #( ls_steps-include ) ).
         mo_window->set_program_line( ls_steps-line ).
@@ -1563,8 +1567,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             IF sy-subrc = 0.
               <hist> = ls_hist.
             ELSE.
-              APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
-              <hist> = ls_hist.
+              "check initial.
+              IF mo_tree_local->m_hide IS NOT INITIAL.
+                ASSIGN ls_hist-ref->* TO FIELD-SYMBOL(<new>).
+                IF <new> IS NOT INITIAL.
+                  APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+                  <hist> = ls_hist.
+                ENDIF.
+              ELSE.
+                APPEND INITIAL LINE TO lt_hist ASSIGNING <hist>.
+                <hist> = ls_hist.
+              ENDIF.
+
             ENDIF.
           ELSE.
             DELETE lt_hist WHERE name = ls_hist-name.
@@ -1575,7 +1589,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       SORT lt_hist BY name.
 
-      IF ls_step_old-stacklevel <> ls_steps-stacklevel.
+      IF ls_step_old-stacklevel <> ls_steps-stacklevel OR m_refresh = abap_true.
         mo_tree_local->clear( ).
         mo_tree_exp->clear( ).
         mo_tree_imp->clear( ).
@@ -1585,6 +1599,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       IF lt_hist IS NOT INITIAL.
         show_variables( CHANGING it_var = lt_hist ).
         set_selected_vars( ).
+        Clear m_refresh.
       ENDIF.
 
     ENDIF.
@@ -5385,10 +5400,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
     ASSIGN COMPONENT 'FULLNAME' OF STRUCTURE <row> TO FIELD-SYMBOL(<fullname>).
     ASSIGN COMPONENT 'PATH' OF STRUCTURE <row> TO FIELD-SYMBOL(<path>).
-    IF <fullname> IS NOT INITIAL.
-      "mo_debugger->mv_selected_var = <fullname>.
-      "CLEAR mo_debugger->m_ref_val.
 
+    IF <fullname> IS NOT INITIAL.
       READ TABLE mo_debugger->mt_selected_var WITH KEY name =  <fullname> TRANSPORTING NO FIELDS.
       IF sy-subrc = 0.
         DELETE mo_debugger->mt_selected_var WHERE name = <fullname>.
@@ -5398,8 +5411,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         APPEND INITIAL LINE TO mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<sel>).
         <sel>-name = <fullname>.
       ENDIF.
-
-      "mo_debugger->mo_window->mo_toolbar->set_button_info( EXPORTING fcode =  'CLEARVAR' icon = CONV #( icon_select_detail ) text = |Clear { <path> }| ).
 
       CASE <kind>.
         WHEN cl_abap_datadescr=>typekind_table.
