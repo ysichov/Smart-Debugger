@@ -407,7 +407,12 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
     TYPES: BEGIN OF t_obj,
              name TYPE string,
              obj  TYPE string,
-           END OF t_obj.
+           END OF t_obj,
+
+           BEGIN OF t_sel_var,
+             name   TYPE string,
+             refval TYPE REF TO data,
+           END OF t_sel_var.
 
     DATA: mt_obj            TYPE TABLE OF t_obj,
           mt_compo          TYPE TABLE OF scompo,
@@ -447,8 +452,9 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mo_tree_imp       TYPE REF TO lcl_rtti_tree,
           mo_tree_local     TYPE REF TO lcl_rtti_tree,
           mo_tree_exp       TYPE REF TO lcl_rtti_tree,
-          mv_selected_var   TYPE string,
-          m_ref_val         TYPE REF TO data,
+          "mv_selected_var   TYPE string,
+          mt_selected_var   TYPE TABLE OF t_sel_var,
+          "m_ref_val         TYPE REF TO data,
           mv_stack_changed  TYPE xfeld,
           m_variable        TYPE REF TO data,
           mt_new_string     TYPE TABLE OF  string,
@@ -464,6 +470,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                       EXPORTING es_stop TYPE xfeld
                       ,
       show_variables CHANGING it_var TYPE lcl_appl=>t_var_table RETURNING VALUE(rv_stop) TYPE xfeld,
+      set_selected_vars,
       save_hist IMPORTING
                   iv_name        TYPE clike
                   iv_fullname    TYPE string
@@ -584,7 +591,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
              typename TYPE abap_abstypename,
              fullname TYPE string,
              path     TYPE string,
-             "objname  TYPE string,
            END OF ts_table.
 
     TYPES tt_table TYPE STANDARD TABLE OF ts_table
@@ -1578,6 +1584,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
       IF lt_hist IS NOT INITIAL.
         show_variables( CHANGING it_var = lt_hist ).
+        set_selected_vars( ).
       ENDIF.
 
     ENDIF.
@@ -1925,18 +1932,19 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
       ENDCASE.
 
-      IF <var>-name = mv_selected_var.
+      READ TABLE mt_selected_var WITH KEY name = <var>-name ASSIGNING FIELD-SYMBOL(<sel>).
+      IF sy-subrc = 0.
 
-        IF m_ref_val IS BOUND.
-          ASSIGN m_ref_val->* TO <hist>.
+        IF <sel>-refval IS BOUND.
+          ASSIGN <sel>-refval->* TO <hist>.
           ASSIGN <var>-ref->* TO <new>.
           IF <new> <> <hist>.
 
-            m_ref_val = <var>-ref.
+            <sel>-refval = <var>-ref.
             rv_stop = abap_true.
           ENDIF.
         ELSE.
-          m_ref_val = <var>-ref.
+          <sel>-refval = <var>-ref.
         ENDIF.
       ENDIF.
 
@@ -1992,7 +2000,20 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF is_skip = abap_true.
       CLEAR is_skip.
       show_variables( CHANGING it_var = it_var ).
+      set_selected_vars( ).
     ENDIF.
+
+  ENDMETHOD.
+
+  METHOD set_selected_vars.
+    DATA(lt_nodes) = mo_tree_local->tree->get_nodes( )->get_all_nodes( ).
+    LOOP AT lt_nodes INTO DATA(ls_nodes).
+      DATA(lv_name) = ls_nodes-node->get_text( ).
+      READ TABLE mt_selected_var WITH KEY name = lv_name TRANSPORTING NO FIELDS.
+      IF sy-subrc = 0.
+        ls_nodes-node->set_row_style( if_salv_c_tree_style=>emphasized_b ).
+      ENDIF.
+    ENDLOOP.
 
   ENDMETHOD.
 
@@ -2160,8 +2181,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD show_step.
-    "run_Script_hist( m_hist_step ).
     show_variables( CHANGING it_var = mt_state ).
+    set_selected_vars( ).
     mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
     mo_window->set_program_line( mo_window->m_prg-line ).
     mo_window->show_stack( ).
@@ -2387,7 +2408,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
         IF  lv_add_hist = abap_true.
           INSERT <state> INTO mt_vars_hist INDEX 1.
-          IF mv_selected_var = <state>-name.
+          READ TABLE mt_selected_var WITH KEY name = <state>-name TRANSPORTING NO FIELDS.
+          IF sy-subrc = 0.
             m_is_find = abap_true.
           ENDIF.
         ENDIF.
@@ -2814,7 +2836,7 @@ CLASS lcl_window IMPLEMENTATION.
      ( function = 'F6END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
      ( butn_type = 3  )
      ( function = 'DIRECTION' icon = CONV #( icon_column_right ) quickinfo = 'Forward' text = 'Forward' )
-     ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Select variable to scan' text = 'Select variable to scan' )
+     ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear vars' text = 'Clear all selected variables' )
      ( function = 'DEBUG' icon = CONV #( icon_tools ) quickinfo = 'Debug' text = 'Debug' )
      ( function = 'STEPS' icon = CONV #( icon_next_step ) quickinfo = 'Steps' text = 'Steps' )
      ( function = 'HISTORY' icon = CONV #( icon_history ) quickinfo = 'Variables history' text = 'History' )
@@ -2963,7 +2985,7 @@ CLASS lcl_window IMPLEMENTATION.
         ELSE.
           mo_toolbar->set_button_info( EXPORTING fcode =  'DIRECTION' icon = CONV #( icon_column_left ) text = 'Backward' quickinfo = 'Backward' ).
           mo_toolbar->set_button_info( EXPORTING fcode =  'F5'  text = 'Step back' quickinfo = 'Step back' ).
-          mo_toolbar->set_button_info( EXPORTING fcode =  'F8'  text = 'to the previous Breakpoint' ).
+          mo_toolbar->set_button_info( EXPORTING fcode =  'F8'  text = 'to the previous stop condition' ).
           mo_toolbar->set_button_visible( visible = abap_false fcode = 'F6' ).
           mo_toolbar->set_button_visible( visible = abap_false fcode = 'F7' ).
 
@@ -2994,10 +3016,15 @@ CLASS lcl_window IMPLEMENTATION.
         ENDIF.
 
       WHEN 'CLEARVAR'.
-        CLEAR: mo_debugger->mv_selected_var,
-               mo_debugger->m_ref_val.
-        mo_toolbar->set_button_info( EXPORTING icon = CONV #( icon_select_detail ) fcode =  'CLEARVAR'  text = 'Select variable to scan' ).
+        CLEAR: mo_debugger->mt_selected_var.
 
+        DATA(lt_nodes) = mo_debugger->mo_tree_local->tree->get_nodes( )->get_all_nodes( ).
+        LOOP AT lt_nodes INTO DATA(ls_nodes).
+          ls_nodes-node->set_row_style( if_salv_c_tree_style=>default ).
+        ENDLOOP.
+        mo_debugger->run_script_HIST( mo_debugger->m_hist_step ).
+        mo_Debugger->mo_tree_local->display( ).
+        RETURN.
       WHEN 'DEBUG'."activate break_points
         mo_debugger->m_debug = mo_debugger->m_debug BIT-XOR c_mask.
 
@@ -5311,8 +5338,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     CASE e_salv_function.
       WHEN 'REFRESH'."
-        mo_debugger->run_script_new( ).
-        mo_debugger->hndl_script_buttons( mo_debugger->mv_stack_changed ).
+        mo_debugger->run_script_HIST( mo_debugger->m_hist_step ).
+        mo_Debugger->mo_tree_local->display( ).
+        RETURN.
+        "mo_debugger->hndl_script_buttons( mo_debugger->mv_stack_changed ).
       WHEN 'INITIALS'."Show/hide empty variables
         m_hide = m_hide BIT-XOR c_mask.
         m_clear = abap_true.
@@ -5356,17 +5385,29 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ASSIGN COMPONENT 'KIND' OF STRUCTURE <row> TO FIELD-SYMBOL(<kind>).
     ASSIGN COMPONENT 'FULLNAME' OF STRUCTURE <row> TO FIELD-SYMBOL(<fullname>).
     ASSIGN COMPONENT 'PATH' OF STRUCTURE <row> TO FIELD-SYMBOL(<path>).
-    mo_debugger->mv_selected_var = <fullname>.
-    CLEAR mo_debugger->m_ref_val.
+    IF <fullname> IS NOT INITIAL.
+      "mo_debugger->mv_selected_var = <fullname>.
+      "CLEAR mo_debugger->m_ref_val.
 
-    mo_debugger->mo_window->mo_toolbar->set_button_info( EXPORTING fcode =  'CLEARVAR' icon = CONV #( icon_select_detail ) text = |'Clear { <path> }| ).
+      READ TABLE mo_debugger->mt_selected_var WITH KEY name =  <fullname> TRANSPORTING NO FIELDS.
+      IF sy-subrc = 0.
+        DELETE mo_debugger->mt_selected_var WHERE name = <fullname>.
+        l_node->set_row_style( if_salv_c_tree_style=>default ).
+      ELSE.
+        l_node->set_row_style( if_salv_c_tree_style=>emphasized_b ).
+        APPEND INITIAL LINE TO mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<sel>).
+        <sel>-name = <fullname>.
+      ENDIF.
 
-    CASE <kind>.
-      WHEN cl_abap_datadescr=>typekind_table.
-        lcl_appl=>open_int_table( iv_name = <fullname> it_ref = <ref> io_window = mo_debugger->mo_window ).
-      WHEN cl_abap_datadescr=>typekind_string.
-        NEW lcl_text_viewer( <ref> ).
-    ENDCASE.
+      "mo_debugger->mo_window->mo_toolbar->set_button_info( EXPORTING fcode =  'CLEARVAR' icon = CONV #( icon_select_detail ) text = |Clear { <path> }| ).
+
+      CASE <kind>.
+        WHEN cl_abap_datadescr=>typekind_table.
+          lcl_appl=>open_int_table( iv_name = <fullname> it_ref = <ref> io_window = mo_debugger->mo_window ).
+        WHEN cl_abap_datadescr=>typekind_string.
+          NEW lcl_text_viewer( <ref> ).
+      ENDCASE.
+    ENDIF.
 
   ENDMETHOD.
 
