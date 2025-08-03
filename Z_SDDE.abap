@@ -607,7 +607,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
           m_icon          TYPE salv_de_tree_image,
           mt_vars         TYPE STANDARD TABLE OF lcl_appl=>var_table,
           mt_classes_leaf TYPE TABLE OF t_classes_leaf,
-          m_no_refresh    TYPE xfeld,
           m_prg_info      TYPE tpda_scr_prg_info,
           mo_debugger     TYPE REF TO lcl_debugger_script,
           tree            TYPE REF TO cl_salv_tree.
@@ -1522,10 +1521,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-    mo_tree_local->m_no_refresh = 'X'.
-    mo_tree_exp->m_no_refresh = 'X'.
-    mo_tree_imp->m_no_refresh = 'X'.
-
     IF  iv_step IS NOT INITIAL.
       es_stop = abap_true.
     ENDIF.
@@ -1536,24 +1531,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       DATA(lt_vars_hist) = mt_vars_hist.
       SORT lt_vars_hist BY step ASCENDING first DESCENDING.
 
-      IF ls_step_old-stacklevel <> ls_steps-stacklevel.
-        mo_tree_local->clear( ).
-        mo_tree_exp->clear( ).
-        mo_tree_imp->clear( ).
-      ENDIF.
-
       CLEAR lt_hist.
       IF m_debug IS NOT INITIAL.BREAK-POINT.ENDIF.
 
       LOOP AT mt_steps INTO DATA(ls_hist_step) WHERE step <= lv_hist_step.
         IF ls_hist_step-stacklevel < ls_steps-stacklevel.
-          DELETE lt_hist where leaf = 'LOCAL'.
+          DELETE lt_hist WHERE leaf = 'LOCAL'.
         ENDIF.
         LOOP AT lt_vars_hist INTO DATA(ls_hist) WHERE step = ls_hist_step-step.
-          IF ls_hist-stack <> ls_steps-stacklevel.
-
-          ENDIF.
-          IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
           IF  mo_tree_local->m_globals IS INITIAL AND ls_hist-leaf = 'GLOBAL' OR ls_hist-program <> ls_Steps-program.
             CONTINUE.
           ENDIF.
@@ -1577,15 +1562,19 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             ENDIF.
           ELSE.
             DELETE lt_hist WHERE name = ls_hist-name.
+            mo_tree_local->clear( ).
           ENDIF.
         ENDLOOP.
       ENDLOOP.
 
       SORT lt_hist BY name.
 
-      LOOP AT lt_hist ASSIGNING FIELD-SYMBOL(<state>).
-        CLEAR <state>-done.
-      ENDLOOP.
+      IF ls_step_old-stacklevel <> ls_steps-stacklevel.
+        mo_tree_local->clear( ).
+        mo_tree_exp->clear( ).
+        mo_tree_imp->clear( ).
+      ENDIF.
+
       IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
       IF lt_hist IS NOT INITIAL.
         show_variables( CHANGING it_var = lt_hist ).
@@ -1593,9 +1582,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     ENDIF.
 
-    mo_tree_local->m_no_refresh = 'X'.
-    mo_tree_exp->m_no_refresh = 'X'.
-    mo_tree_imp->m_no_refresh = 'X'.
   ENDMETHOD.
 
   METHOD run_script_new.
@@ -1839,9 +1825,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CLEAR <state>-done.
     ENDLOOP.
 
-    mo_tree_local->m_no_refresh = 'X'.
-    mo_tree_exp->m_no_refresh = 'X'.
-    mo_tree_imp->m_no_refresh = 'X'.
     CLEAR mo_window->m_show_step.
 
   ENDMETHOD.
@@ -4707,8 +4690,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
            m_ldb_key,
            m_class_key,
            mt_vars,
-           mt_classes_leaf,
-           m_no_refresh.
+           mt_classes_leaf.
 
   ENDMETHOD.
 
@@ -5401,10 +5383,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDIF.
     ENDLOOP.
 
+    DATA(lo_nodes) = tree->get_nodes( ).
     READ TABLE mo_Debugger->mt_state WITH KEY name = iv_full_name ASSIGNING FIELD-SYMBOL(<var>).
     IF sy-subrc = 0.
 
-      DATA(lo_nodes) = tree->get_nodes( ).
       TRY.
           DATA(l_node) =  lo_nodes->get_node( <var>-key ).
         CATCH cx_salv_msg.
