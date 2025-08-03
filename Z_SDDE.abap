@@ -584,7 +584,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
              typename TYPE abap_abstypename,
              fullname TYPE string,
              path     TYPE string,
-             objname  TYPE string,
+             "objname  TYPE string,
            END OF ts_table.
 
     TYPES tt_table TYPE STANDARD TABLE OF ts_table
@@ -4601,11 +4601,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lo_columns->set_optimize( abap_true ).
 
     lo_columns->get_column( 'VALUE' )->set_short_text( 'Value' ).
-    lo_columns->get_column( 'FULLNAME' )->set_visible( '' ).
+    lo_columns->get_column( 'FULLNAME' )->set_visible( abap_false ).
+    lo_columns->get_column( 'PATH' )->set_visible( abap_false ).
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
     lo_columns->get_column( 'TYPENAME' )->set_medium_text( 'Absolute Type' ).
-    lo_columns->get_column( 'OBJNAME' )->set_short_text( 'Int. obj.' ).
-    lo_columns->get_column( 'OBJNAME' )->set_medium_text( 'Int. obj. name' ).
 
     add_buttons( i_type ).
 
@@ -5022,7 +5021,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lv_text = is_var-short.
     ls_tree-fullname = is_var-name.
     ls_tree-path = is_var-path.
-    ls_tree-objname = is_var-instance.
+    "ls_tree-objname = is_var-instance.
 
     "own new method
     IF is_var-cl_leaf IS NOT INITIAL.
