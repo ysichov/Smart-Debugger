@@ -32,6 +32,10 @@ Double-click on any table variable will show it in separate window! And we don't
 
 Sometimes we don't want to see empty or Initial variables. Just press button 'Initials" and all empty variables will disappear. Button works as On/Of switch.
 
+Also I think it is a good idea to seperate importing and returning/exporting parameters into different windows.
+<img width="1748" height="827" alt="image" src="https://github.com/user-attachments/assets/1263a948-46a6-4017-a898-e61f94d79cc0" />
+
+
 That was all about static. But this debugger plugin can execute program run, save all steps and all variables changes. And we can analyse this set of date in 2 directions: to the Future (by default - Button 'Forward') or to the past (Button 'Backward').
 
 <img width="1025" height="40" alt="image" src="https://github.com/user-attachments/assets/f6e2cce9-125d-43ed-8690-fd2cb2faf3b5" />
