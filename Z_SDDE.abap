@@ -2,7 +2,7 @@
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
-*  & version: beta 0.9.400
+*  & version: beta 0.9.500
 *  & Git https://github.com/ysichov/SDDE
 *  & RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *  & EN description - https://github.com/ysichov/SDDE/wiki
@@ -1172,18 +1172,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                 lo_struc ?= lo_tabl->get_table_line_type( ).
                 CREATE DATA r_header TYPE HANDLE lo_struc.
                 ASSIGN r_header->* TO FIELD-SYMBOL(<header>).
-*                TRY.
-*                    LOOP AT td-names INTO l_names.
-*                      CLEAR r_elem.
-*                      r_elem = create_simple_var( EXPORTING i_name = |{ i_name }-{ l_names-name }| ).
-*                      IF r_elem IS NOT INITIAL.
-*                        ASSIGN r_elem->* TO FIELD-SYMBOL(<elem>).
-*                        ASSIGN COMPONENT l_names-name OF STRUCTURE <header> TO FIELD-SYMBOL(<to>).
-*                        <to> = <elem>.
-*                      ENDIF.
-*                    ENDLOOP.
-*                  CATCH cx_root.
-*                ENDTRY.
 
                 traverse( io_type_descr = cl_abap_typedescr=>describe_by_data_ref( r_header )
                           iv_name = l_name
@@ -1482,11 +1470,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       READ TABLE mt_steps INTO ls_steps WITH KEY step =  m_hist_step.
       READ TABLE mt_steps INTO DATA(ls_step_old) WITH KEY step =  lv_old_step.
-      
+
       IF ls_Steps-stacklevel <> ls_Step_old-stacklevel.
         m_refresh = abap_true.
       ENDIF.
-        
+
       IF mo_window->m_visualization IS NOT INITIAL.
         mo_window->set_program( CONV #( ls_steps-include ) ).
         mo_window->set_program_line( ls_steps-line ).
@@ -2671,7 +2659,7 @@ CLASS lcl_window IMPLEMENTATION.
     m_history =  m_zcode = m_visualization = '01'.
     m_hist_depth = 9.
 
-    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.8' i_width = 1400 i_hight = 400 ).
+    mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.9' i_width = 1400 i_hight = 400 ).
     CREATE OBJECT mo_splitter
       EXPORTING
         parent  = mo_box
@@ -2847,11 +2835,11 @@ CLASS lcl_window IMPLEMENTATION.
      ( function = 'F7' icon = CONV #( icon_debugger_step_out ) quickinfo = 'Step out' text = 'Step out' )
      ( function = 'F8' icon = CONV #( icon_debugger_continue ) quickinfo = 'to the next Breakpoint' text = 'Continue' )
      ( butn_type = 3  )
-     ( function = 'F6BEG' icon = CONV #( icon_release ) quickinfo = 'Start of block' text = 'Start of block' )
-     ( function = 'F6END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
+*     ( function = 'F6BEG' icon = CONV #( icon_release ) quickinfo = 'Start of block' text = 'Start of block' )
+*     ( function = 'F6END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
      ( butn_type = 3  )
      ( function = 'DIRECTION' icon = CONV #( icon_column_right ) quickinfo = 'Forward' text = 'Forward' )
-     ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear vars' text = 'Clear all selected variables' )
+     ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear all selected variables' text = 'Clear vars' )
      ( function = 'DEBUG' icon = CONV #( icon_tools ) quickinfo = 'Debug' text = 'Debug' )
      ( function = 'STEPS' icon = CONV #( icon_next_step ) quickinfo = 'Steps' text = 'Steps' )
      ( function = 'HISTORY' icon = CONV #( icon_history ) quickinfo = 'Variables history' text = 'History' )
