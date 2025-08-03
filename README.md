@@ -9,6 +9,9 @@ You can save script and Load every time when needed.
 
 Chhose radio button "Execute directly" and press "Start Script" button.
 
+<img width="1526" height="823" alt="image" src="https://github.com/user-attachments/assets/54e99fad-be8c-4c6b-aad9-989ab141fbe9" />
+
+
 A window will open, divided into several sections. At the top are the control buttons. The largest window is the source code viewer. On the right are three sections with variables: the main one, where local and global variables are displayed. And two smaller sections with import and export parameters. At the very bottom is a section for displaying the stack/execution history, the history of variable changes.
 
 the script will define all your local and global variables, and show them in a several hierarchy. Also we can switch on additional variable types:
