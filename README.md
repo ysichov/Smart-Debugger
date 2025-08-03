@@ -34,6 +34,9 @@ Sometimes we don't want to see empty or Initial variables. Just press button 'In
 
 That was all about static. But this debugger plugin can execute program run, save all steps and all variables changes. And we can analyse this set of date in 2 directions: to the Future (by default - Button 'Forward') or to the past (Button 'Backward').
 
+<img width="1025" height="40" alt="image" src="https://github.com/user-attachments/assets/f6e2cce9-125d-43ed-8690-fd2cb2faf3b5" />
+
+
 So for direction 'Forward' we have the same 4 debug button as in classic debugger:
  - Step into (F5) - one step ahead
  - Step over (F6) - one operation ahead.
@@ -43,6 +46,9 @@ So for direction 'Forward' we have the same 4 debug button as in classic debugge
  For 'Backward' we have a smaller set of buttons:
  - Step back  - one step back
  - to the previous stop condition - to the first break or watch point in the past
+
+<img width="1044" height="35" alt="image" src="https://github.com/user-attachments/assets/3af8571e-d327-48f4-8d94-0c0fd4213678" />
+
 
  It is very easy to create watchpointes. Just double click on any variable. It will be added to the watchpoint table. To delete watchpoint - again press double click on the variable. With button 'Clear vars' we can  delete all watchpoints.
 
