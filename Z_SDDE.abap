@@ -2174,7 +2174,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       hndl_script_buttons( mv_stack_changed ).
       m_is_find = abap_true.
     ENDIF.
-    IF m_counter < 1000."very deep history - to stop
+    IF m_counter < 10000."very deep history - to stop
       me->run_script_new( ).
       hndl_script_buttons( mv_stack_changed ).
     ELSE.
