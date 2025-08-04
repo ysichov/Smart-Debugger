@@ -1483,7 +1483,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     DATA: lt_hist      LIKE mt_vars_hist_view,
           lv_hist_step TYPE i,
           lv_old_step  TYPE i.
-    IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
+
     is_history = abap_true.
 
     IF iv_step IS NOT INITIAL.
@@ -1561,7 +1561,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF iv_step IS INITIAL.
       READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = ls_steps-include linesrc = ls_steps-line INTO DATA(ls_break).
       IF sy-subrc = 0.
-        IF m_debug IS NOT INITIAL.BREAK-POINT.ENDIF.
+
         es_stop = abap_true.
       ENDIF.
     ENDIF.
@@ -1577,7 +1577,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       SORT lt_vars_hist BY step ASCENDING first DESCENDING.
 
       CLEAR lt_hist.
-      IF m_debug IS NOT INITIAL.BREAK-POINT.ENDIF.
+
 
       LOOP AT mt_steps INTO DATA(ls_hist_step) WHERE step <= lv_hist_step.
         IF ls_hist_step-stacklevel < ls_steps-stacklevel.
@@ -1630,7 +1630,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         mo_tree_imp->clear( ).
       ENDIF.
 
-      IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
+
       IF lt_hist IS NOT INITIAL.
         show_variables( CHANGING it_var = lt_hist ).
         set_selected_vars( ).
@@ -1643,7 +1643,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD run_script_new.
 
-    IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
+
 
     DATA: lv_type TYPE string.
     ADD 1 TO m_counter.
@@ -1944,7 +1944,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     l_rel = if_salv_c_node_relation=>last_child.
-    IF m_debug IS NOT INITIAL. BREAK-POINT.ENDIF.
+
     LOOP AT it_var ASSIGNING FIELD-SYMBOL(<var>) WHERE done = abap_false.
 
       CASE <var>-leaf.
@@ -2068,7 +2068,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD hndl_script_buttons.
-    IF m_debug = abap_true. BREAK-POINT. ENDIF.
+    IF m_debug = abap_true.  ENDIF.
 
     IF m_is_find = abap_true.
       show_step( ).
@@ -5196,7 +5196,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           DATA(l_node) =  lo_nodes->get_node( l_var-key ).
 
           ASSIGN l_var-ref->* TO FIELD-SYMBOL(<old_value>).
-          IF is_var-type = l_var-type.
+          "IF is_var-type = l_var-type.
             IF <old_value> NE <new_value>.
               l_key = l_var-key.
               l_rel = if_salv_c_node_relation=>next_sibling.
@@ -5206,9 +5206,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                 me->del_variable( CONV #( is_var-name )  ).
               ENDIF.
             ENDIF.
-          ELSE.
-            me->del_variable( CONV #( is_var-name )  ).
-          ENDIF.
+          "ELSE.
+          "  me->del_variable( CONV #( is_var-name )  ).
+          "ENDIF.
 
           IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
             me->del_variable( CONV #( is_var-name ) ).
@@ -5349,7 +5349,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD delete_node.
-    IF mo_debugger->m_debug  IS NOT INITIAL. BREAK-POINT.  ENDIF.
+    IF mo_debugger->m_debug  IS NOT INITIAL.   ENDIF.
     DATA(lo_nodes) = tree->get_nodes( ).
     DATA(l_node) =  lo_nodes->get_node( iv_key ).
     IF l_node IS NOT INITIAL.
@@ -5457,6 +5457,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD del_variable.
+
     DATA(lt_hist) = mo_debugger->mt_vars_hist.
     SORT lt_hist BY step DESCENDING.
     LOOP AT lt_hist INTO DATA(ls_hist) WHERE name = iv_full_name.
