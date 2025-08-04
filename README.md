@@ -7,7 +7,7 @@ It is based on ABAP Script technology. So set break-points in any abap code and 
 
 You can save script and Load every time when needed.
 
-Chhose radio button "Execute directly" and press "Start Script" button.
+Choose radio button "Execute directly" and press "Start Script" button.
 
 <img width="1526" height="823" alt="image" src="https://github.com/user-attachments/assets/54e99fad-be8c-4c6b-aad9-989ab141fbe9" />
 
