@@ -4,7 +4,7 @@
   <asx:values>
    <PROGDIR>
     <NAME>Z_SMART_DEBUGGER_TEST</NAME>
-    <SUBC>1</SUBC>
+    <SUBC>S</SUBC>
     <RLOAD>E</RLOAD>
     <FIXPT>X</FIXPT>
     <UCCHECK>X</UCCHECK>
@@ -12,8 +12,8 @@
    <TPOOL>
     <item>
      <ID>R</ID>
-     <ENTRY>Program Z_SMART_DEBUGGER_TEST</ENTRY>
-     <LENGTH>29</LENGTH>
+     <ENTRY>Smart Debugger</ENTRY>
+     <LENGTH>33</LENGTH>
     </item>
    </TPOOL>
   </asx:values>
