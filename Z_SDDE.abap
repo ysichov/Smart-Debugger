@@ -2475,6 +2475,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSE. "main node without data
       READ TABLE mt_vars_hist WITH KEY name = <state>-name INTO lv_hist.
       IF sy-subrc <> 0.
+        IF  ms_stack_prev-stacklevel IS INITIAL OR
+         ms_stack-stacklevel > ms_stack_prev-stacklevel.
+          <state>-first = 'X'.
+        ENDIF.
         INSERT <state> INTO mt_vars_hist INDEX 1.
       ENDIF.
     ENDIF.
@@ -5388,14 +5392,14 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     DATA lt_sub TYPE salv_t_nodes.
     LOOP AT lt_nodes INTO DATA(l_node).
-      "READ TABLE lt_sub WITH KEY node = l_node-node TRANSPORTING NO FIELDS. "expanding only first level nodes.
-      "IF sy-subrc NE 0.
+      READ TABLE lt_sub WITH KEY node = l_node-node TRANSPORTING NO FIELDS. "expanding only first level nodes.
+      IF sy-subrc NE 0.
       TRY.
           l_node-node->expand( ).
           lt_sub = l_node-node->get_subtree( ).
         CATCH cx_root.
       ENDTRY.
-      "ENDIF.
+      ENDIF.
     ENDLOOP.
 
     tree->display( ).
