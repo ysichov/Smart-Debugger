@@ -3,7 +3,7 @@ Smart Debugger - SAP Script program for viewing state - all objects and data str
 
 And it can work as debugger time machine which store every variables changes on every steps and show it in convenient format. Usuful to analyse deep structures, several tables simultaneously and search changes in the past!
 
-It is based on ABAP Script technology. So set break-points in any abap code and run. After break-point is triggered, go to the last tab "script" and paste the script from here - https://github.com/ysichov/Smart-Debugger/blob/master/Z_SDDE.abap
+It is based on ABAP Script technology. So set break-points in any abap code and run. After break-point is triggered, go to the last tab "script" and paste the script from here - https://github.com/ysichov/Smart-Debugger/blob/master/Z_SDDE.abap or abapgit automatically pull it from https://github.com/ysichov/Smart-Debugger/blob/master/src/z_smart_debugger_test.prog.abap
 
 You can save script and Load every time when needed.
 
