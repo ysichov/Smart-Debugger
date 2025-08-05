@@ -1,4 +1,3 @@
-*  &---------------------------------------------------------------------*
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -1215,9 +1214,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
           " Check if the referenced object exists
           IF <ls_symobjref>-instancename IS NOT INITIAL AND
-             <ls_symobjref>-instancename <> '{R:initial}'.
+             <ls_symobjref>-instancename <> '{R:initial}' AND
+             <ls_symobjref>-instancename <> '{A:initial}'.
 
             TRY.
+       
                 " Try to get info about the referenced object
                 DATA(ls_ref_info) = cl_tpda_script_data_descr=>get_quick_info(
                   CONV #( <ls_symobjref>-instancename ) ).
@@ -1475,7 +1476,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD script.
     run_script_new( ).
-    hndl_script_buttons( mv_stack_changed ).
+    show_step( ).
+    me->break( ).
+    "hndl_script_buttons( mv_stack_changed ).
   ENDMETHOD.
 
   METHOD run_script_hist.
@@ -1484,7 +1487,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lv_hist_step TYPE i,
           lv_old_step  TYPE i.
 
-    clear mv_recurse.
+    CLEAR mv_recurse.
     is_history = abap_true.
     IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
     IF iv_step IS NOT INITIAL.
@@ -1584,7 +1587,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           DELETE lt_hist WHERE leaf = 'LOCAL'.
         ENDIF.
         LOOP AT lt_vars_hist INTO DATA(ls_hist) WHERE step = ls_hist_step-step.
-    IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
+          IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
           IF  mo_tree_local->m_globals IS INITIAL AND ls_hist-leaf = 'GLOBAL' OR ls_hist-program <> ls_steps-program.
             CONTINUE.
           ENDIF.
@@ -1648,8 +1651,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD run_script_new.
-
-
 
     DATA: lv_type TYPE string.
     ADD 1 TO m_counter.
@@ -1850,6 +1851,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF mo_tree_local->m_globals IS NOT INITIAL.
       LOOP AT mt_globals INTO DATA(ls_global)  WHERE parisval NE 'L'.
         transfer_variable( EXPORTING i_name = ls_global-name iv_type = 'GLOBAL' ).
+
+        LOOP AT mt_loc_fs INTO ls_local.
+          CHECK NOT ls_local-name CA '[]'.
+          transfer_variable( EXPORTING i_name = ls_local-name iv_type = 'GLOBAL' ).
+        ENDLOOP.
       ENDLOOP.
       IF sy-subrc <> 0.
         CLEAR mo_tree_local->m_globals_key.
@@ -1864,9 +1870,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ELSE.
       DELETE mo_tree_local->mt_vars WHERE leaf = 'SYST'.
       DELETE mt_state WHERE leaf = 'SYST'.
-      "mo_tree_local->clear( ).
     ENDIF.
-
 
     IF mo_tree_local->m_ldb IS NOT INITIAL.
       LOOP AT mt_globals INTO ls_global WHERE parisval = 'L'.
@@ -2323,6 +2327,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     CHECK m_hist_step = m_step AND mo_window->m_direction IS INITIAL.
     IF ir_up IS SUPPLIED.
       ASSIGN ir_up->* TO FIELD-SYMBOL(<ir_up>).
+      IF sy-subrc <> 0.
+        RETURN.
+      ENDIF.
     ENDIF.
 
     IF i_instance IS INITIAL.
@@ -5394,11 +5401,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     LOOP AT lt_nodes INTO DATA(l_node).
       READ TABLE lt_sub WITH KEY node = l_node-node TRANSPORTING NO FIELDS. "expanding only first level nodes.
       IF sy-subrc NE 0.
-      TRY.
-          l_node-node->expand( ).
-          lt_sub = l_node-node->get_subtree( ).
-        CATCH cx_root.
-      ENDTRY.
+        TRY.
+            l_node-node->expand( ).
+            lt_sub = l_node-node->get_subtree( ).
+          CATCH cx_root.
+        ENDTRY.
       ENDIF.
     ENDLOOP.
 
