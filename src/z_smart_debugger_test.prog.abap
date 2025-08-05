@@ -1,5 +1,19 @@
-REPORT Z_smart_debugger.
-*  &---------------------------------------------------------------------*
+*<SCRIPT:PERSISTENT>
+REPORT  rstpda_script_template.
+
+*<SCRIPT:HEADER>
+*<SCRIPTNAME>Z_SMART_DEBUGGER_TEST</SCRIPTNAME>
+*<SCRIPT_CLASS>LCL_DEBUGGER_SCRIPT</SCRIPT_CLASS>
+*<SCRIPT_COMMENT>Debugger Skript: Default Template</SCRIPT_COMMENT>
+*<SINGLE_STEP>X</SINGLE_STEP>
+
+*</SCRIPT:HEADER>
+
+*<SCRIPT:PRESETTINGS>
+
+*</SCRIPT:PRESETTINGS>
+
+*<SCRIPT:SCRIPT_CLASS>
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -1853,8 +1867,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF mo_tree_local->m_globals IS NOT INITIAL.
       LOOP AT mt_globals INTO DATA(ls_global)  WHERE parisval NE 'L'.
         transfer_variable( EXPORTING i_name = ls_global-name iv_type = 'GLOBAL' ).
-      ENDLOOP.
 
+        LOOP AT mt_loc_fs INTO ls_local.
+          CHECK NOT ls_local-name CA '[]'.
+          transfer_variable( EXPORTING i_name = ls_local-name iv_type = 'GLOBAL' ).
+        ENDLOOP.
+      ENDLOOP.
       IF sy-subrc <> 0.
         CLEAR mo_tree_local->m_globals_key.
         DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL'.
@@ -5680,3 +5698,6 @@ CLASS lcl_dragdrop IMPLEMENTATION.
     lo_to->raise_selection_done( ).
   ENDMETHOD.
 ENDCLASS.
+*</SCRIPT:SCRIPT_CLASS>
+
+*</SCRIPT:PERSISTENT>
