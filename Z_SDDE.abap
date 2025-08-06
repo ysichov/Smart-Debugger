@@ -1,7 +1,7 @@
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
-*  & version: beta 0.9.500
+*  & version: beta 0.9.600
 *  & Git https://github.com/ysichov/SDDE
 *  & RU description - https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/
 *  & EN description - https://github.com/ysichov/SDDE/wiki
@@ -478,11 +478,14 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                   ir_up          TYPE any OPTIONAL
                   i_instance     TYPE string OPTIONAL,
 
-      f5,
-      f6,
-      f7,
-      f8,
-      hndl_script_buttons IMPORTING iv_stack_changed TYPE xfeld,
+      f5 RETURNING VALUE(rv_stop) TYPE xfeld,
+      f6 RETURNING VALUE(rv_stop) TYPE xfeld,
+      f7 RETURNING VALUE(rv_stop) TYPE xfeld,
+      f8 RETURNING VALUE(rv_stop) TYPE xfeld,
+      make_step,
+      "check_stop RETURNING VALUE(rv_stop) TYPE xfeld,
+      hndl_script_buttons IMPORTING iv_stack_changed TYPE xfeld
+                          RETURNING VALUE(rv_stop)   TYPE xfeld,
       get_obj_index IMPORTING iv_name TYPE any RETURNING VALUE(e_index) TYPE string,
       create_reference         IMPORTING i_name            TYPE string
                                          i_type            TYPE string
@@ -1218,7 +1221,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
              <ls_symobjref>-instancename <> '{A:initial}'.
 
             TRY.
-       
+
                 " Try to get info about the referenced object
                 DATA(ls_ref_info) = cl_tpda_script_data_descr=>get_quick_info(
                   CONV #( <ls_symobjref>-instancename ) ).
@@ -2083,67 +2086,51 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD hndl_script_buttons.
     IF m_is_find = abap_true.
-      show_step( ).
-      me->break( ).
+      rv_stop = abap_true.
       CLEAR m_is_find.
       RETURN.
     ENDIF.
 
     IF mo_window->m_debug_button = 'F5'.
-      show_step( ).
-      me->break( ).
+      rv_stop = abap_true.
 
     ELSEIF mo_window->m_debug_button = 'F6'.
       IF m_f6_level IS NOT INITIAL AND m_f6_level = ms_stack-stacklevel OR mo_window->m_history IS INITIAL.
         CLEAR m_f6_level.
-        show_step( ).
-        me->break( ).
-      ELSE.
-        IF mo_window->m_history IS NOT INITIAL.
-          f5( ).
-        ENDIF.
+        rv_stop = abap_true.
       ENDIF.
 
     ELSEIF mo_window->m_debug_button = 'F6END'.
       IF mo_window->m_prg-flag_eoev IS NOT INITIAL AND m_target_stack = ms_stack-stacklevel.
-        show_step( ).
-        me->break( ).
-      ELSE.
-        f5( ).
+        rv_stop = abap_true.
       ENDIF.
     ELSEIF mo_window->m_debug_button = 'F7'.
 
       IF m_target_stack = ms_stack-stacklevel.
         CLEAR m_target_stack.
-        show_step( ).
-        me->break( ).
-      ELSE.
-        f5( ).
+        rv_stop = abap_true.
       ENDIF.
 
     ELSEIF mo_window->m_debug_button IS NOT INITIAL.
       READ TABLE mo_window->mt_breaks WITH KEY inclnamesrc = mo_window->m_prg-include linesrc = mo_window->m_prg-line INTO DATA(gs_break).
       IF sy-subrc = 0.
-        show_step( ).
-        me->break( ).
+        rv_stop = abap_true.
       ELSE.
 
         IF mo_window->m_debug_button = 'F6BEG' AND m_target_stack = ms_stack-stacklevel.
-          show_step( ).
-          me->break( ).
+          rv_stop = abap_true.
         ELSE.
           IF mo_window->m_history IS NOT INITIAL.
             IF ms_stack-stacklevel = mo_window->m_hist_depth +  mo_window->m_start_stack.
-              f6( ).
+              "f6( )."to refactor
             ELSE.
-              f5( ).
+              "f5( )."to refactor
             ENDIF.
           ENDIF.
         ENDIF.
       ENDIF.
     ELSE.
-      show_step( ).
-      me->break( ).
+      rv_stop = abap_true.
     ENDIF.
 
   ENDMETHOD.
@@ -2155,7 +2142,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     READ TABLE mo_window->mt_stack INTO DATA(stack) INDEX 1.
 
     IF mo_window->m_debug_button NE 'F5' AND mo_window->m_zcode IS NOT INITIAL.
-
       IF stack-program+0(1) NE 'Z' AND stack-program+0(5) NE 'SAPLZ' AND m_f6_level <> stack-stacklevel.
         f7( ).
         RETURN.
@@ -2164,7 +2150,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack IS INITIAL.
       m_target_stack = stack-stacklevel.
-
     ENDIF.
 
     IF mo_window->m_debug_button = 'F7' AND m_target_stack IS INITIAL.
@@ -2181,17 +2166,16 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDTRY.
     IF mv_f7_stop = abap_true.
       CLEAR m_counter.
-      me->run_script_new( ).
-
-      hndl_script_buttons( mv_stack_changed ).
+      rv_stop = abap_true.
       m_is_find = abap_true.
     ENDIF.
-    IF m_counter < 10000."very deep history - to stop
-      me->run_script_new( ).
-      hndl_script_buttons( mv_stack_changed ).
-    ELSE.
+    IF m_counter >= 10000."very deep history - to stop
       CLEAR m_counter.
-      show_step( ).
+      rv_stop = abap_true.
+    ENDIF.
+
+    IF mo_window->m_debug_button = 'F5'.
+      rv_stop = abap_true.
     ENDIF.
   ENDMETHOD.
 
@@ -2204,9 +2188,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
-    me->run_script_new( ).
-
-    hndl_script_buttons( mv_stack_changed ).
   ENDMETHOD.
 
   METHOD f7.
@@ -2218,8 +2199,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
-    me->run_script_new( ).
-    hndl_script_buttons( mv_stack_changed ).
   ENDMETHOD.
 
   METHOD f8.
@@ -2231,9 +2210,63 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
-    me->run_script_new( ).
-    hndl_script_buttons( mv_stack_changed ).
   ENDMETHOD.
+
+
+  METHOD make_Step.
+    DATA: lv_stop TYPE xfeld.
+
+    READ TABLE mo_window->mt_stack INDEX 1 INTO DATA(ls_stack).
+    IF mo_window->m_debug_button = 'F6' AND mo_window->m_history IS NOT INITIAL.
+      m_f6_level = ls_stack-stacklevel.
+    ENDIF.
+
+    WHILE lv_stop IS INITIAL.
+
+      CASE mo_window->m_debug_button.
+
+        WHEN 'F5' OR 'F6END' OR 'F6BEG'.
+          lv_stop = f5( ).
+        WHEN 'F6'.
+          IF mo_window->m_history IS INITIAL.
+            lv_stop = f6( ).
+          ELSE.
+            lv_stop = f5( ).
+          ENDIF.
+
+        WHEN 'F7'.
+          IF mo_window->m_history IS INITIAL.
+            lv_stop = f7( ).
+          ELSE.
+            lv_stop = f5( ).
+          ENDIF.
+
+        WHEN 'F8'.
+          CLEAR m_counter.
+          IF mo_window->m_history IS INITIAL.
+            lv_stop = f8( ).
+          ELSE.
+            mo_window->m_start_stack = ls_stack-stacklevel.
+            IF ls_stack-stacklevel = mo_window->m_start_stack + mo_window->m_hist_depth.
+              lv_stop = f6( ).
+            ELSE.
+              lv_stop = f5( ).
+            ENDIF.
+          ENDIF.
+
+      ENDCASE.
+      run_script_new( ).
+      lv_stop = hndl_script_buttons( mv_stack_changed ).
+      READ TABLE mo_window->mt_stack INDEX 1 INTO ls_stack.
+
+    ENDWHILE.
+
+    show_step( ).
+    me->break( ).
+
+  ENDMETHOD.
+
+
 
   METHOD get_obj_index.
 
@@ -3126,41 +3159,12 @@ CLASS lcl_window IMPLEMENTATION.
     ENDCASE.
 
     IF m_direction IS INITIAL AND mo_debugger->m_hist_step = mo_debugger->m_step.
-      READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
+
       CASE fcode.
-        WHEN 'F5' OR 'F6END' OR 'F6BEG'.
-          mo_debugger->f5( ).
-
-        WHEN 'F6'.
-          IF m_history IS INITIAL.
-            mo_debugger->f6( ).
-          ELSE.
-
-            mo_debugger->m_f6_level = ls_stack-stacklevel.
-            mo_debugger->f5( ).
-          ENDIF.
-
-        WHEN 'F7'.
-          IF m_history IS INITIAL.
-            mo_debugger->f7( ).
-          ELSE.
-            mo_debugger->f5( ).
-          ENDIF.
-
-        WHEN 'F8'.
-          CLEAR m_counter.
-          IF m_history IS INITIAL.
-            mo_debugger->f8( ).
-          ELSE.
-            m_start_stack = ls_stack-stacklevel.
-            IF ls_stack-stacklevel = m_start_stack + m_hist_depth.
-              mo_debugger->f6( ).
-            ELSE.
-              mo_debugger->f5( ).
-            ENDIF.
-          ENDIF.
-
+        WHEN 'F5' OR 'F6' OR 'F6END' OR 'F6BEG' OR 'F7' OR 'F8'.
+          mo_debugger->make_step( ).
       ENDCASE.
+
     ELSE.
       CASE fcode.
 
