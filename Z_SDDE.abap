@@ -727,6 +727,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           WITH NON-UNIQUE DEFAULT KEY.
 
     DATA: m_history              TYPE x,
+          m_varhist              TYPE x,
           m_visualization        TYPE x,
           m_zcode                TYPE x,
           m_direction            TYPE x,
@@ -1699,15 +1700,16 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           DATA: lv_step TYPE i.
           lv_step = m_step - 1.
 
-          mo_tree_local->save_stack_vars( lv_step ).
-          mo_tree_exp->save_stack_vars( lv_step ).
-          mo_tree_imp->save_stack_vars( lv_step ).
+          IF mo_window->m_varhist IS NOT INITIAL.
+            mo_tree_local->save_stack_vars( lv_step ).
+            mo_tree_exp->save_stack_vars( lv_step ).
+            mo_tree_imp->save_stack_vars( lv_step ).
 
-          mo_tree_local->clear( ).
-          mo_tree_exp->clear( ).
-          mo_tree_imp->clear( ).
-          DELETE mt_state WHERE leaf NE 'GLOBAL'. "AND leaf NE 'SYST'.
-
+            mo_tree_local->clear( ).
+            mo_tree_exp->clear( ).
+            mo_tree_imp->clear( ).
+            DELETE mt_state WHERE leaf NE 'GLOBAL'. "AND leaf NE 'SYST'.
+          ENDIF.
         ELSE.
           CLEAR mv_stack_changed.
           m_step_delta = 1.
@@ -1717,6 +1719,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     mo_tree_local->m_prg_info = mo_window->m_prg.
 
+IF mo_window->m_varhist IS NOT INITIAL.
     IF mo_tree_local->m_globals IS NOT INITIAL OR mo_tree_local->m_ldb IS NOT INITIAL.
       DATA: l_name(40),
             lt_inc       TYPE TABLE OF  d010inc.
@@ -1895,6 +1898,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDLOOP.
 
     CLEAR mo_window->m_show_step.
+
+    endif.
 
   ENDMETHOD.
 
@@ -2774,7 +2779,7 @@ CLASS lcl_window IMPLEMENTATION.
   METHOD constructor.
     super->constructor( ).
     mo_debugger = i_debugger.
-    m_history =  m_zcode = m_visualization = '01'.
+    m_history = m_varhist =  m_zcode = m_visualization = '01'.
     m_hist_depth = 9.
 
     mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.9' i_width = 1400 i_hight = 400 ).
@@ -2943,8 +2948,9 @@ CLASS lcl_window IMPLEMENTATION.
           ls_events LIKE LINE OF lt_events.
 
     lt_button  = VALUE #(
-     ( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization ON' text = 'Visualization ON' )
-     ( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'History On' text = 'History On' )
+     ( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization switch' text = 'Visualization ON' )
+     ( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'Stack History switch' text = 'History On' )
+     ( function = 'VARHIST' icon = CONV #( icon_graduate ) quickinfo = 'Variables History switch' text = 'Vars History On' )
      ( function = 'DEPTH' icon = CONV #( icon_next_hierarchy_level ) quickinfo = 'History depth level' text = |Depth { m_hist_depth }| )
      ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
      ( butn_type = 3  )
@@ -2959,8 +2965,8 @@ CLASS lcl_window IMPLEMENTATION.
      ( function = 'DIRECTION' icon = CONV #( icon_column_right ) quickinfo = 'Forward' text = 'Forward' )
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear all selected variables' text = 'Clear vars' )
      ( function = 'DEBUG' icon = CONV #( icon_tools ) quickinfo = 'Debug' text = 'Debug' )
-     ( function = 'STEPS' icon = CONV #( icon_next_step ) quickinfo = 'Steps' text = 'Steps' )
-     ( function = 'HISTORY' icon = CONV #( icon_history ) quickinfo = 'Variables history' text = 'History' )
+     ( function = 'STEPS' icon = CONV #( icon_next_step ) quickinfo = 'Steps table' text = 'Steps' )
+     ( function = 'HISTORY' icon = CONV #( icon_history ) quickinfo = 'History table' text = 'History' )
      ( function = 'INFO' icon = CONV #( icon_information ) quickinfo = 'Documentation' text = '' )
                     ).
 
@@ -3126,6 +3132,14 @@ CLASS lcl_window IMPLEMENTATION.
           mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_red_xcircle ) text = 'History OFF' ).
         ELSE.
           mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_graduate ) text = 'History ON' ).
+        ENDIF.
+
+      WHEN 'VARHIST'.
+        m_varhist = m_varhist BIT-XOR c_mask.
+        IF m_varhist IS INITIAL.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'VARHIST' icon = CONV #( icon_red_xcircle ) text = 'Vars History OFF' ).
+        ELSE.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'VARHIST' icon = CONV #( icon_graduate ) text = 'Vars History ON' ).
         ENDIF.
 
       WHEN 'CODE'.
@@ -5284,10 +5298,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     READ TABLE mt_vars WITH KEY name = is_var-name INTO DATA(l_var).
     DATA(lt_nodes) = tree->get_nodes( )->get_all_nodes( ).
     LOOP AT lt_nodes INTO DATA(ls_nodes).
-          DATA(lr_row) = ls_nodes-node->get_data_row( ).
-          DATA ls_row TYPE ts_table.
-          ls_row = lr_row->*.
-          IF ls_row-fullname = is_var-name.
+      DATA(lr_row) = ls_nodes-node->get_data_row( ).
+      DATA ls_row TYPE ts_table.
+      ls_row = lr_row->*.
+      IF ls_row-fullname = is_var-name.
         DATA(l_node) = ls_nodes-node.
         EXIT.
       ENDIF.
