@@ -1,4 +1,3 @@
-REPORT test.
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -582,8 +581,9 @@ ENDCLASS.
 
 CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_script.
   PUBLIC SECTION.
-
-    METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script.
+   data: mo_debugger type ref to lcl_debugger_script.
+    METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script,
+      steps_flow.
 ENDCLASS.
 
 CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
@@ -2264,7 +2264,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           IF mo_window->m_history IS INITIAL.
             lv_stop = f8( ).
           ELSE.
-            mo_window->m_start_stack = ls_stack-stacklevel.
+
             IF ls_stack-stacklevel = mo_window->m_start_stack + mo_window->m_hist_depth.
               lv_stop = f6( ).
             ELSE.
@@ -3209,9 +3209,14 @@ CLASS lcl_window IMPLEMENTATION.
     ENDCASE.
 
     IF m_direction IS INITIAL AND mo_debugger->m_hist_step = mo_debugger->m_step.
+      IF fcode = 'F8'.
+        READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
+        m_start_stack = ls_stack-stacklevel.
 
+      ENDIF.
       CASE fcode.
         WHEN 'F5' OR 'F6' OR 'F6END' OR 'F6BEG' OR 'F7' OR 'F8'.
+
           mo_debugger->make_step( ).
       ENDCASE.
 
@@ -5786,9 +5791,15 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
     super->constructor( ).
 
+    mo_debugger = io_debugger.
+
     mo_box = create( i_name = 'Flow' i_width = 700 i_hight = 300 ).
     SET HANDLER on_box_close FOR mo_box.
 
+    steps_flow( ).
+  ENDMETHOD.
+
+  METHOD steps_flow.
     TYPES: BEGIN OF lty_entity,
              name TYPE string,
            END OF lty_entity.
@@ -5802,7 +5813,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
           lv_ind2      TYPE i.
 
 
-    LOOP AT io_debugger->mt_steps INTO DATA(ls_step).
+    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
       ls_entity-name = |{ ls_step-eventtype }/{ ls_step-eventname }|.
       COLLECT ls_entity INTO lt_entities.
     ENDLOOP.
@@ -5810,7 +5821,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
     CLEAR ls_step.
 
     lv_mm_string = |graph TD\n |.
-    LOOP AT io_debugger->mt_steps INTO DATA(ls_step2).
+    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step2).
       IF ls_step IS INITIAL.
         ls_step = ls_Step2.
         CONTINUE.
@@ -5822,16 +5833,17 @@ CLASS lcl_mermaid IMPLEMENTATION.
         lv_name = |{ ls_step2-eventtype }/{ ls_step2-eventname }|.
         READ TABLE lt_entities WITH KEY name = lv_name TRANSPORTING NO FIELDS.
         lv_ind2 = sy-tabix.
-
         lv_mm_string = |{ lv_mm_string }{ lv_ind1 }[{ ls_entity-name }] --> { lv_ind2 }[{ lv_name }]\n|.
       ENDIF.
       ls_step = ls_Step2.
     ENDLOOP.
 
-
     TRY.
         DATA(diagram) = NEW zcl_wd_gui_mermaid_js_diagram( parent = mo_box ).
-        diagram->set_source_code_string(    lv_mm_string ).
+        diagram->set_source_code_string(
+
+         lv_mm_string
+         ).
         diagram->display( ).
 
       CATCH zcx_wd_gui_mermaid_js_diagram INTO DATA(error).
