@@ -5820,7 +5820,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
     CLEAR ls_step.
 
-    lv_mm_string = |graph TD\n |.
+    lv_mm_string = |graph LR\n |.
     LOOP AT mo_debugger->mt_steps INTO DATA(ls_step2).
       IF ls_step IS INITIAL.
         ls_step = ls_Step2.
