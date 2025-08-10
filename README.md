@@ -1,4 +1,7 @@
 # SmartDebugger
+
+<img width="390" height="375" alt="image" src="https://github.com/user-attachments/assets/e151991d-08cc-41c9-9f0f-0f7b8d94398e" />
+
 Smart Debugger - SAP Script program for viewing state - all objects and data structures in debug.
 
 And it can work as debugger time machine which store every variables changes on every steps and show it in convenient format. Usuful to analyse deep structures, several tables simultaneously and search changes in the past!
