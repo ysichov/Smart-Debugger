@@ -5807,54 +5807,5 @@ CLASS lcl_mermaid IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD steps_flow.
-    TYPES: BEGIN OF lty_entity,
-             name TYPE string,
-           END OF lty_entity.
-
-
-    DATA: lv_mm_String TYPE string,
-          lv_name      TYPE string,
-          lt_entities  TYPE TABLE OF lty_entity,
-          ls_entity    TYPE lty_entity,
-          lv_ind1      TYPE i,
-          lv_ind2      TYPE i.
-
-
-    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
-      ls_entity-name = |{ ls_step-eventtype }/{ ls_step-eventname }|.
-      COLLECT ls_entity INTO lt_entities.
-    ENDLOOP.
-
-    CLEAR ls_step.
-
-    lv_mm_string = |graph LR\n |.
-    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step2).
-      IF ls_step IS INITIAL.
-        ls_step = ls_Step2.
-        CONTINUE.
-      ENDIF.
-      IF ls_step2-stacklevel > ls_step-stacklevel.
-        ls_entity-name = |{ ls_step-eventtype }/{ ls_step-eventname }|.
-        READ TABLE lt_entities WITH KEY name = ls_entity-name TRANSPORTING NO FIELDS.
-        lv_ind1 = sy-tabix.
-        lv_name = |{ ls_step2-eventtype }/{ ls_step2-eventname }|.
-        READ TABLE lt_entities WITH KEY name = lv_name TRANSPORTING NO FIELDS.
-        lv_ind2 = sy-tabix.
-        lv_mm_string = |{ lv_mm_string }{ lv_ind1 }[{ ls_entity-name }] --> { lv_ind2 }[{ lv_name }]\n|.
-      ENDIF.
-      ls_step = ls_Step2.
-    ENDLOOP.
-
-    TRY.
-        DATA(diagram) = NEW zcl_wd_gui_mermaid_js_diagram( parent = mo_box ).
-        diagram->set_source_code_string(
-
-         lv_mm_string
-         ).
-        diagram->display( ).
-
-      CATCH zcx_wd_gui_mermaid_js_diagram INTO DATA(error).
-        MESSAGE error TYPE 'E'.
-    ENDTRY.
   ENDMETHOD.
 ENDCLASS.
