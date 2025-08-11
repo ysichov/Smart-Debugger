@@ -13,11 +13,13 @@
 *  &---------------------------------------------------------------------*
 
 *  & External resources
+*  & https://github.com/WegnerDan/abapMermaid
+*  & https://gist.github.com/AtomKrieg/7f4ec2e2f49b82def162e85904b7e25b - data object visualizer
+
 *  & Inspired by
 *  & https://habr.com/ru/articles/504908/
 *  & https://github.com/larshp/ABAP-Object-Visualizer - Abap Object Visualizer
 *  & https://github.com/ysichov/SDE_abapgit - Simple Data Explorer
-*  & https://gist.github.com/AtomKrieg/7f4ec2e2f49b82def162e85904b7e25b - data object visualizer
 
 CLASS lcl_data_receiver DEFINITION DEFERRED.
 CLASS lcl_data_transmitter DEFINITION DEFERRED.
@@ -581,7 +583,7 @@ ENDCLASS.
 
 CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_script.
   PUBLIC SECTION.
-   data: mo_debugger type ref to lcl_debugger_script.
+    DATA: mo_debugger TYPE REF TO lcl_debugger_script.
     METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script,
       steps_flow.
 ENDCLASS.
@@ -2103,6 +2105,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD hndl_script_buttons.
+
     IF m_is_find = abap_true.
       rv_stop = abap_true.
       CLEAR m_is_find.
@@ -3101,6 +3104,7 @@ CLASS lcl_window IMPLEMENTATION.
   METHOD hnd_toolbar.
     CONSTANTS: c_mask TYPE x VALUE '01'.
     m_debug_button = fcode.
+    READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
     CASE fcode.
 
       WHEN 'VIS'.
@@ -3210,12 +3214,15 @@ CLASS lcl_window IMPLEMENTATION.
 
     IF m_direction IS INITIAL AND mo_debugger->m_hist_step = mo_debugger->m_step.
       IF fcode = 'F8'.
-        READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
         m_start_stack = ls_stack-stacklevel.
 
       ENDIF.
       CASE fcode.
         WHEN 'F5' OR 'F6' OR 'F6END' OR 'F6BEG' OR 'F7' OR 'F8'.
+
+          IF fcode = 'F7'.
+            mo_debugger->m_target_stack = ls_stack-stacklevel - 1.
+          ENDIF.
 
           mo_debugger->make_step( ).
       ENDCASE.
@@ -5800,6 +5807,54 @@ CLASS lcl_mermaid IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD steps_flow.
-    
+    TYPES: BEGIN OF lty_entity,
+             name TYPE string,
+           END OF lty_entity.
+
+
+    DATA: lv_mm_String TYPE string,
+          lv_name      TYPE string,
+          lt_entities  TYPE TABLE OF lty_entity,
+          ls_entity    TYPE lty_entity,
+          lv_ind1      TYPE i,
+          lv_ind2      TYPE i.
+
+
+    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
+      ls_entity-name = |{ ls_step-eventtype }/{ ls_step-eventname }|.
+      COLLECT ls_entity INTO lt_entities.
+    ENDLOOP.
+
+    CLEAR ls_step.
+
+    lv_mm_string = |graph LR\n |.
+    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step2).
+      IF ls_step IS INITIAL.
+        ls_step = ls_Step2.
+        CONTINUE.
+      ENDIF.
+      IF ls_step2-stacklevel > ls_step-stacklevel.
+        ls_entity-name = |{ ls_step-eventtype }/{ ls_step-eventname }|.
+        READ TABLE lt_entities WITH KEY name = ls_entity-name TRANSPORTING NO FIELDS.
+        lv_ind1 = sy-tabix.
+        lv_name = |{ ls_step2-eventtype }/{ ls_step2-eventname }|.
+        READ TABLE lt_entities WITH KEY name = lv_name TRANSPORTING NO FIELDS.
+        lv_ind2 = sy-tabix.
+        lv_mm_string = |{ lv_mm_string }{ lv_ind1 }[{ ls_entity-name }] --> { lv_ind2 }[{ lv_name }]\n|.
+      ENDIF.
+      ls_step = ls_Step2.
+    ENDLOOP.
+
+    TRY.
+        DATA(diagram) = NEW zcl_wd_gui_mermaid_js_diagram( parent = mo_box ).
+        diagram->set_source_code_string(
+
+         lv_mm_string
+         ).
+        diagram->display( ).
+
+      CATCH zcx_wd_gui_mermaid_js_diagram INTO DATA(error).
+        MESSAGE error TYPE 'E'.
+    ENDTRY.
   ENDMETHOD.
 ENDCLASS.
