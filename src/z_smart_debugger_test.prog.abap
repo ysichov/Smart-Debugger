@@ -1768,7 +1768,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       IF sy-subrc = 0.
         READ TABLE ls_source-t_keywords WITH KEY line = ms_stack_prev-line INTO DATA(ls_oper).
         IF mv_stack_changed IS INITIAL.
-          IF ls_oper-name = 'COMPUTE' OR ls_oper-name = 'SELECT' OR ls_oper-name = 'CLEAR'.
+            IF ls_oper-name = 'COMPUTE' OR ls_oper-name = 'SELECT' OR ls_oper-name = 'CLEAR' OR  ls_oper-name = 'LOOP' OR ls_oper-name = 'SORT'
+             OR ls_oper-name = 'DELETE' OR ls_oper-name = 'READ' OR  ls_oper-name = 'CONCATENATE' OR ls_oper-name = 'CONDENSE'
+             OR ls_oper-name = 'APPEND' OR ls_oper-name = 'MODIFY' OR  ls_oper-name = 'CREATE' OR ls_oper-name = 'SHIFT'
+             OR ls_oper-name = 'ASSIGN' OR ls_oper-name = 'TRANSLATE' OR  ls_oper-name = 'REPLACE'.
             lv_optimize = abap_true.
           ENDIF.
         ENDIF.
