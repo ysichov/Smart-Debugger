@@ -1779,7 +1779,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF mo_window->m_varhist IS NOT INITIAL.
-      IF mo_tree_local->m_globals IS NOT INITIAL OR mo_tree_local->m_ldb IS NOT INITIAL.
+      IF mo_tree_local->m_globals IS NOT INITIAL AND mo_tree_local->m_ldb IS NOT INITIAL.
         DATA: l_name(40),
               lt_inc       TYPE TABLE OF  d010inc.
         l_name = abap_source->program( ).
@@ -1864,11 +1864,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       ENDIF.
 
-      IF mo_tree_local->m_globals IS NOT INITIAL OR
-         mo_tree_local->m_ldb IS NOT INITIAL.
+      IF mo_tree_local->m_globals IS NOT INITIAL OR  mo_tree_local->m_ldb IS NOT INITIAL.
         CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
         SORT mt_globals.
+      ENDIF.
 
+      IF mo_tree_local->m_globals IS NOT INITIAL AND  mo_tree_local->m_ldb IS NOT INITIAL.
         LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
           READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
           IF sy-subrc NE 0.
@@ -1881,7 +1882,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             lv_temp  TYPE char30.
 
       IF lv_optimize = abap_true AND m_update IS INITIAL.
-   
+
         LOOP AT ls_source-t_params INTO DATA(ls_param) WHERE line = ms_stack_prev-line.
           lv_temp = ls_param-name.
           IF lv_temp+0(5) = 'DATA('.
@@ -5962,6 +5963,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ls_step = ls_Step2.
     ENDLOOP.
 
-    
+   
   ENDMETHOD.
 ENDCLASS.
