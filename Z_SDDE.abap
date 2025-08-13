@@ -199,6 +199,7 @@ CLASS lcl_appl DEFINITION.
            END OF t_lang,
 
            BEGIN OF t_stack,
+             step         TYPE i,
              stackpointer TYPE tpda_stack_pointer,
              stacklevel   TYPE tpda_stack_level,
              program      TYPE tpda_program,
@@ -1697,7 +1698,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack_prev.
 
         MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
-        READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack.
+        READ TABLE mo_window->mt_stack INDEX 1 ASSIGNING FIELD-SYMBOL(<stack>).
+        <Stack>-step = m_step.
+        ms_stack = <stack>.
 
         CALL METHOD cl_tpda_script_bp_services=>get_all_bps RECEIVING p_bps_it = mo_window->mt_breaks.
 
@@ -1949,7 +1952,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
       mo_window->set_program_line( mo_window->m_prg-line ).
       IF mv_stack_changed = abap_true.
-        "mo_window->show_stack( ).
+        mo_window->show_stack( ).
       ENDIF.
     ENDIF.
 
@@ -2832,7 +2835,7 @@ CLASS lcl_window IMPLEMENTATION.
   METHOD constructor.
     super->constructor( ).
     mo_debugger = i_debugger.
-    m_history = m_varhist =  m_zcode = m_visualization = '01'.
+    m_history = m_varhist =  m_zcode  = '01'.
     m_hist_depth = 9.
 
     mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.9' i_width = 1400 i_hight = 400 ).
@@ -3001,7 +3004,7 @@ CLASS lcl_window IMPLEMENTATION.
           ls_events LIKE LINE OF lt_events.
 
     lt_button  = VALUE #(
-     "( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization switch' text = 'Visualization ON' )
+     ( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization switch' text = 'Visualization OFF' )
      ( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'Stack History switch' text = 'History On' )
      ( function = 'VARHIST' icon = CONV #( icon_graduate ) quickinfo = 'Variables History switch' text = 'Vars History On' )
      ( function = 'DEPTH' icon = CONV #( icon_next_hierarchy_level ) quickinfo = 'History depth level' text = |Depth { m_hist_depth }| )
@@ -3171,13 +3174,29 @@ CLASS lcl_window IMPLEMENTATION.
       DATA:  lo_column  TYPE REF TO cl_salv_column.
 
       DATA(lo_columns) = mo_salv_stack->get_columns( ).
-      lo_columns->set_optimize( 'X' ).
+      "lo_columns->set_optimize( 'X' ).
+
+      lo_column ?= lo_columns->get_column( 'STEP' ).
+      lo_column->set_output_length( '3' ).
 
       lo_column ?= lo_columns->get_column( 'STACKPOINTER' ).
       lo_column->set_output_length( '5' ).
 
       lo_column ?= lo_columns->get_column( 'STACKLEVEL' ).
       lo_column->set_output_length( '5' ).
+
+      lo_column ?= lo_columns->get_column( 'PROGRAM' ).
+      lo_column->set_output_length( '30' ).
+
+      lo_column ?= lo_columns->get_column( 'INCLUDE' ).
+      lo_column->set_output_length( '40' ).
+
+      lo_column ?= lo_columns->get_column( 'EVENTTYPE' ).
+      lo_column->set_output_length( '20' ).
+
+      lo_column ?= lo_columns->get_column( 'EVENTNAME' ).
+      lo_column->set_output_length( '50' ).
+
       mo_salv_stack->display( ).
     ELSE.
       mo_salv_stack->refresh( ).
@@ -5946,6 +5965,5 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ls_step = ls_Step2.
     ENDLOOP.
 
-   
   ENDMETHOD.
 ENDCLASS.
