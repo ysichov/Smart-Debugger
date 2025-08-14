@@ -447,7 +447,6 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           m_counter         TYPE i,
           mt_steps          TYPE  TABLE OF lcl_appl=>t_step_counter, "source code steps
           mt_var_step       TYPE  TABLE OF lcl_appl=>var_table_h,
-          "mt_del_vars       TYPE STANDARD TABLE OF lcl_appl=>var_table,
           m_step            TYPE i,
           m_is_find         TYPE xfeld,
           m_stop_stack      TYPE i,
@@ -726,8 +725,6 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                 iv_parent_name    TYPE string OPTIONAL
       RETURNING VALUE(e_root_key) TYPE salv_de_node_key.
 
-    METHODS save_stack_vars IMPORTING iv_step TYPE i.
-
   PRIVATE SECTION.
     CONSTANTS: BEGIN OF c_kind,
                  struct LIKE cl_abap_typedescr=>kind_struct VALUE cl_abap_typedescr=>kind_struct,
@@ -775,7 +772,8 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           WITH NON-UNIQUE DEFAULT KEY.
 
 
-    DATA: m_history              TYPE x,
+    DATA: m_version              TYPE x, " 0- alpha, 01 - beta
+          m_history              TYPE x,
           m_visualization        TYPE x,
           m_varhist              TYPE x,
           m_zcode                TYPE x,
@@ -1532,7 +1530,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     run_script( ).
     show_step( ).
     me->break( ).
-    "hndl_script_buttons( mv_stack_changed ).
   ENDMETHOD.
 
   METHOD run_script_hist.
@@ -1579,10 +1576,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         m_refresh = abap_true.
       ENDIF.
 
-      IF mo_window->m_visualization IS NOT INITIAL.
+      "IF mo_window->m_visualization IS NOT INITIAL.
         mo_window->set_program( CONV #( ls_steps-include ) ).
         mo_window->set_program_line( ls_steps-line ).
-      ENDIF.
+      "ENDIF.
 
       IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack =  ls_steps-stacklevel.
         CLEAR m_target_stack.
@@ -1767,16 +1764,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     mo_tree_local->m_prg_info = mo_window->m_prg.
 
-    DATA: lv_optimize TYPE xfeld.
-    READ TABLE mo_window->mt_source WITH KEY include = ms_stack_prev-include INTO DATA(ls_source).
-    IF sy-subrc = 0.
-      READ TABLE ls_source-t_keywords WITH KEY line = ms_stack_prev-line INTO DATA(ls_oper).
-      IF mv_stack_changed IS INITIAL.
-        IF ls_oper-name = 'COMPUTE' OR ls_oper-name = 'SELECT' OR ls_oper-name = 'CLEAR' OR  ls_oper-name = 'LOOP' OR ls_oper-name = 'SORT'
-           OR ls_oper-name = 'DELETE' OR ls_oper-name = 'READ' OR  ls_oper-name = 'CONCATENATE' OR ls_oper-name = 'CONDENSE'
-           OR ls_oper-name = 'APPEND' OR ls_oper-name = 'MODIFY' OR  ls_oper-name = 'CREATE' OR ls_oper-name = 'SHIFT'
-           OR ls_oper-name = 'ASSIGN' OR ls_oper-name = 'TRANSLATE' OR  ls_oper-name = 'REPLACE'.
-          lv_optimize = abap_true.
+    IF mo_window->m_version IS INITIAL.
+      DATA: lv_optimize TYPE xfeld.
+      READ TABLE mo_window->mt_source WITH KEY include = ms_stack_prev-include INTO DATA(ls_source).
+      IF sy-subrc = 0.
+        READ TABLE ls_source-t_keywords WITH KEY line = ms_stack_prev-line INTO DATA(ls_oper).
+        IF mv_stack_changed IS INITIAL.
+          IF ls_oper-name = 'COMPUTE' OR ls_oper-name = 'SELECT' OR ls_oper-name = 'CLEAR' OR  ls_oper-name = 'LOOP' OR ls_oper-name = 'SORT'
+             OR ls_oper-name = 'DELETE' OR ls_oper-name = 'READ' OR  ls_oper-name = 'CONCATENATE' OR ls_oper-name = 'CONDENSE'
+             OR ls_oper-name = 'APPEND' OR ls_oper-name = 'MODIFY' OR  ls_oper-name = 'CREATE' OR ls_oper-name = 'SHIFT'
+             OR ls_oper-name = 'ASSIGN' OR ls_oper-name = 'TRANSLATE' OR  ls_oper-name = 'REPLACE'.
+            lv_optimize = abap_true.
+          ENDIF.
         ENDIF.
       ENDIF.
     ENDIF.
@@ -2011,14 +2010,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CLEAR mo_tree_local->m_globals_key.
       DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL'. "OR leaf = 'SYST'.
       DELETE mt_state WHERE leaf = 'GLOBAL'. "OR leaf = 'SYST'.
-      "mo_tree_local->clear( ).
     ENDIF.
 
     IF mo_tree_local->m_class_key IS NOT INITIAL AND mo_tree_local->m_class_data IS INITIAL.
       mo_tree_local->delete_node( mo_tree_local->m_class_key ).
       DELETE mo_tree_local->mt_vars WHERE leaf = 'CLASS'.
       DELETE mt_state WHERE leaf = 'CLASS'.
-      "mo_tree_local->clear( ).
     ENDIF.
 
     IF mo_tree_local->m_syst IS INITIAL.
@@ -2256,6 +2253,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       rv_stop = abap_true.
     ENDIF.
 
+    IF m_counter MOD 1000 = 0.
+      show_step( ).
+    ENDIF.
+
     IF mo_window->m_debug_button = 'F5'.
       rv_stop = abap_true.
     ENDIF.
@@ -2324,7 +2325,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
 
         WHEN 'F8'.
-          CLEAR m_counter.
+          "CLEAR m_counter.
           IF mo_window->m_history IS INITIAL.
             lv_stop = f8( ).
           ELSE.
@@ -3021,26 +3022,27 @@ CLASS lcl_window IMPLEMENTATION.
           ls_events LIKE LINE OF lt_events.
 
     lt_button  = VALUE #(
-     ( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization switch' text = 'Visualization OFF' )
-     ( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'Stack History switch' text = 'History On' )
-     ( function = 'VARHIST' icon = CONV #( icon_graduate ) quickinfo = 'Variables History switch' text = 'Vars History On' )
-     ( function = 'DEPTH' icon = CONV #( icon_next_hierarchy_level ) quickinfo = 'History depth level' text = |Depth { m_hist_depth }| )
-     ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
-     ( butn_type = 3  )
+     "( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization switch' text = 'Visualization OFF' )
+     "( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'Stack History switch' text = 'History On' )
+     "( function = 'VARHIST' icon = CONV #( icon_graduate ) quickinfo = 'Variables History switch' text = 'Vars History On' )
+     ( function = 'ENGINE' icon = CONV #( icon_graduate ) quickinfo = 'Faster version but can skip some changes' text = 'Alpha' )
      ( function = 'F5' icon = CONV #( icon_debugger_step_into ) quickinfo = 'Step into' text = 'Step into' )
      ( function = 'F6' icon = CONV #( icon_debugger_step_over ) quickinfo = 'Step over' text = 'Step over' )
      ( function = 'F7' icon = CONV #( icon_debugger_step_out ) quickinfo = 'Step out' text = 'Step out' )
      ( function = 'F8' icon = CONV #( icon_debugger_continue ) quickinfo = 'to the next Breakpoint' text = 'Continue' )
+     ( function = 'DIRECTION' icon = CONV #( icon_column_right ) quickinfo = 'Forward' text = 'Forward' )
      ( butn_type = 3  )
+     ( function = 'DEPTH' icon = CONV #( icon_next_hierarchy_level ) quickinfo = 'History depth level' text = |Depth { m_hist_depth }| )
+     ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
+     ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear all selected variables' text = 'Clear vars' )
+     ( butn_type = 3  )
+     ( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = 'MerMaid Flow diagram' text = 'Diagram' )
+     ( function = 'STEPS' icon = CONV #( icon_next_step ) quickinfo = 'Steps table' text = 'Steps' )
+     ( function = 'HISTORY' icon = CONV #( icon_history ) quickinfo = 'History table' text = 'History' )
 *     ( function = 'F6BEG' icon = CONV #( icon_release ) quickinfo = 'Start of block' text = 'Start of block' )
 *     ( function = 'F6END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
      ( butn_type = 3  )
-     ( function = 'DIRECTION' icon = CONV #( icon_column_right ) quickinfo = 'Forward' text = 'Forward' )
-     ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear all selected variables' text = 'Clear vars' )
      ( function = 'DEBUG' icon = CONV #( icon_tools ) quickinfo = 'Debug' text = 'Debug' )
-      ( function = 'STEPS' icon = CONV #( icon_next_step ) quickinfo = 'Steps table' text = 'Steps' )
-     ( function = 'HISTORY' icon = CONV #( icon_history ) quickinfo = 'History table' text = 'History' )
-     ( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = 'MerMaid Flow diagram' text = 'Diagram' )
      ( function = 'INFO' icon = CONV #( icon_information ) quickinfo = 'Documentation' text = '' )
                     ).
 
@@ -3228,6 +3230,13 @@ CLASS lcl_window IMPLEMENTATION.
     READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
     CASE fcode.
 
+      WHEN 'ENGINE'.
+        m_version = m_version BIT-XOR c_mask.
+        IF m_version IS INITIAL.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'ENGINE'  text = 'Alpha' quickinfo = 'Faster version' ).
+        ELSE.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'ENGINE'  text = 'Beta' quickinfo = 'Slower version' ).
+        ENDIF.
       WHEN 'VIS'.
         m_visualization = m_visualization BIT-XOR c_mask.
         IF m_visualization IS INITIAL.
@@ -4893,7 +4902,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     add_buttons( i_type ).
 
-    "tree->get_nodes( )->expand_all( ).
     DATA(lo_event) = tree->get_event( ) .
     SET HANDLER hndl_double_click
                 hndl_user_command FOR lo_event.
@@ -5093,8 +5101,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           IF sy-subrc = 0.
             IF l_node IS NOT INITIAL.
               TRY.
-                  "DATA(lo_nodes) = tree->get_nodes( ).
-                  "DATA(l_node) =  lo_nodes->get_node( l_var-key ).
                   FIELD-SYMBOLS: <old_value> TYPE any.
                   ASSIGN l_var-ref->* TO <old_value>.
                   IF sy-subrc = 0.
@@ -5239,8 +5245,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       READ TABLE mt_vars WITH KEY name = is_var-name INTO DATA(l_var).
       IF sy-subrc = 0.
         TRY.
-            "DATA(lo_nodes) = tree->get_nodes( ).
-            "DATA(l_node) =  lo_nodes->get_node( l_var-key ).
             FIELD-SYMBOLS: <old_value> TYPE any.
             ASSIGN l_var-ref->* TO <old_value>.
             IF sy-subrc = 0.
@@ -5264,9 +5268,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           CATCH cx_root.
             DELETE mt_vars WHERE name = is_var-name.
         ENDTRY.
-
       ENDIF.
-
     ENDIF.
 
     DATA(lo_nodes) = tree->get_nodes( ).
@@ -5330,18 +5332,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         RETURN.
       ENDIF.
 
-*      READ TABLE mo_debugger->mt_state WITH KEY parent = is_var-name TRANSPORTING NO FIELDS.
-*      IF sy-subrc NE 0.
-*        DATA(lo_nodes) = tree->get_nodes( ).
-*        DATA(l_node) =  lo_nodes->get_node( l_var-key ).
-*
-*        l_key = l_var-key.
-*        l_rel = if_salv_c_node_relation=>next_sibling.
-*        DELETE mt_vars WHERE name = is_var-name.
-*        DELETE mt_classes_leaf WHERE name = is_var-name.
-*      ELSE.
-*        RETURN.
-*      ENDIF.
     ELSE.
       l_rel = iv_rel.
     ENDIF.
@@ -5351,7 +5341,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lv_text = is_var-short.
     ls_tree-fullname = is_var-name.
     ls_tree-path = is_var-path.
-    "ls_tree-objname = is_var-instance.
 
     "own new method
     IF is_var-cl_leaf IS NOT INITIAL.
@@ -5395,21 +5384,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       l_node->delete( ).
     ENDIF.
 
-  ENDMETHOD.
-
-  METHOD save_stack_vars.
-*    return.
-*    GET TIME.
-*    LOOP AT mo_debugger->mt_state INTO DATA(vars).
-*
-*      READ TABLE mo_debugger->mt_var_step WITH KEY name = vars-name step = iv_step TRANSPORTING NO FIELDS  .
-*      IF sy-subrc NE 0.
-*        APPEND INITIAL LINE TO mo_debugger->mt_var_step ASSIGNING FIELD-SYMBOL(<step>).
-*        MOVE-CORRESPONDING vars TO <step>.
-*        <step>-step = iv_step.BREAK-POINT.
-*        <step>-time = sy-uzeit.
-*      ENDIF.
-*    ENDLOOP.
   ENDMETHOD.
 
   METHOD traverse_table.
@@ -5459,12 +5433,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ENDLOOP.
     IF l_node IS NOT INITIAL. "sy-subrc = 0.
       TRY.
-          "DATA(lo_nodes) = tree->get_nodes( ).
-          "DATA(l_node) =  lo_nodes->get_node( l_var-key ).
           FIELD-SYMBOLS: <old_value> TYPE any.
           ASSIGN l_var-ref->* TO <old_value>.
           IF sy-subrc = 0.
-            "IF is_var-type = l_var-type.
             IF <old_value> NE <new_value>.
               l_key = l_var-key.
               l_rel = if_salv_c_node_relation=>next_sibling.
@@ -5475,9 +5446,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
               ENDIF.
             ENDIF.
           ENDIF.
-          "ELSE.
-          "  me->del_variable( CONV #( is_var-name )  ).
-          "ENDIF.
 
           IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
             me->del_variable( CONV #( is_var-name ) ).
@@ -5492,7 +5460,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         RETURN.
       ENDIF.
     ENDIF.
-
 
     IF is_var-cl_leaf IS NOT INITIAL.
 
@@ -5564,8 +5531,10 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         m_globals_key = main_node_key.
       WHEN 'LDB'.
         m_ldb_key = main_node_key.
+
       WHEN 'Class-data global variables'.
         m_class_key = main_node_key.
+
       WHEN 'System variables'.
         m_syst_key = main_node_key.
     ENDCASE.
@@ -5628,7 +5597,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   METHOD display.
 
     DATA(lo_columns) = tree->get_columns( ).
-    "lo_columns->set_optimize( ).
     lo_columns->get_column( 'KIND' )->set_visible( abap_false ).
 
     DATA(lo_nodes) = tree->get_nodes( ).
@@ -5675,8 +5643,8 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         m_class_data = m_class_data BIT-XOR c_mask.
       WHEN 'LDB'."Show/hide LDB variables (globals)
         m_ldb = m_ldb BIT-XOR c_mask.
-
     ENDCASE.
+
     mo_debugger->m_update = abap_true.
 
     mo_debugger->mo_tree_local->clear( ).
@@ -5755,14 +5723,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
           DATA(l_node) =  lo_nodes->get_node( <var>-key ).
         CATCH cx_salv_msg.
       ENDTRY.
-
-*      IF  NOT ( ( mo_debugger->mo_window->m_direction IS NOT INITIAL AND mo_debugger->m_hist_step > 1 AND mo_debugger->mo_window->m_debug_button IS NOT INITIAL ) OR
-*         ( mo_debugger->mo_window->m_direction IS INITIAL AND mo_debugger->m_hist_step < mo_debugger->m_step AND mo_debugger->mo_window->m_debug_button IS NOT INITIAL ) ).
-*
-*        <var>-step = mo_debugger->m_step.
-*        "APPEND <var> TO mo_debugger->mt_del_vars.
-
-*      ENDIF.
 
       DELETE mt_vars WHERE name = iv_full_name.
       DELETE mt_classes_leaf WHERE name = iv_full_name.
@@ -5948,14 +5908,12 @@ CLASS lcl_mermaid IMPLEMENTATION.
              name TYPE string,
            END OF lty_entity.
 
-
     DATA: lv_mm_String TYPE string,
           lv_name      TYPE string,
           lt_entities  TYPE TABLE OF lty_entity,
           ls_entity    TYPE lty_entity,
           lv_ind1      TYPE i,
           lv_ind2      TYPE i.
-
 
     LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
       ls_entity-name = |{ ls_step-eventtype }/{ ls_step-eventname }|.
@@ -5982,5 +5940,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ls_step = ls_Step2.
     ENDLOOP.
 
+   
   ENDMETHOD.
 ENDCLASS.
