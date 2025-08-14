@@ -755,7 +755,8 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
           WITH NON-UNIQUE DEFAULT KEY.
 
 
-    DATA: m_history              TYPE x,
+    DATA: m_version              TYPE x, " 0- alpha, 01 - beta
+          m_history              TYPE x,
           m_visualization        TYPE x,
           m_varhist              TYPE x,
           m_zcode                TYPE x,
@@ -1558,10 +1559,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         m_refresh = abap_true.
       ENDIF.
 
-      IF mo_window->m_visualization IS NOT INITIAL.
+      "IF mo_window->m_visualization IS NOT INITIAL.
         mo_window->set_program( CONV #( ls_steps-include ) ).
         mo_window->set_program_line( ls_steps-line ).
-      ENDIF.
+      "ENDIF.
 
       IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack =  ls_steps-stacklevel.
         CLEAR m_target_stack.
@@ -1746,16 +1747,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     mo_tree_local->m_prg_info = mo_window->m_prg.
 
-    DATA: lv_optimize TYPE xfeld.
-    READ TABLE mo_window->mt_source WITH KEY include = ms_stack_prev-include INTO DATA(ls_source).
-    IF sy-subrc = 0.
-      READ TABLE ls_source-t_keywords WITH KEY line = ms_stack_prev-line INTO DATA(ls_oper).
-      IF mv_stack_changed IS INITIAL.
-        IF ls_oper-name = 'COMPUTE' OR ls_oper-name = 'SELECT' OR ls_oper-name = 'CLEAR' OR  ls_oper-name = 'LOOP' OR ls_oper-name = 'SORT'
-           OR ls_oper-name = 'DELETE' OR ls_oper-name = 'READ' OR  ls_oper-name = 'CONCATENATE' OR ls_oper-name = 'CONDENSE'
-           OR ls_oper-name = 'APPEND' OR ls_oper-name = 'MODIFY' OR  ls_oper-name = 'CREATE' OR ls_oper-name = 'SHIFT'
-           OR ls_oper-name = 'ASSIGN' OR ls_oper-name = 'TRANSLATE' OR  ls_oper-name = 'REPLACE'.
-          lv_optimize = abap_true.
+    IF mo_window->m_version IS INITIAL.
+      DATA: lv_optimize TYPE xfeld.
+      READ TABLE mo_window->mt_source WITH KEY include = ms_stack_prev-include INTO DATA(ls_source).
+      IF sy-subrc = 0.
+        READ TABLE ls_source-t_keywords WITH KEY line = ms_stack_prev-line INTO DATA(ls_oper).
+        IF mv_stack_changed IS INITIAL.
+          IF ls_oper-name = 'COMPUTE' OR ls_oper-name = 'SELECT' OR ls_oper-name = 'CLEAR' OR  ls_oper-name = 'LOOP' OR ls_oper-name = 'SORT'
+             OR ls_oper-name = 'DELETE' OR ls_oper-name = 'READ' OR  ls_oper-name = 'CONCATENATE' OR ls_oper-name = 'CONDENSE'
+             OR ls_oper-name = 'APPEND' OR ls_oper-name = 'MODIFY' OR  ls_oper-name = 'CREATE' OR ls_oper-name = 'SHIFT'
+             OR ls_oper-name = 'ASSIGN' OR ls_oper-name = 'TRANSLATE' OR  ls_oper-name = 'REPLACE'.
+            lv_optimize = abap_true.
+          ENDIF.
         ENDIF.
       ENDIF.
     ENDIF.
@@ -2233,6 +2236,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       rv_stop = abap_true.
     ENDIF.
 
+    IF m_counter MOD 1000 = 0.
+      show_step( ).
+    ENDIF.
+
     IF mo_window->m_debug_button = 'F5'.
       rv_stop = abap_true.
     ENDIF.
@@ -2301,7 +2308,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
 
         WHEN 'F8'.
-          CLEAR m_counter.
+          "CLEAR m_counter.
           IF mo_window->m_history IS INITIAL.
             lv_stop = f8( ).
           ELSE.
@@ -2998,26 +3005,27 @@ CLASS lcl_window IMPLEMENTATION.
           ls_events LIKE LINE OF lt_events.
 
     lt_button  = VALUE #(
-     ( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization switch' text = 'Visualization OFF' )
-     ( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'Stack History switch' text = 'History On' )
-     ( function = 'VARHIST' icon = CONV #( icon_graduate ) quickinfo = 'Variables History switch' text = 'Vars History On' )
-     ( function = 'DEPTH' icon = CONV #( icon_next_hierarchy_level ) quickinfo = 'History depth level' text = |Depth { m_hist_depth }| )
-     ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
-     ( butn_type = 3  )
+     "( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization switch' text = 'Visualization OFF' )
+     "( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'Stack History switch' text = 'History On' )
+     "( function = 'VARHIST' icon = CONV #( icon_graduate ) quickinfo = 'Variables History switch' text = 'Vars History On' )
+     ( function = 'ENGINE' icon = CONV #( icon_graduate ) quickinfo = 'Faster version but can skip some changes' text = 'Alpha' )
      ( function = 'F5' icon = CONV #( icon_debugger_step_into ) quickinfo = 'Step into' text = 'Step into' )
      ( function = 'F6' icon = CONV #( icon_debugger_step_over ) quickinfo = 'Step over' text = 'Step over' )
      ( function = 'F7' icon = CONV #( icon_debugger_step_out ) quickinfo = 'Step out' text = 'Step out' )
      ( function = 'F8' icon = CONV #( icon_debugger_continue ) quickinfo = 'to the next Breakpoint' text = 'Continue' )
+     ( function = 'DIRECTION' icon = CONV #( icon_column_right ) quickinfo = 'Forward' text = 'Forward' )
      ( butn_type = 3  )
+     ( function = 'DEPTH' icon = CONV #( icon_next_hierarchy_level ) quickinfo = 'History depth level' text = |Depth { m_hist_depth }| )
+     ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
+     ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear all selected variables' text = 'Clear vars' )
+     ( butn_type = 3  )
+     ( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = 'MerMaid Flow diagram' text = 'Diagram' )
+     ( function = 'STEPS' icon = CONV #( icon_next_step ) quickinfo = 'Steps table' text = 'Steps' )
+     ( function = 'HISTORY' icon = CONV #( icon_history ) quickinfo = 'History table' text = 'History' )
 *     ( function = 'F6BEG' icon = CONV #( icon_release ) quickinfo = 'Start of block' text = 'Start of block' )
 *     ( function = 'F6END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
      ( butn_type = 3  )
-     ( function = 'DIRECTION' icon = CONV #( icon_column_right ) quickinfo = 'Forward' text = 'Forward' )
-     ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear all selected variables' text = 'Clear vars' )
      ( function = 'DEBUG' icon = CONV #( icon_tools ) quickinfo = 'Debug' text = 'Debug' )
-      ( function = 'STEPS' icon = CONV #( icon_next_step ) quickinfo = 'Steps table' text = 'Steps' )
-     ( function = 'HISTORY' icon = CONV #( icon_history ) quickinfo = 'History table' text = 'History' )
-     ( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = 'MerMaid Flow diagram' text = 'Diagram' )
      ( function = 'INFO' icon = CONV #( icon_information ) quickinfo = 'Documentation' text = '' )
                     ).
 
@@ -3205,6 +3213,13 @@ CLASS lcl_window IMPLEMENTATION.
     READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
     CASE fcode.
 
+      WHEN 'ENGINE'.
+        m_version = m_version BIT-XOR c_mask.
+        IF m_version IS INITIAL.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'ENGINE'  text = 'Alpha' quickinfo = 'Faster version' ).
+        ELSE.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'ENGINE'  text = 'Beta' quickinfo = 'Slower version' ).
+        ENDIF.
       WHEN 'VIS'.
         m_visualization = m_visualization BIT-XOR c_mask.
         IF m_visualization IS INITIAL.
