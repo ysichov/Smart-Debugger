@@ -5940,6 +5940,10 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ls_step = ls_Step2.
     ENDLOOP.
 
-   
+
   ENDMETHOD.
 ENDCLASS.
+
+*</SCRIPT:SCRIPT_CLASS>
+
+*</SCRIPT:PERSISTENT>
