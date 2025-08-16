@@ -55,18 +55,17 @@ So for direction 'Forward' we have the same 4 debug button as in classic debugge
  - Step back  - one step back
  - to the previous stop condition - to the first break or watch point in the past
 
-<img width="1044" height="35" alt="image" src="https://github.com/user-attachments/assets/3af8571e-d327-48f4-8d94-0c0fd4213678" />
+<img width="1214" height="43" alt="image" src="https://github.com/user-attachments/assets/ec84be4b-fdf6-4000-a199-37c8b3ce300f" />
+
 
 
  It is very easy to create watchpointes. Just double click on any variable. It will be added to the watchpoint table. To delete watchpoint - again press double click on the variable. With button 'Clear vars' we can  delete all watchpoints.
 
  <img width="906" height="438" alt="image" src="https://github.com/user-attachments/assets/7731bab7-49b2-4133-b3b5-63cca1561d4b" />
+Buttons were refactored.
 
- 
-
- By default we have first button state 'Visualisation ON' - with this option we can see live program run for every step!!!
- 
- Also by default (button 'History On' we are saving all variables changes)
+ Button - Alpha - fasj version which analyse ABAP code to reduce checked variables. It is working like switch to Beta - slower but more precise version.
+ Button 'History On' we are saving all variables changes - by default
  
  Button 'Depth' have Depth 9 - which means that we analyse 9 stack levels. We can set it from 0 to 9. Zero means that we are writing history only for current stack level. Depth 1 - means that we are saving current level and level of functions/method/forms which run on current level... And so on
 
