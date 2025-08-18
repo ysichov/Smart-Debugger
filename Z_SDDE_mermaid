@@ -21,6 +21,7 @@
 *  & https://github.com/larshp/ABAP-Object-Visualizer - Abap Object Visualizer
 *  & https://github.com/ysichov/SDE_abapgit - Simple Data Explorer
 
+CLASS lcl_ai DEFINITION DEFERRED.
 CLASS lcl_data_receiver DEFINITION DEFERRED.
 CLASS lcl_data_transmitter DEFINITION DEFERRED.
 CLASS lcl_rtti_tree DEFINITION DEFERRED.
@@ -300,6 +301,8 @@ CLASS lcl_popup IMPLEMENTATION.
 
 ENDCLASS.
 
+
+
 CLASS lcl_ddic DEFINITION.
   PUBLIC SECTION.
     CLASS-METHODS: get_text_table IMPORTING i_tname TYPE tabname
@@ -463,7 +466,8 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mv_stack_changed  TYPE xfeld,
           m_variable        TYPE REF TO data,
           mt_new_string     TYPE TABLE OF  string,
-          m_quick           TYPE tpda_scr_quick_info.
+          m_quick           TYPE tpda_scr_quick_info,
+          mr_statements     TYPE RANGE OF string.
 
     METHODS: prologue  REDEFINITION,
       init    REDEFINITION,
@@ -471,6 +475,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
       end     REDEFINITION,
 
       run_script,
+      fill_variables,
       run_script_hist IMPORTING iv_step TYPE i OPTIONAL
                       EXPORTING es_stop TYPE xfeld
                       ,
@@ -723,6 +728,366 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
 
     METHODS: hndl_double_click FOR EVENT double_click OF cl_salv_events_tree IMPORTING node_key,
       hndl_user_command FOR EVENT added_function OF cl_salv_events IMPORTING e_salv_function.
+
+ENDCLASS.
+
+CLASS lCL_AI_API DEFINITION.
+  PUBLIC SECTION.
+
+    METHODS  call_openai  IMPORTING iv_prompt TYPE string RETURNING VALUE(rv_answer) TYPE string.
+  PRIVATE SECTION.
+    DATA: mv_api_key TYPE string.
+
+    METHODS: build_request
+      IMPORTING
+        iv_prompt  TYPE string
+      EXPORTING
+        ev_payload TYPE string ,
+      send_request
+        IMPORTING
+          iv_payload  TYPE string
+        EXPORTING
+          ev_response TYPE string,
+      output
+        IMPORTING
+                  iv_prompt        TYPE string
+                  iv_content       TYPE string
+        RETURNING VALUE(rv_answer) TYPE string.
+ENDCLASS.
+
+CLASS lCL_AI_API IMPLEMENTATION.
+
+  METHOD call_openai.
+    DATA: lv_prompt   TYPE string,
+          lv_payload  TYPE string,
+          lv_response TYPE string.
+
+    "Build payload
+    CALL METHOD build_request
+      EXPORTING
+        iv_prompt  = iv_prompt
+      IMPORTING
+        ev_payload = lv_payload.
+
+    CALL METHOD me->send_request
+      EXPORTING
+        iv_payload  = lv_payload
+      IMPORTING
+        ev_response = lv_response.
+
+    rv_answer = output(
+      EXPORTING
+        iv_prompt  = iv_prompt
+        iv_content = lv_response ).
+
+  ENDMETHOD.
+
+  METHOD build_request.
+
+    DATA: lv_payload TYPE string.
+
+    lv_payload = |{ '{ "model": "mistral-tiny", "messages": [{ "role": "user", "content": "' && iv_prompt &&  '" }], "max_tokens": 1000 } ' }|.
+
+    ev_payload = lv_payload.
+  ENDMETHOD.
+
+  METHOD send_request.
+
+    DATA: lo_http_client   TYPE REF TO if_http_client,
+          lv_response_body TYPE string,
+          lv_header        TYPE string.
+
+    CALL METHOD cl_http_client=>create_by_destination
+      EXPORTING
+        destination                = 'Z_LM' "SM59 local config
+      IMPORTING
+        client                     = lo_http_client
+      EXCEPTIONS
+        argument_not_found         = 1
+        destination_not_found      = 2
+        destination_no_authority   = 3
+        plugin_not_active          = 4
+        internal_error             = 5
+        oa2c_set_token_error       = 6
+        oa2c_missing_authorization = 7
+        oa2c_invalid_config        = 8
+        oa2c_invalid_parameters    = 9
+        oa2c_invalid_scope         = 10
+        oa2c_invalid_grant         = 11
+        oa2c_secstore_adm          = 12
+        OTHERS                     = 13.
+    IF sy-subrc <> 0.
+*     Implement suitable error handling here
+    ENDIF.
+
+    "mv_api_key = 'lmstudio'. "any name for local LLMs or secret key for external
+    "set request header
+    lo_http_client->request->set_header_field( name = 'Content-Type' value = 'application/json' ).
+    lo_http_client->request->set_header_field( name = 'Authorization' value = |Bearer { mv_api_key }| ).
+
+    lo_http_client->request->set_method('POST').
+
+    "set payload
+    lo_http_client->request->set_cdata( iv_payload ).
+
+    CALL METHOD lo_http_client->send
+      EXCEPTIONS
+        http_communication_failure = 1
+        http_invalid_state         = 2
+        http_processing_failed     = 3
+        http_invalid_timeout       = 4
+        OTHERS                     = 5.
+    IF sy-subrc = 0.
+      CALL METHOD lo_http_client->receive
+        EXCEPTIONS
+          http_communication_failure = 1
+          http_invalid_state         = 2
+          http_processing_failed     = 3
+          OTHERS                     = 4.
+      "Get response
+      IF sy-subrc <> 0.
+        lv_response_body = lo_http_client->response->get_data( ).
+        ev_response = lv_response_body.
+      ELSE.
+        lv_response_body = lo_http_client->response->get_data( ).
+        IF lv_response_body IS NOT INITIAL.
+          ev_response = lv_response_body.
+        ELSE.
+          ev_response = 'Call was succeesful, but got no response'.
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD output.
+    DATA: lv_text(1000) TYPE c,
+          lv_string     TYPE string,
+          lv_content    TYPE string,
+          lv_reasoning  TYPE string.
+
+    TYPES: BEGIN OF lty_s_message,
+             role              TYPE string,
+             content           TYPE string,
+             reasoning_content TYPE string,
+           END           OF lty_s_MESSAGE,
+           lty_t_message TYPE STANDARD TABLE OF lty_s_message WITH NON-UNIQUE DEFAULT KEY,
+           BEGIN OF lty_s_choice,
+             index         TYPE string,
+             message       TYPE lty_s_message,
+             logprobs      TYPE string,
+             finish_reason TYPE string,
+           END      OF lty_s_choice,
+           BEGIN OF lty_s_base_chatgpt_res,
+             id      TYPE string,
+             object  TYPE string,
+             created TYPE string,
+             model   TYPE string,
+             choices TYPE TABLE OF lty_s_choice WITH NON-UNIQUE DEFAULT KEY,
+           END OF lty_s_base_chatgpt_res.
+
+    DATA ls_response TYPE lty_s_base_chatgpt_res.
+
+    DATA: lv_binary TYPE xstring.
+
+    DATA: lo_x2c TYPE REF TO cl_abap_conv_in_ce.
+    lo_x2c = cl_abap_conv_in_ce=>create( encoding = 'UTF-8' ).
+    lv_binary = iv_content.
+    lo_x2c->convert( EXPORTING input = lv_binary
+                     IMPORTING data  = lv_string ).
+
+    /ui2/cl_json=>deserialize( EXPORTING json = lv_string CHANGING data = ls_response ).
+
+    IF  ls_response-choices IS NOT INITIAL.
+      lv_content = ls_response-choices[ 1 ]-message-content.
+      lv_reasoning = ls_response-choices[ 1 ]-message-reasoning_content.
+    ELSE.
+      lv_content = lv_string.
+    ENDIF.
+
+
+    rv_answer = lv_content.
+*    cl_demo_output=>display(
+*     | PROMPT: { iv_prompt } { cl_abap_char_utilities=>cr_lf  } CONTENT: { lv_content } { cl_abap_char_utilities=>cr_lf } reasoning: { lv_reasoning } | ).
+  ENDMETHOD.
+
+
+ENDCLASS.
+
+
+CLASS lcl_AI DEFINITION INHERITING FROM lcl_popup.
+  PUBLIC SECTION.
+    DATA: mo_ai_box               TYPE REF TO cl_gui_dialogbox_container,
+          mo_ai_splitter          TYPE REF TO cl_gui_splitter_container,
+          mo_ai_toolbar_container TYPE REF TO cl_gui_container,
+          mo_ai_toolbar           TYPE REF TO cl_gui_toolbar,
+          mo_prompt_container     TYPE REF TO cl_gui_container,
+          mo_answer_container     TYPE REF TO cl_gui_container,
+          mo_prompt_text          TYPE REF TO cl_gui_textedit,
+          mo_answer_text          TYPE REF TO cl_gui_textedit,
+          mv_prompt               TYPE string,
+          mv_answer               TYPE string.
+
+    METHODS:  constructor IMPORTING io_source TYPE REF TO cl_ci_source_include,
+      add_ai_toolbar_buttons,
+      hnd_ai_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode.
+
+ENDCLASS.
+
+CLASS lcl_ai IMPLEMENTATION.
+
+  METHOD constructor.
+    super->constructor( ).
+
+    mo_AI_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.9' i_width = 1400 i_hight = 400 ).
+    CREATE OBJECT mo_ai_splitter
+      EXPORTING
+        parent  = mo_ai_box
+        rows    = 3
+        columns = 1
+      EXCEPTIONS
+        OTHERS  = 1.
+
+    mo_ai_splitter->get_container(
+         EXPORTING
+           row       = 1
+           column    = 1
+         RECEIVING
+           container = mo_ai_toolbar_container ).
+
+    mo_ai_splitter->get_container(
+      EXPORTING
+        row       = 2
+        column    = 1
+      RECEIVING
+        container = mo_prompt_container ).
+
+    mo_ai_splitter->get_container(
+      EXPORTING
+        row       = 3
+        column    = 1
+      RECEIVING
+        container = mo_answer_container  ).
+
+    mo_ai_splitter->set_row_height( id = 1 height = '3' ).
+
+    mo_ai_splitter->set_row_sash( id    = 1
+                                  type  = 0
+                                  value = 0 ).
+
+
+    SET HANDLER on_box_close FOR mo_ai_box.
+
+
+    CREATE OBJECT mo_prompt_text
+      EXPORTING
+        parent                 = mo_prompt_container
+      EXCEPTIONS
+        error_cntl_create      = 1
+        error_cntl_init        = 2
+        error_cntl_link        = 3
+        error_dp_create        = 4
+        gui_type_not_supported = 5
+        OTHERS                 = 6.
+    IF sy-subrc <> 0.
+      on_box_close( mo_box ).
+    ENDIF.
+
+    CREATE OBJECT mo_answer_text
+      EXPORTING
+        parent                 = mo_answer_container
+      EXCEPTIONS
+        error_cntl_create      = 1
+        error_cntl_init        = 2
+        error_cntl_link        = 3
+        error_dp_create        = 4
+        gui_type_not_supported = 5
+        OTHERS                 = 6.
+    IF sy-subrc <> 0.
+      on_box_close( mo_box ).
+    ENDIF.
+
+    mo_answer_text->set_readonly_mode( ).
+
+    CREATE OBJECT mo_ai_toolbar EXPORTING parent = mo_ai_toolbar_container.
+    add_ai_toolbar_buttons( ).
+    mo_ai_toolbar->set_visible( 'X' ).
+
+    "set prompt
+    DATA lt_string TYPE TABLE OF char255.
+
+    APPEND INITIAL LINE TO lt_string ASSIGNING FIELD-SYMBOL(<str>).
+    <str> = 'Explain please the meaning of this ABAP code'.
+    mv_prompt = <str>.
+    APPEND INITIAL LINE TO lt_string ASSIGNING <str>.
+
+
+    LOOP AT io_source->lines INTO DATA(ls_line).
+      APPEND INITIAL LINE TO lt_string ASSIGNING <str>.
+      <str> = ls_line.
+      mv_prompt = mv_prompt && <str>.
+    ENDLOOP.
+
+    mo_prompt_text->set_text_as_r3table( lt_string ).
+    cl_gui_control=>set_focus( mo_ai_box ).
+  ENDMETHOD.
+
+  METHOD add_ai_toolbar_buttons.
+    DATA: lt_button TYPE ttb_button,
+          lt_events TYPE cntl_simple_events,
+          ls_events LIKE LINE OF lt_events.
+
+    lt_button  = VALUE #(
+     ( function = 'AI' icon = CONV #( icon_manikin_unknown_gender ) quickinfo = 'Ask AI' text = 'Ask AI' )
+     "( butn_type = 3  )
+                    ).
+
+    mo_ai_toolbar->add_button_group( lt_button ).
+
+*   Register events
+    ls_events-eventid = cl_gui_toolbar=>m_id_function_selected.
+    ls_events-appl_event = space.
+    APPEND ls_events TO lt_events.
+
+    mo_ai_toolbar->set_registered_events( events = lt_events ).
+    SET HANDLER me->hnd_ai_toolbar FOR mo_ai_toolbar.
+
+  ENDMETHOD.
+
+  METHOD hnd_ai_toolbar.
+
+    DATA: lv_prompt TYPE string.
+
+    CASE fcode.
+
+      WHEN 'AI'.
+
+        cl_gui_cfw=>flush( ).
+        DATA(lo_AI) = NEW lcl_ai_api( ).
+
+        DATA lt_text TYPE TABLE OF char255.
+        CALL METHOD mo_prompt_text->get_text_as_stream
+          IMPORTING
+            text = lt_text.
+        CLEAR mv_prompt.
+        LOOP AT lt_text INTO DATA(lv_line).
+          CONCATENATE mv_prompt lv_line
+                      "cl_abap_char_utilities=>newline
+                 INTO mv_prompt.
+        ENDLOOP.
+
+        REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline IN mv_prompt WITH ''.
+        REPLACE ALL OCCURRENCES OF '#' IN mv_prompt WITH ''.
+        REPLACE ALL OCCURRENCES OF REGEX '[[:cntrl:]]' IN mv_prompt WITH ' '.
+
+        mv_answer = lo_ai->call_openai( mv_prompt ).
+
+        mo_answer_text->set_textstream( mv_answer ).
+
+    ENDCASE.
+
+  ENDMETHOD.
 
 ENDCLASS.
 
@@ -1510,6 +1875,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD script.
+    fill_variables( ).
     run_script( ).
     show_step( ).
     me->break( ).
@@ -1560,8 +1926,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
       "IF mo_window->m_visualization IS NOT INITIAL.
-        mo_window->set_program( CONV #( ls_steps-include ) ).
-        mo_window->set_program_line( ls_steps-line ).
+      mo_window->set_program( CONV #( ls_steps-include ) ).
+      mo_window->set_program_line( ls_steps-line ).
       "ENDIF.
 
       IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack =  ls_steps-stacklevel.
@@ -1756,7 +2122,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           IF ls_oper-name = 'COMPUTE' OR ls_oper-name = 'SELECT' OR ls_oper-name = 'CLEAR' OR  ls_oper-name = 'LOOP' OR ls_oper-name = 'SORT'
              OR ls_oper-name = 'DELETE' OR ls_oper-name = 'READ' OR  ls_oper-name = 'CONCATENATE' OR ls_oper-name = 'CONDENSE'
              OR ls_oper-name = 'APPEND' OR ls_oper-name = 'MODIFY' OR  ls_oper-name = 'CREATE' OR ls_oper-name = 'SHIFT'
-             OR ls_oper-name = 'ASSIGN' OR ls_oper-name = 'TRANSLATE' OR  ls_oper-name = 'REPLACE'.
+             OR ls_oper-name = 'ASSIGN' OR ls_oper-name = 'TRANSLATE' OR  ls_oper-name = 'REPLACE'
+             OR  ls_oper-name = 'ADD' OR  ls_oper-name = 'SUBTRACT'.
             lv_optimize = abap_true.
           ENDIF.
         ENDIF.
@@ -1954,6 +2321,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         mo_window->show_stack( ).
       ENDIF.
     ENDIF.
+
+  ENDMETHOD.
+
+  METHOD fill_variables.
 
   ENDMETHOD.
 
@@ -3008,7 +3379,7 @@ CLASS lcl_window IMPLEMENTATION.
      "( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization switch' text = 'Visualization OFF' )
      "( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'Stack History switch' text = 'History On' )
      "( function = 'VARHIST' icon = CONV #( icon_graduate ) quickinfo = 'Variables History switch' text = 'Vars History On' )
-     ( function = 'ENGINE' icon = CONV #( icon_graduate ) quickinfo = 'Faster version but can skip some changes' text = 'Alpha' )
+     "( function = 'AI' icon = CONV #( icon_manikin_unknown_gender ) quickinfo = 'Ask AI' text = 'Ask AI' )
      ( function = 'F5' icon = CONV #( icon_debugger_step_into ) quickinfo = 'Step into' text = 'Step into' )
      ( function = 'F6' icon = CONV #( icon_debugger_step_over ) quickinfo = 'Step over' text = 'Step over' )
      ( function = 'F7' icon = CONV #( icon_debugger_step_out ) quickinfo = 'Step out' text = 'Step out' )
@@ -3025,6 +3396,7 @@ CLASS lcl_window IMPLEMENTATION.
 *     ( function = 'F6BEG' icon = CONV #( icon_release ) quickinfo = 'Start of block' text = 'Start of block' )
 *     ( function = 'F6END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
      ( butn_type = 3  )
+     ( function = 'ENGINE' icon = CONV #( icon_graduate ) quickinfo = 'Faster version but can skip some changes' text = 'Alpha' )
      ( function = 'DEBUG' icon = CONV #( icon_tools ) quickinfo = 'Debug' text = 'Debug' )
      ( function = 'INFO' icon = CONV #( icon_information ) quickinfo = 'Documentation' text = '' )
                     ).
@@ -3103,10 +3475,6 @@ CLASS lcl_window IMPLEMENTATION.
           APPEND gs_token TO gt_params.
 
         ENDWHILE.
-
-        IF gr_procedure->statement_index = lv_max.
-          EXIT.
-        ENDIF.
 
         IF gr_procedure->statement_index = lv_max.
           EXIT.
@@ -3212,6 +3580,11 @@ CLASS lcl_window IMPLEMENTATION.
     m_debug_button = fcode.
     READ TABLE mt_stack INDEX 1 INTO DATA(ls_stack).
     CASE fcode.
+
+      WHEN 'AI'.
+
+        READ TABLE mo_debugger->mo_window->mt_source INDEX 1 INTO DATA(ls_source).
+        NEW lcl_ai( ls_source-source ).
 
       WHEN 'ENGINE'.
         m_version = m_version BIT-XOR c_mask.
