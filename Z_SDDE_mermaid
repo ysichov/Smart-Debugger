@@ -29,85 +29,6 @@ CLASS lcl_window DEFINITION DEFERRED.
 CLASS lcl_table_viewer DEFINITION DEFERRED.
 CLASS lcl_mermaid DEFINITION DEFERRED.
 
-
-CLASS lcl_source_parcer DEFINITION.
-  PUBLIC SECTION.
-    CLASS-METHODS: get_fs_var IMPORTING iv_program TYPE string iv_type TYPE string iv_name TYPE string
-              RETURNING VALUE(rt_vars) TYPE tpda_scr_locals_it.
-ENDCLASS.
-
-CLASS lcl_source_parcer IMPLEMENTATION.
-  METHOD get_fs_var. "get local field symbols variables
-    RETURN.
-    DATA gr_scan TYPE REF TO cl_ci_scan.
-    DATA gr_source TYPE REF TO cl_ci_source_include.
-    DATA gr_statement TYPE REF TO if_ci_kzn_statement_iterator.
-    DATA gr_procedure TYPE REF TO if_ci_kzn_statement_iterator.
-
-    gr_source = cl_ci_source_include=>create( p_name = CONV #( iv_program ) ).
-    gr_scan = NEW cl_ci_scan( p_include = gr_source ).
-
-    gr_statement = cl_cikzn_scan_iterator_factory=>get_statement_iterator( ciscan = gr_scan ).
-    gr_procedure = cl_cikzn_scan_iterator_factory=>get_procedure_iterator( ciscan = gr_scan ).
-
-    DO.
-      TRY.
-          gr_statement->next( ).
-        CATCH cx_scan_iterator_reached_end.
-          EXIT.
-      ENDTRY.
-
-      DATA(gt_kw) = gr_statement->get_keyword( ).
-
-      IF gt_kw = iv_type .
-
-        DATA(token) = gr_statement->get_token( offset = 2 ).
-        IF token NE iv_name.
-          CONTINUE.
-        ENDIF.
-
-        gr_procedure->statement_index = gr_statement->statement_index.
-        gr_procedure->statement_type = gr_statement->statement_type.
-
-        DO.
-          TRY.
-              gr_procedure->next( ).
-            CATCH cx_scan_iterator_reached_end.
-              ULINE.
-              EXIT.
-          ENDTRY.
-
-          gt_kw = gr_procedure->get_keyword( ).
-          IF gt_kw = 'FIELD-SYMBOLS'.
-            token = gr_procedure->get_token( offset = 2 ).
-            APPEND INITIAL LINE TO rt_vars ASSIGNING FIELD-SYMBOL(<ls_var>).
-            <ls_var>-name = token.
-          ELSE.
-            WHILE 1 = 1.
-              token = gr_procedure->get_token( offset = sy-index ).
-              IF strlen( token ) > 13.
-                IF token+0(13) =  'FIELD-SYMBOL('.
-                  SHIFT token LEFT UP TO '<' .
-                  REPLACE ALL OCCURRENCES OF ')' IN token WITH ''.
-                  APPEND INITIAL LINE TO rt_vars ASSIGNING <ls_var>.
-                  <ls_var>-name = token.
-                ENDIF.
-              ENDIF.
-
-              IF token = ''.
-                EXIT.
-              ENDIF.
-
-            ENDWHILE.
-          ENDIF.
-
-        ENDDO.
-
-      ENDIF.
-    ENDDO.
-  ENDMETHOD.
-ENDCLASS.
-
 CLASS lcl_box_handler DEFINITION."for memory clearing
   PUBLIC SECTION.
     METHODS: on_box_close FOR EVENT close OF cl_gui_dialogbox_container IMPORTING sender.
@@ -408,6 +329,13 @@ CLASS lcl_rtti DEFINITION.
       create_struc_handle IMPORTING i_tname  TYPE tabname
                           EXPORTING e_t_comp TYPE abap_component_tab
                                     e_handle TYPE REF TO cl_abap_structdescr.
+ENDCLASS.
+CLASS lcl_debugger_script DEFINITION DEFERRED.
+CLASS lcl_source_parser DEFINITION.
+  PUBLIC SECTION.
+    CLASS-METHODS: get_fs_var IMPORTING iv_program TYPE string iv_type TYPE string iv_name TYPE string
+              RETURNING VALUE(rt_vars) TYPE tpda_scr_locals_it,
+              parse_tokens IMPORTING iv_program TYPE program io_debugger TYPE REF TO lcl_debugger_script.
 ENDCLASS.
 
 CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super.
@@ -1091,7 +1019,7 @@ CLASS lcl_ai IMPLEMENTATION.
 
 ENDCLASS.
 
-CLASS lcl_window DEFINITION INHERITING FROM lcl_popup.
+CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
   PUBLIC SECTION.
 
     TYPES: BEGIN OF ts_table,
@@ -2205,7 +2133,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
           SORT mt_locals.
 
-          mt_loc_fs = lcl_source_parcer=>get_fs_var( iv_program = CONV #( mo_window->m_prg-program )
+          mt_loc_fs = lcl_source_parser=>get_fs_var( iv_program = CONV #( mo_window->m_prg-program )
                                                      iv_type    = CONV #( mo_window->m_prg-eventtype )
                                                      iv_name    = CONV #( mo_window->m_prg-eventname ) ).
 
@@ -3163,6 +3091,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
 ENDCLASS.                    "lcl_debugger_script IMPLEMENTATION
 
+
+
 CLASS lcl_types DEFINITION ABSTRACT.
   PUBLIC SECTION.
     TYPES:
@@ -3415,76 +3345,10 @@ CLASS lcl_window IMPLEMENTATION.
 
   METHOD set_program.
 
-    DATA lr_scan TYPE REF TO cl_ci_scan.
     READ TABLE mt_source WITH KEY include = iv_program INTO DATA(ls_source).
     IF sy-subrc <> 0.
-      ls_source-include = iv_program.
-      ls_source-source = cl_ci_source_include=>create( p_name = iv_program ).
-
-      "to refactor
-      DATA gr_scan TYPE REF TO cl_ci_scan.
-      DATA gr_statement TYPE REF TO if_ci_kzn_statement_iterator.
-      DATA gr_procedure TYPE REF TO if_ci_kzn_statement_iterator.
-      DATA gs_token TYPE ts_oper.
-      DATA gt_Tokens TYPE tt_opers.
-      DATA gt_params TYPE tt_opers.
-      gr_scan = NEW cl_ci_scan( p_include = ls_source-source ).
-
-      gr_statement = cl_cikzn_scan_iterator_factory=>get_statement_iterator( ciscan = gr_scan ).
-      gr_procedure = cl_cikzn_scan_iterator_factory=>get_procedure_iterator( ciscan = gr_scan ).
-
-      TRY.
-          gr_statement->next( ).
-        CATCH cx_scan_iterator_reached_end.
-          EXIT.
-      ENDTRY.
-
-      DATA(gt_kw) = gr_statement->get_keyword( ).
-
-      DATA(token) = gr_statement->get_token( offset = 2 ).
-
-      gr_procedure->statement_index = gr_statement->statement_index.
-      gr_procedure->statement_type = gr_statement->statement_type.
-
-      DATA(lv_max) = lines( gr_scan->statements ).
-      DO.
-        TRY.
-            gr_procedure->next( ).
-          CATCH cx_scan_iterator_reached_end.
-        ENDTRY.
-
-        gt_kw = gr_procedure->get_keyword( ).
-
-        gs_token-name = gt_kw.
-
-        READ TABLE gr_scan->statements INDEX gr_procedure->statement_index INTO DATA(ls_statement).
-        gs_token-line = ls_Statement-trow.
-        APPEND gs_token TO gt_tokens.
-
-        WHILE 1 = 1.
-          token = gr_procedure->get_token( offset = sy-index ).
-          IF sy-index = 1 AND gs_token-name = token.
-            CONTINUE.
-          ENDIF.
-
-          IF token = ''.
-            EXIT.
-          ENDIF.
-
-          gs_token-name = token.
-          APPEND gs_token TO gt_params.
-
-        ENDWHILE.
-
-        IF gr_procedure->statement_index = lv_max.
-          EXIT.
-        ENDIF.
-
-      ENDDO.
-
-      ls_source-t_keywords = gt_tokens.
-      ls_source-t_params = gt_params.
-      APPEND ls_source TO mt_source.
+      lcl_source_parser=>parse_tokens( iv_program = iv_program io_debugger = mo_debugger ).
+      READ TABLE mt_source WITH KEY include = iv_program INTO ls_source.
     ENDIF.
 
     mo_code_viewer->set_text( table = ls_source-source->lines ).
@@ -6307,5 +6171,252 @@ CLASS lcl_mermaid IMPLEMENTATION.
       CATCH zcx_wd_gui_mermaid_js_diagram INTO DATA(error).
         MESSAGE error TYPE 'E'.
     ENDTRY.
+  ENDMETHOD.
+ENDCLASS.
+
+CLASS lcl_source_parser IMPLEMENTATION.
+  METHOD get_fs_var. "get local field symbols variables
+    RETURN.
+    DATA gr_scan TYPE REF TO cl_ci_scan.
+    DATA gr_source TYPE REF TO cl_ci_source_include.
+    DATA gr_statement TYPE REF TO if_ci_kzn_statement_iterator.
+    DATA gr_procedure TYPE REF TO if_ci_kzn_statement_iterator.
+
+    gr_source = cl_ci_source_include=>create( p_name = CONV #( iv_program ) ).
+    gr_scan = NEW cl_ci_scan( p_include = gr_source ).
+
+    gr_statement = cl_cikzn_scan_iterator_factory=>get_statement_iterator( ciscan = gr_scan ).
+    gr_procedure = cl_cikzn_scan_iterator_factory=>get_procedure_iterator( ciscan = gr_scan ).
+
+    DO.
+      TRY.
+          gr_statement->next( ).
+        CATCH cx_scan_iterator_reached_end.
+          EXIT.
+      ENDTRY.
+
+      DATA(gt_kw) = gr_statement->get_keyword( ).
+
+      IF gt_kw = iv_type .
+
+        DATA(token) = gr_statement->get_token( offset = 2 ).
+        IF token NE iv_name.
+          CONTINUE.
+        ENDIF.
+
+        gr_procedure->statement_index = gr_statement->statement_index.
+        gr_procedure->statement_type = gr_statement->statement_type.
+
+        DO.
+          TRY.
+              gr_procedure->next( ).
+            CATCH cx_scan_iterator_reached_end.
+              ULINE.
+              EXIT.
+          ENDTRY.
+
+          gt_kw = gr_procedure->get_keyword( ).
+          IF gt_kw = 'FIELD-SYMBOLS'.
+            token = gr_procedure->get_token( offset = 2 ).
+            APPEND INITIAL LINE TO rt_vars ASSIGNING FIELD-SYMBOL(<ls_var>).
+            <ls_var>-name = token.
+          ELSE.
+            WHILE 1 = 1.
+              token = gr_procedure->get_token( offset = sy-index ).
+              IF strlen( token ) > 13.
+                IF token+0(13) =  'FIELD-SYMBOL('.
+                  SHIFT token LEFT UP TO '<' .
+                  REPLACE ALL OCCURRENCES OF ')' IN token WITH ''.
+                  APPEND INITIAL LINE TO rt_vars ASSIGNING <ls_var>.
+                  <ls_var>-name = token.
+                ENDIF.
+              ENDIF.
+
+              IF token = ''.
+                EXIT.
+              ENDIF.
+
+            ENDWHILE.
+          ENDIF.
+
+        ENDDO.
+
+      ENDIF.
+    ENDDO.
+  ENDMETHOD.
+
+  METHOD parse_tokens.
+
+    DATA: lr_scan   TYPE REF TO cl_ci_scan,
+          ls_source TYPE lcl_window=>ts_progs,
+          lv_prev   TYPE string,
+          lv_change TYPE string.
+
+    DATA gr_scan TYPE REF TO cl_ci_scan.
+    DATA gr_statement TYPE REF TO if_ci_kzn_statement_iterator.
+    DATA gr_procedure TYPE REF TO if_ci_kzn_statement_iterator.
+    DATA gs_token TYPE lcl_window=>ts_oper.
+    DATA gt_Tokens TYPE lcl_window=>tt_opers.
+    DATA gt_params TYPE lcl_window=>tt_opers.
+
+    ls_source-source = cl_ci_source_include=>create( p_name = iv_program ).
+    gr_scan = NEW cl_ci_scan( p_include = ls_source-source ).
+
+    ls_source-include = iv_program.
+
+    gr_statement = cl_cikzn_scan_iterator_factory=>get_statement_iterator( ciscan = gr_scan ).
+    gr_procedure = cl_cikzn_scan_iterator_factory=>get_procedure_iterator( ciscan = gr_scan ).
+
+    TRY.
+        gr_statement->next( ).
+      CATCH cx_scan_iterator_reached_end.
+        EXIT.
+    ENDTRY.
+
+    DATA(gt_kw) = gr_statement->get_keyword( ).
+
+    DATA(token) = gr_statement->get_token( offset = 2 ).
+
+    gr_procedure->statement_index = gr_statement->statement_index.
+    gr_procedure->statement_type = gr_statement->statement_type.
+
+    DATA(lv_max) = lines( gr_scan->statements ).
+    DO.
+      TRY.
+          gr_procedure->next( ).
+        CATCH cx_scan_iterator_reached_end.
+      ENDTRY.
+
+      gt_kw = gr_procedure->get_keyword( ).
+
+      gs_token-name = gt_kw.
+
+      READ TABLE gr_scan->statements INDEX gr_procedure->statement_index INTO DATA(ls_statement).
+      IF sy-subrc <> 0.
+        EXIT.
+      ENDIF.
+      gs_token-line = ls_Statement-trow.
+      APPEND gs_token TO gt_tokens.
+
+      CLEAR lv_prev.
+      IF gt_kw = 'ASSIGN' OR gt_kw = 'ADD' OR gt_kw = 'SUBTRACT' .
+        DATA(lv_count) = 0.
+      ENDIF.
+
+      WHILE 1 = 1.
+        CLEAR lv_change.
+        token = gr_procedure->get_token( offset = sy-index ).
+        IF sy-index = 1 AND gs_token-name = token.
+          CONTINUE.
+        ENDIF.
+
+        IF token = ''.
+          CASE gt_kw.
+            WHEN 'COMPUTE'.
+              IF  NOT lv_prev CO '0123456789.() ' .
+                WRITE : 'including', lv_prev.
+              ENDIF.
+            WHEN 'CLEAR' OR 'SORT' OR 'CONDENSE'."no logic
+          ENDCASE.
+          EXIT.
+        ENDIF.
+
+
+        DATA lv_temp TYPE char30.
+        lv_temp = token.
+
+        IF lv_temp+0(5) = 'DATA('.
+          SHIFT lv_temp LEFT BY 5 PLACES.
+          REPLACE ALL OCCURRENCES OF ')' IN lv_temp WITH ''.
+        ENDIF.
+
+        IF lv_temp+0(6) = '@DATA('.
+          SHIFT lv_temp LEFT BY 6 PLACES.
+          REPLACE ALL OCCURRENCES OF ')' IN lv_temp WITH ''.
+        ENDIF.
+
+        IF lv_temp+0(13) = 'FIELD-SYMBOL('.
+          SHIFT lv_temp LEFT BY 13 PLACES.
+          REPLACE ALL OCCURRENCES OF ')' IN lv_temp WITH ''.
+        ENDIF.
+
+
+        CASE gt_kw.
+          WHEN 'COMPUTE'.
+            IF lv_temp CA '='.
+              lv_change = lv_prev.
+            ELSEIF lv_temp CA '+-*/'.
+              IF  NOT lv_prev  CO '0123456789.() ' .
+                lv_change = lv_prev.
+              ENDIF.
+            ENDIF.
+
+
+          WHEN 'CLEAR' OR 'SORT'.
+            lv_change = lv_temp.
+          WHEN  'CONDENSE'.
+
+            IF lv_temp <> 'NO-GAPS'.
+              lv_change = lv_temp.
+            ENDIF.
+          WHEN 'ASSIGN'.
+            ADD 1 TO lv_count.
+            IF lv_count <> 2.
+              lv_change = lv_temp.
+            ENDIF.
+          WHEN 'ADD' OR 'SUBTRACT'.
+            ADD 1 TO lv_count.
+            IF lv_count = 1.
+              IF  NOT lv_temp CO '0123456789.() '  .
+                "WRITE : 'including', lv_temp.
+              ENDIF.
+            ENDIF.
+            IF lv_count = 3.
+              lv_change = lv_temp.
+            ENDIF.
+          WHEN 'READ'.
+            IF lv_prev =  'INTO' OR lv_prev =  'ASSIGNING'.
+              lv_change = lv_temp.
+            ENDIF.
+
+          WHEN 'SELECT'.
+            IF  ( lv_prev =  'INTO' OR lv_prev =  '(' ) AND ( lv_temp <> 'TABLE' AND lv_temp <> '('  AND lv_temp <> ')' AND  lv_temp <> ',' ).
+              lv_change = lv_temp.
+
+            ENDIF.
+
+          WHEN OTHERS.
+
+            gs_token-name = token.
+            APPEND gs_token TO gt_params.
+
+        ENDCASE.
+
+        IF lv_temp = '(' .
+          lv_prev = lv_temp.
+          CONTINUE.
+        ENDIF.
+
+        IF  NOT lv_temp  CA '()'.
+          IF lv_temp <> 'TABLE' AND lv_prev <> '('.
+            lv_prev = lv_temp.
+          ENDIF.
+        ENDIF.
+
+        IF lv_change IS NOT INITIAL.
+          gs_token-name = lv_change.
+          APPEND gs_token TO gt_params.
+        ENDIF.
+
+      ENDWHILE.
+
+      IF gr_procedure->statement_index = lv_max.
+        EXIT.
+      ENDIF.
+
+    ENDDO.
+    ls_source-t_keywords = gt_tokens.
+    ls_source-t_params = gt_params.
+    APPEND ls_source TO io_debugger->mo_window->mt_source.
   ENDMETHOD.
 ENDCLASS.
