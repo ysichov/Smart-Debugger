@@ -474,7 +474,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                  CHANGING  c_obj  TYPE REF TO data,
 
       read_class_globals,
-      get_form_parameters IMPORTING i_prg TYPE tpda_scr_prg_info.
+      get_form_parameters IMPORTING i_prg TYPE tpda_scr_prg_info i_form type TPDA_EVENT.
 
     METHODS traverse
       IMPORTING
@@ -1335,6 +1335,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           CONTINUE.
         ENDIF.
         IF sy-tabix = l_statement-from + 1.
+          IF l_token-str <> i_form.
+            EXIT.
+          ENDIF.
           ls_param-form = l_token-str.
           CONTINUE.
         ENDIF.
@@ -2152,7 +2155,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             ENDIF.
 
             IF mo_window->m_prg-event-eventtype = 'FORM'.
-              get_form_parameters( mo_window->m_prg ).
+              get_form_parameters( i_prg = mo_window->m_prg i_form = ms_stack-eventname ).
             ENDIF.
 
             SORT mt_locals.
