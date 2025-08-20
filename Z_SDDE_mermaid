@@ -169,14 +169,12 @@ CLASS lcl_popup DEFINITION.
           mo_variables_container TYPE REF TO cl_gui_container,
           mo_tables_container    TYPE REF TO cl_gui_container.
 
-    METHODS: "constructor,
+    METHODS: constructor IMPORTING i_additional_name TYPE string OPTIONAL,
       create IMPORTING i_width       TYPE i
                        i_hight       TYPE i
                        i_name        TYPE text100 OPTIONAL
              RETURNING VALUE(ro_box) TYPE REF TO cl_gui_dialogbox_container,
-
-      on_box_close FOR EVENT close OF cl_gui_dialogbox_container IMPORTING sender,
-      constructor IMPORTING i_additional_name TYPE string OPTIONAL.
+      on_box_close FOR EVENT close OF cl_gui_dialogbox_container IMPORTING sender.
 
 ENDCLASS.
 
@@ -1042,11 +1040,23 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              source     TYPE REF TO cl_ci_source_include,
              t_keywords TYPE tt_opers,
              t_params   TYPE tt_opers,
-           END OF ts_progs.
+           END OF ts_progs,
+
+           BEGIN OF ts_locals,
+             program   TYPE tpda_program,
+             eventtype TYPE tpda_event_type,
+             eventname TYPE tpda_event,
+             mt_locals TYPE tpda_scr_locals_it,
+           END OF ts_locals,
+
+           BEGIN OF ts_globals,
+             program    TYPE tpda_program,
+             mt_globals TYPE tpda_scr_globals_it,
+           END OF ts_globals.
+
 
     TYPES tt_table TYPE STANDARD TABLE OF ts_table
           WITH NON-UNIQUE DEFAULT KEY.
-
 
     DATA: m_version              TYPE x, " 0- alpha, 01 - beta
           m_history              TYPE x,
@@ -1080,7 +1090,9 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
           mt_breaks              TYPE tpda_bp_persistent_it,
           m_hist_depth           TYPE i,
           m_start_stack          TYPE i,
-          mt_source              TYPE STANDARD  TABLE OF ts_progs.
+          mt_source              TYPE STANDARD  TABLE OF ts_progs,
+          mt_locals_set          TYPE STANDARD TABLE OF ts_locals,
+          mt_globals_set         TYPE STANDARD TABLE OF ts_globals.
 
     METHODS: constructor IMPORTING i_debugger TYPE REF TO lcl_debugger_script i_additional_name TYPE string OPTIONAL,
       add_toolbar_buttons,
@@ -1315,8 +1327,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lv_type  TYPE char1.
     DATA(gr_source) = cl_ci_source_include=>create( p_name = CONV #( i_prg-include ) ).
     CREATE OBJECT gr_scan EXPORTING p_include = gr_source.
-
-    LOOP AT gr_scan->tokens INTO DATA(l_token) WHERE str = 'FORM' .
+     LOOP AT gr_scan->tokens INTO DATA(l_token) WHERE str = 'FORM' .
       READ TABLE gr_scan->statements INTO DATA(l_statement) WITH KEY from =  sy-tabix.
 
       LOOP AT gr_scan->tokens FROM l_statement-from TO l_statement-to INTO l_token.
@@ -2078,84 +2089,102 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       IF mv_stack_changed = abap_true OR is_history = abap_true.
 
         IF mo_tree_local->m_locals IS NOT INITIAL.
-          CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
 
-          IF ms_stack-eventtype = 'METHOD'.
-            APPEND INITIAL LINE TO mt_locals ASSIGNING FIELD-SYMBOL(<loc>).
-            <loc>-name = 'ME'.
-          ENDIF.
-          IF ms_stack-eventtype = 'FUNCTION'.
-            DATA: lv_fname              TYPE rs38l_fnam,
-                  lt_exception_list     TYPE TABLE OF  rsexc,
-                  lt_export_parameter   TYPE TABLE OF  rsexp,
-                  lt_import_parameter   TYPE TABLE OF  rsimp,
-                  lt_changing_parameter TYPE TABLE OF    rscha,
-                  lt_tables_parameter   TYPE TABLE OF    rstbl.
+          READ TABLE mo_window->mt_locals_set WITH KEY program = ms_stack-program
+                                                       eventname = ms_stack-eventname
+                                                       eventtype = ms_stack-eventtype
+             INTO DATA(ls_local_Set).
 
-            lv_fname = ms_stack-eventname.
-            CALL FUNCTION 'FUNCTION_IMPORT_INTERFACE'
-              EXPORTING
-                funcname           = lv_fname
-              TABLES
-                exception_list     = lt_exception_list
-                export_parameter   = lt_export_parameter
-                import_parameter   = lt_import_parameter
-                changing_parameter = lt_changing_parameter
-                tables_parameter   = lt_tables_parameter
-              EXCEPTIONS
-                error_message      = 1
-                function_not_found = 2
-                invalid_name       = 3
-                OTHERS             = 4.
-            IF sy-subrc = 0.
-              LOOP AT lt_export_parameter INTO DATA(ls_exp).
-                APPEND INITIAL LINE TO mt_locals ASSIGNING <loc>.
-                <loc>-name = ls_exp-parameter.
-                <loc>-parkind = 2.
-              ENDLOOP.
-              LOOP AT lt_import_parameter INTO DATA(ls_imp).
-                APPEND INITIAL LINE TO mt_locals ASSIGNING <loc>.
-                <loc>-name = ls_imp-parameter.
-                <loc>-parkind = 1.
-              ENDLOOP.
-              LOOP AT lt_changing_parameter INTO DATA(ls_change).
-                APPEND INITIAL LINE TO mt_locals ASSIGNING <loc>.
-                <loc>-name = ls_change-parameter.
-                <loc>-parkind = 2.
-              ENDLOOP.
-              LOOP AT lt_tables_parameter INTO DATA(ls_table).
-                APPEND INITIAL LINE TO mt_locals ASSIGNING <loc>.
-                <loc>-name = ls_table-parameter.
-                <loc>-parkind = 2.
-              ENDLOOP.
+          IF sy-subrc = 0.
+            mt_locals = ls_local_set-mt_locals.
+          ELSE.
+            CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
+
+            IF ms_stack-eventtype = 'METHOD'.
+              APPEND INITIAL LINE TO mt_locals ASSIGNING FIELD-SYMBOL(<loc>).
+              <loc>-name = 'ME'.
             ENDIF.
-          ENDIF.
+            IF ms_stack-eventtype = 'FUNCTION'.
+              DATA: lv_fname              TYPE rs38l_fnam,
+                    lt_exception_list     TYPE TABLE OF  rsexc,
+                    lt_export_parameter   TYPE TABLE OF  rsexp,
+                    lt_import_parameter   TYPE TABLE OF  rsimp,
+                    lt_changing_parameter TYPE TABLE OF    rscha,
+                    lt_tables_parameter   TYPE TABLE OF    rstbl.
 
-          SORT mt_locals.
+              lv_fname = ms_stack-eventname.
+              CALL FUNCTION 'FUNCTION_IMPORT_INTERFACE'
+                EXPORTING
+                  funcname           = lv_fname
+                TABLES
+                  exception_list     = lt_exception_list
+                  export_parameter   = lt_export_parameter
+                  import_parameter   = lt_import_parameter
+                  changing_parameter = lt_changing_parameter
+                  tables_parameter   = lt_tables_parameter
+                EXCEPTIONS
+                  error_message      = 1
+                  function_not_found = 2
+                  invalid_name       = 3
+                  OTHERS             = 4.
+              IF sy-subrc = 0.
+                LOOP AT lt_export_parameter INTO DATA(ls_exp).
+                  APPEND INITIAL LINE TO mt_locals ASSIGNING <loc>.
+                  <loc>-name = ls_exp-parameter.
+                  <loc>-parkind = 2.
+                ENDLOOP.
+                LOOP AT lt_import_parameter INTO DATA(ls_imp).
+                  APPEND INITIAL LINE TO mt_locals ASSIGNING <loc>.
+                  <loc>-name = ls_imp-parameter.
+                  <loc>-parkind = 1.
+                ENDLOOP.
+                LOOP AT lt_changing_parameter INTO DATA(ls_change).
+                  APPEND INITIAL LINE TO mt_locals ASSIGNING <loc>.
+                  <loc>-name = ls_change-parameter.
+                  <loc>-parkind = 2.
+                ENDLOOP.
+                LOOP AT lt_tables_parameter INTO DATA(ls_table).
+                  APPEND INITIAL LINE TO mt_locals ASSIGNING <loc>.
+                  <loc>-name = ls_table-parameter.
+                  <loc>-parkind = 2.
+                ENDLOOP.
+              ENDIF.
+            ENDIF.
+
+            IF mo_window->m_prg-event-eventtype = 'FORM'.
+              get_form_parameters( mo_window->m_prg ).
+            ENDIF.
+
+            SORT mt_locals.
+          ENDIF.
 
           mt_loc_fs = lcl_source_parser=>get_fs_var( iv_program = CONV #( mo_window->m_prg-program )
                                                      iv_type    = CONV #( mo_window->m_prg-eventtype )
                                                      iv_name    = CONV #( mo_window->m_prg-eventname ) ).
 
-          IF mo_window->m_prg-event-eventtype = 'FORM'.
-            get_form_parameters( mo_window->m_prg ).
-          ENDIF.
         ENDIF.
 
       ENDIF.
 
       IF mo_tree_local->m_globals IS NOT INITIAL OR  mo_tree_local->m_ldb IS NOT INITIAL.
-        CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
-        SORT mt_globals.
-      ENDIF.
 
-      IF mo_tree_local->m_globals IS NOT INITIAL AND  mo_tree_local->m_ldb IS NOT INITIAL.
-        LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
-          READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
-          IF sy-subrc NE 0.
-            <global>-parisval = 'L'.
+
+        READ TABLE mo_window->mt_globals_set WITH KEY program = ms_stack-program INTO DATA(ls_global_Set).
+
+        IF sy-subrc = 0.
+          mt_globals = ls_global_set-mt_globals.
+        ELSE.
+          CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
+          SORT mt_globals.
+          IF mo_tree_local->m_globals IS NOT INITIAL AND  mo_tree_local->m_ldb IS NOT INITIAL.
+            LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
+              READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
+              IF sy-subrc NE 0.
+                <global>-parisval = 'L'.
+              ENDIF.
+            ENDLOOP.
           ENDIF.
-        ENDLOOP.
+        ENDIF.
       ENDIF.
 
       DATA: lr_names TYPE RANGE OF string,
@@ -2180,8 +2209,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       IF mo_tree_local->m_locals IS NOT INITIAL.
         LOOP AT mt_locals INTO DATA(ls_local).
-
-          "CHECK NOT ls_local-name CA '[]'.
 
           CASE ls_local-parkind.
             WHEN 0.
@@ -2530,12 +2557,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       rv_stop = abap_true.
       m_is_find = abap_true.
     ENDIF.
-    IF m_counter >= 10000."very deep history - to stop
+    IF m_counter >= 50000."very deep history - to stop
       CLEAR m_counter.
       rv_stop = abap_true.
     ENDIF.
 
-    IF m_counter MOD 1000 = 0.
+    IF m_counter MOD 10000 = 0.
       show_step( ).
     ENDIF.
 
@@ -3345,13 +3372,12 @@ CLASS lcl_window IMPLEMENTATION.
 
   METHOD set_program.
 
+    lcl_source_parser=>parse_tokens( iv_program = iv_program io_debugger = mo_debugger ).
     READ TABLE mt_source WITH KEY include = iv_program INTO DATA(ls_source).
-    IF sy-subrc <> 0.
-      lcl_source_parser=>parse_tokens( iv_program = iv_program io_debugger = mo_debugger ).
-      READ TABLE mt_source WITH KEY include = iv_program INTO ls_source.
+    IF sy-subrc = 0.
+      mo_code_viewer->set_text( table = ls_source-source->lines ).
     ENDIF.
 
-    mo_code_viewer->set_text( table = ls_source-source->lines ).
   ENDMETHOD.
 
   METHOD set_program_line.
@@ -3806,7 +3832,9 @@ CLASS lcl_text_viewer IMPLEMENTATION.
     mo_text->set_text_as_r3table( lt_string ).
     CALL METHOD cl_gui_cfw=>flush.
     mo_text->set_focus( mo_box ).
+
   ENDMETHOD.
+
 ENDCLASS.
 
 CLASS lcl_data_receiver IMPLEMENTATION.
@@ -6247,176 +6275,179 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
   METHOD parse_tokens.
 
-    DATA: lr_scan   TYPE REF TO cl_ci_scan,
-          ls_source TYPE lcl_window=>ts_progs,
-          lv_prev   TYPE string,
-          lv_change TYPE string.
+    DATA: lr_scan      TYPE REF TO cl_ci_scan,
+          lv_prev      TYPE string,
+          lv_change    TYPE string,
 
-    DATA gr_scan TYPE REF TO cl_ci_scan.
-    DATA gr_statement TYPE REF TO if_ci_kzn_statement_iterator.
-    DATA gr_procedure TYPE REF TO if_ci_kzn_statement_iterator.
-    DATA gs_token TYPE lcl_window=>ts_oper.
-    DATA gt_Tokens TYPE lcl_window=>tt_opers.
-    DATA gt_params TYPE lcl_window=>tt_opers.
+          gr_scan      TYPE REF TO cl_ci_scan,
+          gr_statement TYPE REF TO if_ci_kzn_statement_iterator,
+          gr_procedure TYPE REF TO if_ci_kzn_statement_iterator,
+          gs_token     TYPE lcl_window=>ts_oper,
+          gt_Tokens    TYPE lcl_window=>tt_opers,
+          gt_params    TYPE lcl_window=>tt_opers.
 
-    ls_source-source = cl_ci_source_include=>create( p_name = iv_program ).
-    gr_scan = NEW cl_ci_scan( p_include = ls_source-source ).
+    READ TABLE io_debugger->mo_window->mt_source WITH KEY include = iv_program INTO DATA(ls_source).
+    IF sy-subrc <> 0.
 
-    ls_source-include = iv_program.
+      ls_source-source = cl_ci_source_include=>create( p_name = iv_program ).
+      gr_scan = NEW cl_ci_scan( p_include = ls_source-source ).
 
-    gr_statement = cl_cikzn_scan_iterator_factory=>get_statement_iterator( ciscan = gr_scan ).
-    gr_procedure = cl_cikzn_scan_iterator_factory=>get_procedure_iterator( ciscan = gr_scan ).
+      ls_source-include = iv_program.
 
-    TRY.
-        gr_statement->next( ).
-      CATCH cx_scan_iterator_reached_end.
-        EXIT.
-    ENDTRY.
+      gr_statement = cl_cikzn_scan_iterator_factory=>get_statement_iterator( ciscan = gr_scan ).
+      gr_procedure = cl_cikzn_scan_iterator_factory=>get_procedure_iterator( ciscan = gr_scan ).
 
-    DATA(gt_kw) = gr_statement->get_keyword( ).
-
-    DATA(token) = gr_statement->get_token( offset = 2 ).
-
-    gr_procedure->statement_index = gr_statement->statement_index.
-    gr_procedure->statement_type = gr_statement->statement_type.
-
-    DATA(lv_max) = lines( gr_scan->statements ).
-    DO.
       TRY.
-          gr_procedure->next( ).
+          gr_statement->next( ).
         CATCH cx_scan_iterator_reached_end.
+          EXIT.
       ENDTRY.
 
-      gt_kw = gr_procedure->get_keyword( ).
+      DATA(gt_kw) = gr_statement->get_keyword( ).
 
-      gs_token-name = gt_kw.
+      DATA(token) = gr_statement->get_token( offset = 2 ).
 
-      READ TABLE gr_scan->statements INDEX gr_procedure->statement_index INTO DATA(ls_statement).
-      IF sy-subrc <> 0.
-        EXIT.
-      ENDIF.
-      gs_token-line = ls_Statement-trow.
-      APPEND gs_token TO gt_tokens.
+      gr_procedure->statement_index = gr_statement->statement_index.
+      gr_procedure->statement_type = gr_statement->statement_type.
 
-      CLEAR lv_prev.
-      IF gt_kw = 'ASSIGN' OR gt_kw = 'ADD' OR gt_kw = 'SUBTRACT' .
-        DATA(lv_count) = 0.
-      ENDIF.
+      DATA(lv_max) = lines( gr_scan->statements ).
+      DO.
+        TRY.
+            gr_procedure->next( ).
+          CATCH cx_scan_iterator_reached_end.
+        ENDTRY.
 
-      WHILE 1 = 1.
-        CLEAR lv_change.
-        token = gr_procedure->get_token( offset = sy-index ).
-        IF sy-index = 1 AND gs_token-name = token.
-          CONTINUE.
+        gt_kw = gr_procedure->get_keyword( ).
+
+        gs_token-name = gt_kw.
+
+        READ TABLE gr_scan->statements INDEX gr_procedure->statement_index INTO DATA(ls_statement).
+        IF sy-subrc <> 0.
+          EXIT.
+        ENDIF.
+        gs_token-line = ls_Statement-trow.
+        APPEND gs_token TO gt_tokens.
+
+        CLEAR lv_prev.
+        IF gt_kw = 'ASSIGN' OR gt_kw = 'ADD' OR gt_kw = 'SUBTRACT' .
+          DATA(lv_count) = 0.
         ENDIF.
 
-        IF token = ''.
+        WHILE 1 = 1.
+          CLEAR lv_change.
+          token = gr_procedure->get_token( offset = sy-index ).
+          IF sy-index = 1 AND gs_token-name = token.
+            CONTINUE.
+          ENDIF.
+
+          IF token = ''.
+            CASE gt_kw.
+              WHEN 'COMPUTE'.
+                IF  NOT lv_prev CO '0123456789.() ' .
+                  WRITE : 'including', lv_prev.
+                ENDIF.
+              WHEN 'CLEAR' OR 'SORT' OR 'CONDENSE'."no logic
+            ENDCASE.
+            EXIT.
+          ENDIF.
+
+
+          DATA lv_temp TYPE char30.
+          lv_temp = token.
+
+          IF lv_temp+0(5) = 'DATA('.
+            SHIFT lv_temp LEFT BY 5 PLACES.
+            REPLACE ALL OCCURRENCES OF ')' IN lv_temp WITH ''.
+          ENDIF.
+
+          IF lv_temp+0(6) = '@DATA('.
+            SHIFT lv_temp LEFT BY 6 PLACES.
+            REPLACE ALL OCCURRENCES OF ')' IN lv_temp WITH ''.
+          ENDIF.
+
+          IF lv_temp+0(13) = 'FIELD-SYMBOL('.
+            SHIFT lv_temp LEFT BY 13 PLACES.
+            REPLACE ALL OCCURRENCES OF ')' IN lv_temp WITH ''.
+          ENDIF.
+
+
           CASE gt_kw.
             WHEN 'COMPUTE'.
-              IF  NOT lv_prev CO '0123456789.() ' .
-                WRITE : 'including', lv_prev.
+              IF lv_temp CA '='.
+                lv_change = lv_prev.
+              ELSEIF lv_temp CA '+-*/'.
+                IF  NOT lv_prev  CO '0123456789.() ' .
+                  lv_change = lv_prev.
+                ENDIF.
               ENDIF.
-            WHEN 'CLEAR' OR 'SORT' OR 'CONDENSE'."no logic
+
+
+            WHEN 'CLEAR' OR 'SORT'.
+              lv_change = lv_temp.
+            WHEN  'CONDENSE'.
+
+              IF lv_temp <> 'NO-GAPS'.
+                lv_change = lv_temp.
+              ENDIF.
+            WHEN 'ASSIGN'.
+              ADD 1 TO lv_count.
+              IF lv_count <> 2.
+                lv_change = lv_temp.
+              ENDIF.
+            WHEN 'ADD' OR 'SUBTRACT'.
+              ADD 1 TO lv_count.
+              IF lv_count = 1.
+                IF  NOT lv_temp CO '0123456789.() '  .
+                  "WRITE : 'including', lv_temp.
+                ENDIF.
+              ENDIF.
+              IF lv_count = 3.
+                lv_change = lv_temp.
+              ENDIF.
+            WHEN 'READ'.
+              IF lv_prev =  'INTO' OR lv_prev =  'ASSIGNING'.
+                lv_change = lv_temp.
+              ENDIF.
+
+            WHEN 'SELECT'.
+              IF  ( lv_prev =  'INTO' OR lv_prev =  '(' ) AND ( lv_temp <> 'TABLE' AND lv_temp <> '('  AND lv_temp <> ')' AND  lv_temp <> ',' ).
+                lv_change = lv_temp.
+
+              ENDIF.
+
+            WHEN OTHERS.
+
+              gs_token-name = token.
+              APPEND gs_token TO gt_params.
+
           ENDCASE.
+
+          IF lv_temp = '(' .
+            lv_prev = lv_temp.
+            CONTINUE.
+          ENDIF.
+
+          IF  NOT lv_temp  CA '()'.
+            IF lv_temp <> 'TABLE' AND lv_prev <> '('.
+              lv_prev = lv_temp.
+            ENDIF.
+          ENDIF.
+
+          IF lv_change IS NOT INITIAL.
+            gs_token-name = lv_change.
+            APPEND gs_token TO gt_params.
+          ENDIF.
+
+        ENDWHILE.
+
+        IF gr_procedure->statement_index = lv_max.
           EXIT.
         ENDIF.
 
-
-        DATA lv_temp TYPE char30.
-        lv_temp = token.
-
-        IF lv_temp+0(5) = 'DATA('.
-          SHIFT lv_temp LEFT BY 5 PLACES.
-          REPLACE ALL OCCURRENCES OF ')' IN lv_temp WITH ''.
-        ENDIF.
-
-        IF lv_temp+0(6) = '@DATA('.
-          SHIFT lv_temp LEFT BY 6 PLACES.
-          REPLACE ALL OCCURRENCES OF ')' IN lv_temp WITH ''.
-        ENDIF.
-
-        IF lv_temp+0(13) = 'FIELD-SYMBOL('.
-          SHIFT lv_temp LEFT BY 13 PLACES.
-          REPLACE ALL OCCURRENCES OF ')' IN lv_temp WITH ''.
-        ENDIF.
-
-
-        CASE gt_kw.
-          WHEN 'COMPUTE'.
-            IF lv_temp CA '='.
-              lv_change = lv_prev.
-            ELSEIF lv_temp CA '+-*/'.
-              IF  NOT lv_prev  CO '0123456789.() ' .
-                lv_change = lv_prev.
-              ENDIF.
-            ENDIF.
-
-
-          WHEN 'CLEAR' OR 'SORT'.
-            lv_change = lv_temp.
-          WHEN  'CONDENSE'.
-
-            IF lv_temp <> 'NO-GAPS'.
-              lv_change = lv_temp.
-            ENDIF.
-          WHEN 'ASSIGN'.
-            ADD 1 TO lv_count.
-            IF lv_count <> 2.
-              lv_change = lv_temp.
-            ENDIF.
-          WHEN 'ADD' OR 'SUBTRACT'.
-            ADD 1 TO lv_count.
-            IF lv_count = 1.
-              IF  NOT lv_temp CO '0123456789.() '  .
-                "WRITE : 'including', lv_temp.
-              ENDIF.
-            ENDIF.
-            IF lv_count = 3.
-              lv_change = lv_temp.
-            ENDIF.
-          WHEN 'READ'.
-            IF lv_prev =  'INTO' OR lv_prev =  'ASSIGNING'.
-              lv_change = lv_temp.
-            ENDIF.
-
-          WHEN 'SELECT'.
-            IF  ( lv_prev =  'INTO' OR lv_prev =  '(' ) AND ( lv_temp <> 'TABLE' AND lv_temp <> '('  AND lv_temp <> ')' AND  lv_temp <> ',' ).
-              lv_change = lv_temp.
-
-            ENDIF.
-
-          WHEN OTHERS.
-
-            gs_token-name = token.
-            APPEND gs_token TO gt_params.
-
-        ENDCASE.
-
-        IF lv_temp = '(' .
-          lv_prev = lv_temp.
-          CONTINUE.
-        ENDIF.
-
-        IF  NOT lv_temp  CA '()'.
-          IF lv_temp <> 'TABLE' AND lv_prev <> '('.
-            lv_prev = lv_temp.
-          ENDIF.
-        ENDIF.
-
-        IF lv_change IS NOT INITIAL.
-          gs_token-name = lv_change.
-          APPEND gs_token TO gt_params.
-        ENDIF.
-
-      ENDWHILE.
-
-      IF gr_procedure->statement_index = lv_max.
-        EXIT.
-      ENDIF.
-
-    ENDDO.
-    ls_source-t_keywords = gt_tokens.
-    ls_source-t_params = gt_params.
-    APPEND ls_source TO io_debugger->mo_window->mt_source.
+      ENDDO.
+      ls_source-t_keywords = gt_tokens.
+      ls_source-t_params = gt_params.
+      APPEND ls_source TO io_debugger->mo_window->mt_source.
+    ENDIF.
   ENDMETHOD.
 ENDCLASS.
