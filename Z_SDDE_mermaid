@@ -331,9 +331,7 @@ ENDCLASS.
 CLASS lcl_debugger_script DEFINITION DEFERRED.
 CLASS lcl_source_parser DEFINITION.
   PUBLIC SECTION.
-    CLASS-METHODS: get_fs_var IMPORTING iv_program TYPE string iv_type TYPE string iv_name TYPE string
-              RETURNING VALUE(rt_vars) TYPE tpda_scr_locals_it,
-              parse_tokens IMPORTING iv_program TYPE program io_debugger TYPE REF TO lcl_debugger_script.
+    CLASS-METHODS: parse_tokens IMPORTING iv_program TYPE program io_debugger TYPE REF TO lcl_debugger_script.
 ENDCLASS.
 
 CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super.
@@ -474,7 +472,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                  CHANGING  c_obj  TYPE REF TO data,
 
       read_class_globals,
-      get_form_parameters IMPORTING i_prg TYPE tpda_scr_prg_info i_form type TPDA_EVENT.
+      get_form_parameters IMPORTING i_prg TYPE tpda_scr_prg_info i_form TYPE tpda_event.
 
     METHODS traverse
       IMPORTING
@@ -1327,7 +1325,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lv_type  TYPE char1.
     DATA(gr_source) = cl_ci_source_include=>create( p_name = CONV #( i_prg-include ) ).
     CREATE OBJECT gr_scan EXPORTING p_include = gr_source.
-     LOOP AT gr_scan->tokens INTO DATA(l_token) WHERE str = 'FORM' .
+    LOOP AT gr_scan->tokens INTO DATA(l_token) WHERE str = 'FORM' .
       READ TABLE gr_scan->statements INTO DATA(l_statement) WITH KEY from =  sy-tabix.
 
       LOOP AT gr_scan->tokens FROM l_statement-from TO l_statement-to INTO l_token.
@@ -2040,7 +2038,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           DATA: lv_step TYPE i.
           lv_step = m_step - 1.
           IF mo_window->m_varhist IS NOT INITIAL.
-
             mo_tree_local->clear( ).
             mo_tree_exp->clear( ).
             mo_tree_imp->clear( ).
@@ -2064,9 +2061,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           IF ls_oper-name = 'COMPUTE' OR ls_oper-name = 'SELECT' OR ls_oper-name = 'CLEAR' OR  ls_oper-name = 'LOOP' OR ls_oper-name = 'SORT'
              OR ls_oper-name = 'DELETE' OR ls_oper-name = 'READ' OR  ls_oper-name = 'CONCATENATE' OR ls_oper-name = 'CONDENSE'
              OR ls_oper-name = 'APPEND' OR ls_oper-name = 'MODIFY' OR  ls_oper-name = 'CREATE' OR ls_oper-name = 'SHIFT'
-             OR ls_oper-name = 'ASSIGN' OR ls_oper-name = 'TRANSLATE' OR  ls_oper-name = 'REPLACE'
+             OR ls_oper-name = 'ASSIGN' OR ls_oper-name = 'UNASSIGN' OR ls_oper-name = 'TRANSLATE' OR  ls_oper-name = 'REPLACE'
              OR  ls_oper-name = 'ADD' OR  ls_oper-name = 'SUBTRACT'.
             lv_optimize = abap_true.
+
+           IF ls_oper-name = 'UNASSIGN'.
+            mo_tree_local->clear( ).
+            mo_tree_exp->clear( ).
+            mo_tree_imp->clear( ).
+            DELETE mt_state WHERE leaf NE 'GLOBAL'.
+          ENDIF.
+
           ENDIF.
         ENDIF.
       ENDIF.
@@ -2089,7 +2094,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             OTHERS       = 2.
       ENDIF.
 
-      IF mv_stack_changed = abap_true OR is_history = abap_true.
+      IF mv_stack_changed = abap_true.
 
         IF mo_tree_local->m_locals IS NOT INITIAL.
 
@@ -2160,34 +2165,32 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
             SORT mt_locals.
           ENDIF.
-
-          mt_loc_fs = lcl_source_parser=>get_fs_var( iv_program = CONV #( mo_window->m_prg-program )
-                                                     iv_type    = CONV #( mo_window->m_prg-eventtype )
-                                                     iv_name    = CONV #( mo_window->m_prg-eventname ) ).
-
         ENDIF.
 
-      ENDIF.
+        IF mo_tree_local->m_globals IS NOT INITIAL OR  mo_tree_local->m_ldb IS NOT INITIAL.
 
-      IF mo_tree_local->m_globals IS NOT INITIAL OR  mo_tree_local->m_ldb IS NOT INITIAL.
+          READ TABLE mo_window->mt_globals_set WITH KEY program = ms_stack-program INTO DATA(ls_global_Set).
 
-
-        READ TABLE mo_window->mt_globals_set WITH KEY program = ms_stack-program INTO DATA(ls_global_Set).
-
-        IF sy-subrc = 0.
-          mt_globals = ls_global_set-mt_globals.
-        ELSE.
-          CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
-          SORT mt_globals.
-          IF mo_tree_local->m_globals IS NOT INITIAL AND  mo_tree_local->m_ldb IS NOT INITIAL.
-            LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
-              READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
-              IF sy-subrc NE 0.
-                <global>-parisval = 'L'.
-              ENDIF.
-            ENDLOOP.
+          IF sy-subrc = 0.
+            mt_globals = ls_global_set-mt_globals.
+          ELSE.
+            CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
+            SORT mt_globals.
+            IF mo_tree_local->m_globals IS NOT INITIAL AND  mo_tree_local->m_ldb IS NOT INITIAL.
+              LOOP AT mt_globals ASSIGNING FIELD-SYMBOL(<global>).
+                READ TABLE mt_compo WITH KEY name = <global>-name TRANSPORTING NO FIELDS.
+                IF sy-subrc NE 0.
+                  <global>-parisval = 'L'.
+                ENDIF.
+              ENDLOOP.
+            ENDIF.
           ENDIF.
         ENDIF.
+
+        IF mo_tree_local->m_class_data IS NOT INITIAL.
+          read_class_globals( ).
+        ENDIF.
+
       ENDIF.
 
       DATA: lr_names TYPE RANGE OF string,
@@ -2197,11 +2200,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
         LOOP AT ls_source-t_params INTO DATA(ls_param) WHERE line = ms_stack_prev-line.
           lv_temp = ls_param-name.
-          IF lv_temp+0(5) = 'DATA('.
-            SHIFT lv_temp LEFT BY 5 PLACES.
-            REPLACE ALL OCCURRENCES OF ')' IN lv_temp WITH ''.
-          ENDIF.
           lr_names = VALUE #( BASE lr_names ( sign = 'I' option = 'EQ' low = lv_temp ) ).
+          IF lv_temp+0(1) = '<'.
+            APPEND INITIAL LINE TO mt_locals ASSIGNING FIELD-SYMBOL(<locals>).
+            <locals>-name = lv_temp.
+          ENDIF.
         ENDLOOP.
         IF sy-subrc = 0.
           DELETE mt_globals WHERE name NOT IN lr_names.
@@ -2258,10 +2261,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       LOOP AT mt_globals INTO ls_global WHERE parisval = 'L'.
         transfer_variable( EXPORTING i_name = ls_global-name iv_type = 'LDB' ).
       ENDLOOP.
-    ENDIF.
-
-    IF mo_tree_local->m_class_data IS NOT INITIAL.
-      read_class_globals( ).
     ENDIF.
 
     LOOP AT mt_state ASSIGNING FIELD-SYMBOL(<state>).
@@ -6206,75 +6205,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
 ENDCLASS.
 
 CLASS lcl_source_parser IMPLEMENTATION.
-  METHOD get_fs_var. "get local field symbols variables
-    RETURN.
-    DATA gr_scan TYPE REF TO cl_ci_scan.
-    DATA gr_source TYPE REF TO cl_ci_source_include.
-    DATA gr_statement TYPE REF TO if_ci_kzn_statement_iterator.
-    DATA gr_procedure TYPE REF TO if_ci_kzn_statement_iterator.
-
-    gr_source = cl_ci_source_include=>create( p_name = CONV #( iv_program ) ).
-    gr_scan = NEW cl_ci_scan( p_include = gr_source ).
-
-    gr_statement = cl_cikzn_scan_iterator_factory=>get_statement_iterator( ciscan = gr_scan ).
-    gr_procedure = cl_cikzn_scan_iterator_factory=>get_procedure_iterator( ciscan = gr_scan ).
-
-    DO.
-      TRY.
-          gr_statement->next( ).
-        CATCH cx_scan_iterator_reached_end.
-          EXIT.
-      ENDTRY.
-
-      DATA(gt_kw) = gr_statement->get_keyword( ).
-
-      IF gt_kw = iv_type .
-
-        DATA(token) = gr_statement->get_token( offset = 2 ).
-        IF token NE iv_name.
-          CONTINUE.
-        ENDIF.
-
-        gr_procedure->statement_index = gr_statement->statement_index.
-        gr_procedure->statement_type = gr_statement->statement_type.
-
-        DO.
-          TRY.
-              gr_procedure->next( ).
-            CATCH cx_scan_iterator_reached_end.
-              ULINE.
-              EXIT.
-          ENDTRY.
-
-          gt_kw = gr_procedure->get_keyword( ).
-          IF gt_kw = 'FIELD-SYMBOLS'.
-            token = gr_procedure->get_token( offset = 2 ).
-            APPEND INITIAL LINE TO rt_vars ASSIGNING FIELD-SYMBOL(<ls_var>).
-            <ls_var>-name = token.
-          ELSE.
-            WHILE 1 = 1.
-              token = gr_procedure->get_token( offset = sy-index ).
-              IF strlen( token ) > 13.
-                IF token+0(13) =  'FIELD-SYMBOL('.
-                  SHIFT token LEFT UP TO '<' .
-                  REPLACE ALL OCCURRENCES OF ')' IN token WITH ''.
-                  APPEND INITIAL LINE TO rt_vars ASSIGNING <ls_var>.
-                  <ls_var>-name = token.
-                ENDIF.
-              ENDIF.
-
-              IF token = ''.
-                EXIT.
-              ENDIF.
-
-            ENDWHILE.
-          ENDIF.
-
-        ENDDO.
-
-      ENDIF.
-    ENDDO.
-  ENDMETHOD.
 
   METHOD parse_tokens.
 
@@ -6392,7 +6322,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
               IF lv_temp <> 'NO-GAPS'.
                 lv_change = lv_temp.
               ENDIF.
-            WHEN 'ASSIGN'.
+            WHEN 'ASSIGN' or 'UNASSIGN'.
               ADD 1 TO lv_count.
               IF lv_count <> 2.
                 lv_change = lv_temp.
