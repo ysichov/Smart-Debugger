@@ -1996,7 +1996,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ADD 1 TO m_counter.
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
-        mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
         DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
 
         READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack_prev.
