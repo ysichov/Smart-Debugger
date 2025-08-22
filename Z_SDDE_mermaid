@@ -1044,19 +1044,20 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              program   TYPE tpda_program,
              eventtype TYPE tpda_event_type,
              eventname TYPE tpda_event,
-             mt_locals TYPE tpda_scr_locals_it,
+             locals_tab TYPE tpda_scr_locals_it,
+             mt_fs TYPE tpda_scr_locals_it,
            END OF ts_locals,
 
            BEGIN OF ts_globals,
              program    TYPE tpda_program,
-             mt_globals TYPE tpda_scr_globals_it,
+             globals_tab TYPE tpda_scr_globals_it,
+             mt_fs TYPE tpda_scr_locals_it,
            END OF ts_globals.
-
 
     TYPES tt_table TYPE STANDARD TABLE OF ts_table
           WITH NON-UNIQUE DEFAULT KEY.
 
-    DATA: m_version              TYPE x, " 0- alpha, 01 - beta
+    DATA: m_version              TYPE x, " 0 - alpha, 01 - beta
           m_history              TYPE x,
           m_visualization        TYPE x,
           m_varhist              TYPE x,
@@ -1995,7 +1996,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ADD 1 TO m_counter.
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
-
+        mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
         DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
 
         READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack_prev.
@@ -2104,7 +2105,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
              INTO DATA(ls_local_Set).
 
           IF sy-subrc = 0.
-            mt_locals = ls_local_set-mt_locals.
+            mt_locals = ls_local_set-locals_tab.
           ELSE.
             CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
 
@@ -2164,15 +2165,21 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             ENDIF.
 
             SORT mt_locals.
+
+            ls_local_set-program = ms_stack-program.
+            ls_local_set-eventname = ms_stack-eventname.
+            ls_local_set-eventtype = ms_stack-eventtype.
+            ls_local_set-locals_tab = mt_locals.
+            APPEND ls_local_set to mo_window->mt_locals_set.
           ENDIF.
         ENDIF.
 
-        IF mo_tree_local->m_globals IS NOT INITIAL OR  mo_tree_local->m_ldb IS NOT INITIAL.
+        IF ( mo_tree_local->m_globals IS NOT INITIAL OR  mo_tree_local->m_ldb IS NOT INITIAL ) AND ms_stack_prev-program <> ms_stack-program.
 
           READ TABLE mo_window->mt_globals_set WITH KEY program = ms_stack-program INTO DATA(ls_global_Set).
 
           IF sy-subrc = 0.
-            mt_globals = ls_global_set-mt_globals.
+            mt_globals = ls_global_set-globals_tab.
           ELSE.
             CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
             SORT mt_globals.
@@ -2184,6 +2191,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                 ENDIF.
               ENDLOOP.
             ENDIF.
+            ls_global_set-program = ms_stack-program.
+            ls_global_set-globals_tab = mt_globals.
+            APPEND ls_global_set to mo_window->mt_globals_set.
           ENDIF.
         ENDIF.
 
@@ -2271,13 +2281,13 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     CLEAR: mo_window->m_show_step.
 
     mo_tree_imp->m_prg_info = mo_window->m_prg.
-    IF mo_window->m_visualization IS NOT INITIAL.
-      mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
-      mo_window->set_program_line( mo_window->m_prg-line ).
-      IF mv_stack_changed = abap_true.
-        mo_window->show_stack( ).
-      ENDIF.
-    ENDIF.
+*    IF mo_window->m_visualization IS NOT INITIAL.
+*      mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+*      mo_window->set_program_line( mo_window->m_prg-line ).
+*      IF mv_stack_changed = abap_true.
+*        mo_window->show_stack( ).
+*      ENDIF.
+*    ENDIF.
 
   ENDMETHOD.
 
