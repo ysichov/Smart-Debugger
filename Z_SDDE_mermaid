@@ -1,3 +1,4 @@
+REPORT smart.
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -463,8 +464,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
       get_table  IMPORTING i_name TYPE string
                  CHANGING  c_obj  TYPE REF TO data,
 
-      read_class_globals,
-      get_form_parameters IMPORTING i_prg TYPE tpda_scr_prg_info i_form TYPE tpda_event.
+      read_class_globals.
 
     METHODS traverse
       IMPORTING
@@ -1307,85 +1307,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                      CHANGING  c_obj  = r_data ).
       ENDCASE.
     ENDLOOP.
-  ENDMETHOD.
-
-  METHOD get_form_parameters.
-
-    TYPES: BEGIN OF t_param,
-             form TYPE string,
-             name TYPE string,
-             type TYPE char1,
-           END OF t_param.
-
-    DATA: gr_scan  TYPE REF TO cl_ci_scan,
-          lt_param TYPE TABLE OF t_param,
-          ls_param TYPE t_param,
-          lv_par   TYPE char1,
-          lv_type  TYPE char1.
-    DATA(gr_source) = cl_ci_source_include=>create( p_name = CONV #( i_prg-include ) ).
-    CREATE OBJECT gr_scan EXPORTING p_include = gr_source.
-    LOOP AT gr_scan->tokens INTO DATA(l_token) WHERE str = 'FORM' .
-      READ TABLE gr_scan->statements INTO DATA(l_statement) WITH KEY from =  sy-tabix.
-
-      LOOP AT gr_scan->tokens FROM l_statement-from TO l_statement-to INTO l_token.
-        IF sy-tabix = l_statement-from.
-          CONTINUE.
-        ENDIF.
-        IF sy-tabix = l_statement-from + 1.
-          IF l_token-str <> i_form.
-            EXIT.
-          ENDIF.
-          ls_param-form = l_token-str.
-          CONTINUE.
-        ENDIF.
-        IF l_token-str = 'USING'.
-          ls_param-type = 'I'.
-          CLEAR: lv_type, lv_par.
-          CONTINUE.
-        ELSEIF l_token-str = 'CHANGING'.
-          IF ls_param-name IS NOT INITIAL.
-            APPEND ls_param TO lt_param.
-            CLEAR: lv_type, lv_par, ls_param-name.
-          ENDIF.
-          ls_param-type = 'E'.
-          CLEAR: lv_type, lv_par.
-          CONTINUE.
-        ENDIF.
-        IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str NE 'TYPE'.
-          APPEND ls_param TO lt_param.
-          CLEAR: lv_par, ls_param-name.
-        ENDIF.
-
-        IF lv_par IS INITIAL.
-          ls_param-name = l_token-str.
-          lv_par = abap_true.
-          CONTINUE.
-        ENDIF.
-        IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str = 'TYPE'.
-          lv_type = abap_true.
-          CONTINUE.
-        ENDIF.
-        IF lv_par = abap_true AND lv_type = abap_true.
-          APPEND ls_param TO lt_param.
-          CLEAR: lv_type, lv_par, ls_param-name.
-        ENDIF.
-      ENDLOOP.
-    ENDLOOP.
-
-    IF ls_param-name IS NOT INITIAL.
-      APPEND ls_param TO lt_param.
-    ENDIF.
-
-    LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
-      READ TABLE mt_locals WITH KEY name = ls_param-name ASSIGNING FIELD-SYMBOL(<loc>).
-      IF sy-subrc = 0.
-        IF ls_param-type = 'I'.
-          <loc>-parkind = '1'.
-        ELSEIF ls_param-type = 'E'.
-          <loc>-parkind = '2'.
-        ENDIF.
-      ENDIF.
-    ENDLOOP.
 
   ENDMETHOD.
 
@@ -2068,6 +1989,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
           ENDIF.
         ENDIF.
+      ELSE.
+        READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO ls_source.
       ENDIF.
     ENDIF.
 
@@ -2154,8 +2077,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             ENDIF.
 
             IF mo_window->m_prg-event-eventtype = 'FORM'.
-              BREAK-POINT.
-              get_form_parameters( i_prg = mo_window->m_prg i_form = ms_stack-eventname ).
+              LOOP AT ls_source-t_params INTO data(ls_params) WHERE name = mo_window->m_prg-event-eventname and class is INITIAL.
+                READ TABLE mt_locals WITH KEY name = ls_params-param ASSIGNING FIELD-SYMBOL(<local>).
+                IF sy-subrc = 0.
+                  IF ls_params-type = 'I'.
+                    <local>-parkind = '1'.
+                  ELSEIF ls_params-type = 'E'.
+                    <local>-parkind = '2'.
+                  ENDIF.
+                ENDIF.
+              ENDLOOP.
+
+              "get_form_parameters( i_prg = mo_window->m_prg i_form = ms_stack-eventname ).
             ENDIF.
 
             SORT mt_locals.
