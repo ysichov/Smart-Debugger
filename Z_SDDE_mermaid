@@ -1018,6 +1018,15 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
 
            tt_opers TYPE STANDARD TABLE OF ts_oper WITH EMPTY KEY,
 
+           BEGIN OF t_param,
+             prog  TYPE string,
+             class TYPE string,
+             event TYPE string,
+             name  TYPE string,
+             param TYPE string,
+             type  TYPE char1,
+           END OF t_param,
+
            BEGIN OF ts_progs,
              include    TYPE program,
              source     TYPE REF TO cl_ci_source_include,
