@@ -463,8 +463,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
       get_table  IMPORTING i_name TYPE string
                  CHANGING  c_obj  TYPE REF TO data,
 
-      read_class_globals,
-      get_form_parameters IMPORTING i_prg TYPE tpda_scr_prg_info i_form TYPE tpda_event.
+      read_class_globals.
 
     METHODS traverse
       IMPORTING
@@ -477,7 +476,8 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
         iv_struc_name  TYPE string OPTIONAL
         i_instance     TYPE string OPTIONAL
         i_cl_leaf      TYPE int4
-        i_ref          TYPE xfeld OPTIONAL.
+        i_ref          TYPE xfeld OPTIONAL
+        i_suffix       TYPE string OPTIONAL.
 
     METHODS traverse_struct
       IMPORTING io_type_descr  TYPE REF TO cl_abap_typedescr
@@ -488,7 +488,8 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                 ir_up          TYPE  REF TO data OPTIONAL
                 iv_parent_name TYPE string OPTIONAL
                 iv_struc_name  TYPE string OPTIONAL
-                i_instance     TYPE string OPTIONAL.
+                i_instance     TYPE string OPTIONAL
+                i_suffix       TYPE string OPTIONAL.
 
     METHODS traverse_elem
       IMPORTING
@@ -1018,11 +1019,21 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
 
            tt_opers TYPE STANDARD TABLE OF ts_oper WITH EMPTY KEY,
 
+           BEGIN OF ts_params,
+             class TYPE string,
+             event TYPE string,
+             name  TYPE string,
+             param TYPE string,
+             type  TYPE char1,
+           END OF ts_params,
+           tt_params TYPE STANDARD TABLE OF ts_params WITH EMPTY KEY,
+
            BEGIN OF ts_progs,
              include    TYPE program,
              source     TYPE REF TO cl_ci_source_include,
              t_keywords TYPE tt_opers,
-             t_params   TYPE tt_opers,
+             t_operands TYPE tt_opers,
+             t_params   TYPE tt_params,
            END OF ts_progs,
 
            BEGIN OF ts_locals,
@@ -1077,6 +1088,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
           m_hist_depth           TYPE i,
           m_start_stack          TYPE i,
           mt_source              TYPE STANDARD  TABLE OF ts_progs,
+          mt_params              TYPE STANDARD  TABLE OF ts_params,
           mt_locals_set          TYPE STANDARD TABLE OF ts_locals,
           mt_globals_set         TYPE STANDARD TABLE OF ts_globals.
 
@@ -1295,85 +1307,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           get_table( EXPORTING i_name = |{ i_name }-{ comp-compname }|
                      CHANGING  c_obj  = r_data ).
       ENDCASE.
-    ENDLOOP.
-  ENDMETHOD.
-
-  METHOD get_form_parameters.
-
-    TYPES: BEGIN OF t_param,
-             form TYPE string,
-             name TYPE string,
-             type TYPE char1,
-           END OF t_param.
-
-    DATA: gr_scan  TYPE REF TO cl_ci_scan,
-          lt_param TYPE TABLE OF t_param,
-          ls_param TYPE t_param,
-          lv_par   TYPE char1,
-          lv_type  TYPE char1.
-    DATA(gr_source) = cl_ci_source_include=>create( p_name = CONV #( i_prg-include ) ).
-    CREATE OBJECT gr_scan EXPORTING p_include = gr_source.
-    LOOP AT gr_scan->tokens INTO DATA(l_token) WHERE str = 'FORM' .
-      READ TABLE gr_scan->statements INTO DATA(l_statement) WITH KEY from =  sy-tabix.
-
-      LOOP AT gr_scan->tokens FROM l_statement-from TO l_statement-to INTO l_token.
-        IF sy-tabix = l_statement-from.
-          CONTINUE.
-        ENDIF.
-        IF sy-tabix = l_statement-from + 1.
-          IF l_token-str <> i_form.
-            EXIT.
-          ENDIF.
-          ls_param-form = l_token-str.
-          CONTINUE.
-        ENDIF.
-        IF l_token-str = 'USING'.
-          ls_param-type = 'I'.
-          CLEAR: lv_type, lv_par.
-          CONTINUE.
-        ELSEIF l_token-str = 'CHANGING'.
-          IF ls_param-name IS NOT INITIAL.
-            APPEND ls_param TO lt_param.
-            CLEAR: lv_type, lv_par, ls_param-name.
-          ENDIF.
-          ls_param-type = 'E'.
-          CLEAR: lv_type, lv_par.
-          CONTINUE.
-        ENDIF.
-        IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str NE 'TYPE'.
-          APPEND ls_param TO lt_param.
-          CLEAR: lv_par, ls_param-name.
-        ENDIF.
-
-        IF lv_par IS INITIAL.
-          ls_param-name = l_token-str.
-          lv_par = abap_true.
-          CONTINUE.
-        ENDIF.
-        IF lv_par = abap_true AND lv_type IS INITIAL AND l_token-str = 'TYPE'.
-          lv_type = abap_true.
-          CONTINUE.
-        ENDIF.
-        IF lv_par = abap_true AND lv_type = abap_true.
-          APPEND ls_param TO lt_param.
-          CLEAR: lv_type, lv_par, ls_param-name.
-        ENDIF.
-      ENDLOOP.
-    ENDLOOP.
-
-    IF ls_param-name IS NOT INITIAL.
-      APPEND ls_param TO lt_param.
-    ENDIF.
-
-    LOOP AT lt_param INTO ls_param WHERE form = i_prg-event-eventname.
-      READ TABLE mt_locals WITH KEY name = ls_param-name ASSIGNING FIELD-SYMBOL(<loc>).
-      IF sy-subrc = 0.
-        IF ls_param-type = 'I'.
-          <loc>-parkind = '1'.
-        ELSEIF ls_param-type = 'E'.
-          <loc>-parkind = '2'.
-        ENDIF.
-      ENDIF.
     ENDLOOP.
 
   ENDMETHOD.
@@ -2057,6 +1990,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
           ENDIF.
         ENDIF.
+      ELSE.
+        READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO ls_source.
       ENDIF.
     ENDIF.
 
@@ -2143,7 +2078,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             ENDIF.
 
             IF mo_window->m_prg-event-eventtype = 'FORM'.
-              get_form_parameters( i_prg = mo_window->m_prg i_form = ms_stack-eventname ).
+              LOOP AT ls_source-t_params INTO DATA(ls_params) WHERE name = mo_window->m_prg-event-eventname AND class IS INITIAL.
+                READ TABLE mt_locals WITH KEY name = ls_params-param ASSIGNING FIELD-SYMBOL(<local>).
+                IF sy-subrc = 0.
+                  IF ls_params-type = 'I'.
+                    <local>-parkind = '1'.
+                  ELSEIF ls_params-type = 'E'.
+                    <local>-parkind = '2'.
+                  ENDIF.
+                ENDIF.
+              ENDLOOP.
+
+              "get_form_parameters( i_prg = mo_window->m_prg i_form = ms_stack-eventname ).
             ENDIF.
 
             SORT mt_locals.
@@ -2192,7 +2138,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       IF lv_optimize = abap_true AND m_update IS INITIAL.
 
-        LOOP AT ls_source-t_params INTO DATA(ls_param) WHERE line = ms_stack_prev-line.
+        LOOP AT ls_source-t_operands INTO DATA(ls_param) WHERE line = ms_stack_prev-line.
           lv_temp = ls_param-name.
           lr_names = VALUE #( BASE lr_names ( sign = 'I' option = 'EQ' low = lv_temp ) ).
         ENDLOOP.
@@ -2952,7 +2898,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                            iv_parent_name = iv_parent_name
                            i_instance     = i_instance
                            i_cl_leaf      = i_cl_leaf
-                           iv_struc_name  = iv_struc_name ).
+                           iv_struc_name  = iv_struc_name
+                           i_suffix       = i_suffix ).
         ELSE.
           traverse_struct( io_type_descr  = io_type_descr
                            iv_name        = iv_name
@@ -3010,7 +2957,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     lt_component = lo_struct_descr->get_components( ).
 
     LOOP AT lt_component INTO ls_component.
+      IF ls_component-name IS INITIAL AND ls_component-suffix IS NOT INITIAL.
+        "ls_component-name = ls_component-suffix.
+        data(lv_suffix) =  ls_component-suffix.
+      ENDIF.
 
+      IF i_suffix is not INITIAL.
+        ls_component-name = ls_component-name && i_suffix.
+      ENDIF.
       DATA: lr_new_struc TYPE REF TO data.
       ASSIGN ir_up->* TO FIELD-SYMBOL(<up>).
       IF ls_component-name IS INITIAL.
@@ -3073,7 +3027,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                   iv_parent_name = lv_parent
                   iv_struc_name  = ls_component-name
                   i_cl_leaf      = i_cl_leaf
-                  i_instance     = i_instance ).
+                  i_instance     = i_instance
+                  i_suffix       = lv_suffix ).
       ENDIF.
     ENDLOOP.
   ENDMETHOD.
@@ -6111,59 +6066,6 @@ CLASS lcl_dragdrop IMPLEMENTATION.
   ENDMETHOD.
 ENDCLASS.
 
-CLASS lcl_mermaid IMPLEMENTATION.
-
-  METHOD constructor.
-
-    super->constructor( ).
-
-    mo_debugger = io_debugger.
-
-    mo_box = create( i_name = 'Flow' i_width = 700 i_hight = 300 ).
-    SET HANDLER on_box_close FOR mo_box.
-
-    steps_flow( ).
-  ENDMETHOD.
-
-  METHOD steps_flow.
-    TYPES: BEGIN OF lty_entity,
-             name TYPE string,
-           END OF lty_entity.
-
-    DATA: lv_mm_String TYPE string,
-          lv_name      TYPE string,
-          lt_entities  TYPE TABLE OF lty_entity,
-          ls_entity    TYPE lty_entity,
-          lv_ind1      TYPE i,
-          lv_ind2      TYPE i.
-
-    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
-      ls_entity-name = |{ ls_step-eventtype }/{ ls_step-eventname }|.
-      COLLECT ls_entity INTO lt_entities.
-    ENDLOOP.
-
-    CLEAR ls_step.
-
-    lv_mm_string = |graph LR\n |.
-    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step2).
-      IF ls_step IS INITIAL.
-        ls_step = ls_Step2.
-        CONTINUE.
-      ENDIF.
-      IF ls_step2-stacklevel > ls_step-stacklevel.
-        ls_entity-name = |{ ls_step-eventtype }/{ ls_step-eventname }|.
-        READ TABLE lt_entities WITH KEY name = ls_entity-name TRANSPORTING NO FIELDS.
-        lv_ind1 = sy-tabix.
-        lv_name = |{ ls_step2-eventtype }/{ ls_step2-eventname }|.
-        READ TABLE lt_entities WITH KEY name = lv_name TRANSPORTING NO FIELDS.
-        lv_ind2 = sy-tabix.
-        lv_mm_string = |{ lv_mm_string }{ lv_ind1 }[{ ls_entity-name }] --> { lv_ind2 }[{ lv_name }]\n|.
-      ENDIF.
-      ls_step = ls_Step2.
-    ENDLOOP.
-
-  ENDMETHOD.
-ENDCLASS.
 
 CLASS lcl_source_parser IMPLEMENTATION.
 
@@ -6180,10 +6082,15 @@ CLASS lcl_source_parser IMPLEMENTATION.
           gt_Tokens    TYPE lcl_window=>tt_opers,
           gt_params    TYPE lcl_window=>tt_opers,
           lv_eventtype TYPE string,
-          lv_eventname TYPE string.
+          lv_eventname TYPE string,
+          ls_param     TYPE lcl_window=>ts_params,
+          lv_par       TYPE char1,
+          lv_type      TYPE char1,
+          lv_class     TYPE xfeld.
 
     CHECK io_debugger->mo_window->m_zcode IS INITIAL OR
-      ( io_debugger->mo_window->m_zcode IS NOT INITIAL AND ( iv_program+0(1) = 'Z' OR iv_program+0(5) = 'SAPLZ' ) ).
+      ( io_debugger->mo_window->m_zcode IS NOT INITIAL AND ( iv_program+0(1) = 'Z' OR iv_program+0(5) = 'SAPLZ' ) )
+      OR io_debugger->mo_window->mt_source IS INITIAL.
 
     READ TABLE io_debugger->mo_window->mt_source WITH KEY include = iv_program INTO DATA(ls_source).
     IF sy-subrc <> 0.
@@ -6227,8 +6134,16 @@ CLASS lcl_source_parser IMPLEMENTATION.
         gs_token-line = ls_Statement-trow.
         APPEND gs_token TO gt_tokens.
 
-        IF gt_kw = 'FORM' OR gt_kw = 'METHOD'.
-          lv_eventtype = gt_kw.
+        IF gt_kw = 'CLASS'.
+          lv_class = abap_true.
+        ENDIF.
+
+        IF gt_kw = 'FORM' OR gt_kw = 'METHOD' OR gt_kw = 'METHODS'.
+          lv_eventtype = ls_param-event =  gt_kw.
+          IF gt_kw = 'FORM'.
+            CLEAR: lv_class, ls_param-class.
+          ENDIF.
+
         ENDIF.
 
         IF gt_kw = 'ENDFORM' OR gt_kw = 'ENDMETHOD'.
@@ -6247,9 +6162,12 @@ CLASS lcl_source_parser IMPLEMENTATION.
             CONTINUE.
           ENDIF.
 
+          IF sy-index = 2 AND lv_class = abap_true AND ls_param-class IS INITIAL.
+            ls_param-class = token.
+          ENDIF.
+
           IF sy-index = 2 AND lv_eventtype IS NOT INITIAL AND lv_eventname IS INITIAL.
-            lv_eventname = token.
-            EXIT.
+            lv_eventname = ls_param-name =  token.
           ENDIF.
 
           IF token = ''.
@@ -6261,6 +6179,45 @@ CLASS lcl_source_parser IMPLEMENTATION.
               WHEN 'CLEAR' OR 'SORT' OR 'CONDENSE'."no logic
             ENDCASE.
             EXIT.
+          ENDIF.
+
+          IF token = 'USING' OR token = 'IMPORTING'.
+            ls_param-type = 'I'.
+            CLEAR: lv_type, lv_par.
+            CONTINUE.
+          ELSEIF token = 'CHANGING' OR token = 'EXPORTING' OR token = 'RETURNING'.
+
+            IF ls_param-param IS NOT INITIAL.
+              APPEND ls_param TO ls_source-t_params.
+              CLEAR: lv_type, lv_par, ls_param-param.
+            ENDIF.
+
+            ls_param-type = 'E'.
+            CLEAR: lv_type, lv_par.
+            CONTINUE.
+          ELSEIF token = 'OPTIONAL'.
+            CONTINUE.
+          ENDIF.
+
+          IF gt_kw = 'FORM' OR gt_kw = 'METHODS'.
+            IF lv_par = abap_true AND lv_type IS INITIAL AND  token NE 'TYPE'.
+              APPEND ls_param TO ls_source-t_params.
+              CLEAR: lv_par, ls_param-param.
+            ENDIF.
+
+            IF lv_par IS INITIAL.
+              ls_param-param = token.
+              lv_par = abap_true.
+              CONTINUE.
+            ENDIF.
+            IF lv_par = abap_true AND lv_type IS INITIAL AND token = 'TYPE'.
+              lv_type = abap_true.
+              CONTINUE.
+            ENDIF.
+            IF lv_par = abap_true AND lv_type = abap_true.
+              APPEND ls_param TO ls_source-t_params.
+              CLEAR: lv_type, lv_par, ls_param-param.
+            ENDIF.
           ENDIF.
 
 
@@ -6388,9 +6345,62 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
       ENDDO.
       ls_source-t_keywords = gt_tokens.
-      ls_source-t_params = gt_params.
+      ls_source-t_operands = gt_params.
       APPEND ls_source TO io_debugger->mo_window->mt_source.
     ENDIF.
   ENDMETHOD.
 
+ENDCLASS.
+
+CLASS lcl_mermaid IMPLEMENTATION.
+
+  METHOD constructor.
+
+    super->constructor( ).
+
+    mo_debugger = io_debugger.
+
+    mo_box = create( i_name = 'Flow' i_width = 700 i_hight = 300 ).
+    SET HANDLER on_box_close FOR mo_box.
+
+    steps_flow( ).
+  ENDMETHOD.
+
+  METHOD steps_flow.
+    TYPES: BEGIN OF lty_entity,
+             name TYPE string,
+           END OF lty_entity.
+
+    DATA: lv_mm_String TYPE string,
+          lv_name      TYPE string,
+          lt_entities  TYPE TABLE OF lty_entity,
+          ls_entity    TYPE lty_entity,
+          lv_ind1      TYPE i,
+          lv_ind2      TYPE i.
+
+    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
+      ls_entity-name = |{ ls_step-eventtype }/{ ls_step-eventname }|.
+      COLLECT ls_entity INTO lt_entities.
+    ENDLOOP.
+
+    CLEAR ls_step.
+
+    lv_mm_string = |graph LR\n |.
+    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step2).
+      IF ls_step IS INITIAL.
+        ls_step = ls_Step2.
+        CONTINUE.
+      ENDIF.
+      IF ls_step2-stacklevel > ls_step-stacklevel.
+        ls_entity-name = |{ ls_step-eventtype }/{ ls_step-eventname }|.
+        READ TABLE lt_entities WITH KEY name = ls_entity-name TRANSPORTING NO FIELDS.
+        lv_ind1 = sy-tabix.
+        lv_name = |{ ls_step2-eventtype }/{ ls_step2-eventname }|.
+        READ TABLE lt_entities WITH KEY name = lv_name TRANSPORTING NO FIELDS.
+        lv_ind2 = sy-tabix.
+        lv_mm_string = |{ lv_mm_string }{ lv_ind1 }[{ ls_entity-name }] --> { lv_ind2 }[{ lv_name }]\n|.
+      ENDIF.
+      ls_step = ls_Step2.
+    ENDLOOP.
+  ENDMETHOD.
 ENDCLASS.
