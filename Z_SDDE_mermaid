@@ -1958,7 +1958,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             mo_tree_local->clear( ).
             mo_tree_exp->clear( ).
             mo_tree_imp->clear( ).
-            DELETE mt_state WHERE leaf NE 'GLOBAL'. "AND leaf NE 'SYST'.
+            IF ms_stack_prev-program <> ms_Stack-program.
+              CLEAR mt_state.
+            ELSE.
+              DELETE mt_state WHERE leaf NE 'GLOBAL'. "AND leaf NE 'SYST'.
+            ENDIF.
           ENDIF.
         ELSE.
           CLEAR mv_stack_changed.
@@ -2103,7 +2107,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             APPEND ls_local_set TO mo_window->mt_locals_set.
           ENDIF.
         ENDIF.
-
+       
         IF ( mo_tree_local->m_globals IS NOT INITIAL OR  mo_tree_local->m_ldb IS NOT INITIAL ) AND ms_stack_prev-program <> ms_stack-program.
 
           READ TABLE mo_window->mt_globals_set WITH KEY program = ms_stack-program INTO DATA(ls_global_Set).
@@ -2111,6 +2115,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           IF sy-subrc = 0 AND ls_global_Set-glob_fill = abap_true.
             mt_globals = ls_global_set-globals_tab.
           ELSE.
+
             CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
             SORT mt_globals.
             IF mo_tree_local->m_globals IS NOT INITIAL AND  mo_tree_local->m_ldb IS NOT INITIAL.
@@ -2175,6 +2180,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
       IF mo_tree_local->m_globals IS NOT INITIAL.
+     
         LOOP AT mt_globals INTO DATA(ls_global)  WHERE parisval NE 'L'.
           transfer_variable( EXPORTING i_name = ls_global-name iv_type = 'GLOBAL' ).
         ENDLOOP.
@@ -2209,7 +2215,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD show_variables.
-
+    
     FIELD-SYMBOLS: <hist> TYPE any,
                    <new>  TYPE any.
 
@@ -6090,9 +6096,9 @@ CLASS lcl_source_parser IMPLEMENTATION.
           lv_class     TYPE xfeld,
           lv_preferred TYPE xfeld.
 
-    CHECK io_debugger->mo_window->m_zcode IS INITIAL OR
-      ( io_debugger->mo_window->m_zcode IS NOT INITIAL AND ( iv_program+0(1) = 'Z' OR iv_program+0(5) = 'SAPLZ' ) )
-      OR io_debugger->mo_window->mt_source IS INITIAL.
+    "CHECK io_debugger->mo_window->m_zcode IS INITIAL
+    "OR ( io_debugger->mo_window->m_zcode IS NOT INITIAL AND ( iv_program+0(1) = 'Z' OR iv_program+0(5) = 'SAPLZ' ) )
+    "OR io_debugger->mo_window->mt_source IS INITIAL.
 
     READ TABLE io_debugger->mo_window->mt_source WITH KEY include = iv_program INTO DATA(ls_source).
     IF sy-subrc <> 0.
@@ -6142,11 +6148,11 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
         IF gt_kw = 'FORM' OR gt_kw = 'METHOD' OR gt_kw = 'METHODS' OR gt_kw = 'CLASS-METHODS'.
           lv_eventtype = ls_param-event =  gt_kw.
-          clear lv_eventname.
+          CLEAR lv_eventname.
           IF gt_kw = 'FORM'.
             CLEAR: lv_class, ls_param-class.
           ELSE.
-           lv_eventtype = ls_param-event =  'METHOD'.
+            lv_eventtype = ls_param-event =  'METHOD'.
           ENDIF.
         ENDIF.
 
@@ -6365,7 +6371,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
       ls_source-t_operands = gt_params.
       APPEND ls_source TO io_debugger->mo_window->mt_source.
     ENDIF.
-    
+
   ENDMETHOD.
 
 ENDCLASS.
