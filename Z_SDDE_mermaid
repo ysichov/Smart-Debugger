@@ -6146,9 +6146,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
           IF gt_kw = 'FORM'.
             CLEAR: lv_class, ls_param-class.
           ELSE.
-           lv_eventtype = ls_param-event =  'METHOD'.   
+           lv_eventtype = ls_param-event =  'METHOD'.
           ENDIF.
-
         ENDIF.
 
         IF gt_kw = 'ENDFORM' OR gt_kw = 'ENDMETHOD'.
@@ -6315,7 +6314,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
 
           IF  NOT lv_temp  CA '()'.
-            IF lv_temp <> 'TABLE' AND lv_prev <> '('.
+            IF lv_temp <> 'TABLE'  AND lv_prev <> '('.
               lv_prev = lv_temp.
             ENDIF.
           ENDIF.
@@ -6366,7 +6365,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
       ls_source-t_operands = gt_params.
       APPEND ls_source TO io_debugger->mo_window->mt_source.
     ENDIF.
-    BREAK-POINT.
+    
   ENDMETHOD.
 
 ENDCLASS.
