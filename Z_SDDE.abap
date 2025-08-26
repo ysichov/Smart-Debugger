@@ -1912,9 +1912,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ADD 1 TO m_counter.
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
-        mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
         DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
-
+        "mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
         READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack_prev.
 
         MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
@@ -2107,7 +2106,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             APPEND ls_local_set TO mo_window->mt_locals_set.
           ENDIF.
         ENDIF.
-       
+
         IF ( mo_tree_local->m_globals IS NOT INITIAL OR  mo_tree_local->m_ldb IS NOT INITIAL ) AND ms_stack_prev-program <> ms_stack-program.
 
           READ TABLE mo_window->mt_globals_set WITH KEY program = ms_stack-program INTO DATA(ls_global_Set).
@@ -2180,7 +2179,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
       IF mo_tree_local->m_globals IS NOT INITIAL.
-     
+
         LOOP AT mt_globals INTO DATA(ls_global)  WHERE parisval NE 'L'.
           transfer_variable( EXPORTING i_name = ls_global-name iv_type = 'GLOBAL' ).
         ENDLOOP.
@@ -2215,7 +2214,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD show_variables.
-    
+
     FIELD-SYMBOLS: <hist> TYPE any,
                    <new>  TYPE any.
 
@@ -2483,6 +2482,15 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
+
+    "step out and not save history for standard code if it is swithed off
+    cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
+    IF  mo_window->m_zcode IS NOT INITIAL AND
+      ( mo_window->m_prg-program+0(1) <> 'Z' AND stack-program+0(5) <> 'SAPLZ' ).
+      f7( ).
+      RETURN.
+    ENDIF.
+
     IF mv_f7_stop = abap_true.
       CLEAR m_counter.
       rv_stop = abap_true.
@@ -3307,7 +3315,6 @@ CLASS lcl_window IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD set_program.
-
     lcl_source_parser=>parse_tokens( iv_program = iv_program io_debugger = mo_debugger ).
     READ TABLE mt_source WITH KEY include = iv_program INTO DATA(ls_source).
     IF sy-subrc = 0.
@@ -6426,6 +6433,5 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDIF.
       ls_step = ls_Step2.
     ENDLOOP.
-  
   ENDMETHOD.
 ENDCLASS.
