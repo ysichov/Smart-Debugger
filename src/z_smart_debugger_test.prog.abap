@@ -1037,11 +1037,12 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
            tt_opers TYPE STANDARD TABLE OF ts_oper WITH EMPTY KEY,
 
            BEGIN OF ts_params,
-             class TYPE string,
-             event TYPE string,
-             name  TYPE string,
-             param TYPE string,
-             type  TYPE char1,
+             class     TYPE string,
+             event     TYPE string,
+             name      TYPE string,
+             param     TYPE string,
+             type      TYPE char1,
+             preferred TYPE char1,
            END OF ts_params,
            tt_params TYPE STANDARD TABLE OF ts_params WITH EMPTY KEY,
 
@@ -1974,7 +1975,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             mo_tree_local->clear( ).
             mo_tree_exp->clear( ).
             mo_tree_imp->clear( ).
-            DELETE mt_state WHERE leaf NE 'GLOBAL'. "AND leaf NE 'SYST'.
+            IF ms_stack_prev-program <> ms_Stack-program.
+              CLEAR mt_state.
+            ELSE.
+              DELETE mt_state WHERE leaf NE 'GLOBAL'. "AND leaf NE 'SYST'.
+            ENDIF.
           ENDIF.
         ELSE.
           CLEAR mv_stack_changed.
@@ -2119,7 +2124,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             APPEND ls_local_set TO mo_window->mt_locals_set.
           ENDIF.
         ENDIF.
-
+       
         IF ( mo_tree_local->m_globals IS NOT INITIAL OR  mo_tree_local->m_ldb IS NOT INITIAL ) AND ms_stack_prev-program <> ms_stack-program.
 
           READ TABLE mo_window->mt_globals_set WITH KEY program = ms_stack-program INTO DATA(ls_global_Set).
@@ -2127,6 +2132,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           IF sy-subrc = 0 AND ls_global_Set-glob_fill = abap_true.
             mt_globals = ls_global_set-globals_tab.
           ELSE.
+
             CALL METHOD cl_tpda_script_data_descr=>globals RECEIVING p_globals_it = mt_globals.
             SORT mt_globals.
             IF mo_tree_local->m_globals IS NOT INITIAL AND  mo_tree_local->m_ldb IS NOT INITIAL.
@@ -2191,6 +2197,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
       IF mo_tree_local->m_globals IS NOT INITIAL.
+     
         LOOP AT mt_globals INTO DATA(ls_global)  WHERE parisval NE 'L'.
           transfer_variable( EXPORTING i_name = ls_global-name iv_type = 'GLOBAL' ).
         ENDLOOP.
@@ -2225,7 +2232,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD show_variables.
-
+    
     FIELD-SYMBOLS: <hist> TYPE any,
                    <new>  TYPE any.
 
@@ -2976,10 +2983,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     LOOP AT lt_component INTO ls_component.
       IF ls_component-name IS INITIAL AND ls_component-suffix IS NOT INITIAL.
         "ls_component-name = ls_component-suffix.
-        data(lv_suffix) =  ls_component-suffix.
+        DATA(lv_suffix) =  ls_component-suffix.
       ENDIF.
 
-      IF i_suffix is not INITIAL.
+      IF i_suffix IS NOT INITIAL.
         ls_component-name = ls_component-name && i_suffix.
       ENDIF.
       DATA: lr_new_struc TYPE REF TO data.
@@ -6103,11 +6110,12 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ls_param     TYPE lcl_window=>ts_params,
           lv_par       TYPE char1,
           lv_type      TYPE char1,
-          lv_class     TYPE xfeld.
+          lv_class     TYPE xfeld,
+          lv_preferred TYPE xfeld.
 
-    CHECK io_debugger->mo_window->m_zcode IS INITIAL OR
-      ( io_debugger->mo_window->m_zcode IS NOT INITIAL AND ( iv_program+0(1) = 'Z' OR iv_program+0(5) = 'SAPLZ' ) )
-      OR io_debugger->mo_window->mt_source IS INITIAL.
+    "CHECK io_debugger->mo_window->m_zcode IS INITIAL
+    "OR ( io_debugger->mo_window->m_zcode IS NOT INITIAL AND ( iv_program+0(1) = 'Z' OR iv_program+0(5) = 'SAPLZ' ) )
+    "OR io_debugger->mo_window->mt_source IS INITIAL.
 
     READ TABLE io_debugger->mo_window->mt_source WITH KEY include = iv_program INTO DATA(ls_source).
     IF sy-subrc <> 0.
@@ -6155,12 +6163,14 @@ CLASS lcl_source_parser IMPLEMENTATION.
           lv_class = abap_true.
         ENDIF.
 
-        IF gt_kw = 'FORM' OR gt_kw = 'METHOD' OR gt_kw = 'METHODS'.
+        IF gt_kw = 'FORM' OR gt_kw = 'METHOD' OR gt_kw = 'METHODS' OR gt_kw = 'CLASS-METHODS'.
           lv_eventtype = ls_param-event =  gt_kw.
+          CLEAR lv_eventname.
           IF gt_kw = 'FORM'.
             CLEAR: lv_class, ls_param-class.
+          ELSE.
+            lv_eventtype = ls_param-event =  'METHOD'.
           ENDIF.
-
         ENDIF.
 
         IF gt_kw = 'ENDFORM' OR gt_kw = 'ENDMETHOD'.
@@ -6212,11 +6222,24 @@ CLASS lcl_source_parser IMPLEMENTATION.
             ls_param-type = 'E'.
             CLEAR: lv_type, lv_par.
             CONTINUE.
-          ELSEIF token = 'OPTIONAL'.
+          ELSEIF token = 'OPTIONAL' OR token = 'PREFERRED'.
+            CONTINUE.
+          ELSEIF token = 'PARAMETER'.
+            lv_preferred = abap_true.
             CONTINUE.
           ENDIF.
 
-          IF gt_kw = 'FORM' OR gt_kw = 'METHODS'.
+          IF lv_preferred = abap_true.
+            READ TABLE ls_source-t_params WITH KEY event = 'METHOD' name = ls_param-name param = token ASSIGNING FIELD-SYMBOL(<param>).
+            IF sy-subrc = 0.
+              <param>-preferred = abap_true.
+            ENDIF.
+
+            CLEAR lv_preferred.
+            CONTINUE.
+          ENDIF.
+
+          IF gt_kw = 'FORM' OR gt_kw = 'METHODS' OR gt_kw = 'CLASS-METHODS'.
             IF lv_par = abap_true AND lv_type IS INITIAL AND  token NE 'TYPE'.
               APPEND ls_param TO ls_source-t_params.
               CLEAR: lv_par, ls_param-param.
@@ -6314,7 +6337,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
 
           IF  NOT lv_temp  CA '()'.
-            IF lv_temp <> 'TABLE' AND lv_prev <> '('.
+            IF lv_temp <> 'TABLE'  AND lv_prev <> '('.
               lv_prev = lv_temp.
             ENDIF.
           ENDIF.
@@ -6365,6 +6388,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
       ls_source-t_operands = gt_params.
       APPEND ls_source TO io_debugger->mo_window->mt_source.
     ENDIF.
+
   ENDMETHOD.
 
 ENDCLASS.
@@ -6419,8 +6443,8 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDIF.
       ls_step = ls_Step2.
     ENDLOOP.
+  
   ENDMETHOD.
-ENDCLASS.
-*</SCRIPT:SCRIPT_CLASS>
+ENDCLASS.*</SCRIPT:SCRIPT_CLASS>
 
 *</SCRIPT:PERSISTENT>
