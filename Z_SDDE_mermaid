@@ -1913,7 +1913,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
         DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
-        "mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+*        IF m_counter = 1.
+*          mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+*        ENDIF.
         READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack_prev.
 
         MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
@@ -6103,10 +6105,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
           lv_class     TYPE xfeld,
           lv_preferred TYPE xfeld.
 
-    "CHECK io_debugger->mo_window->m_zcode IS INITIAL
-    "OR ( io_debugger->mo_window->m_zcode IS NOT INITIAL AND ( iv_program+0(1) = 'Z' OR iv_program+0(5) = 'SAPLZ' ) )
-    "OR io_debugger->mo_window->mt_source IS INITIAL.
-
     READ TABLE io_debugger->mo_window->mt_source WITH KEY include = iv_program INTO DATA(ls_source).
     IF sy-subrc <> 0.
 
@@ -6149,6 +6147,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
         gs_token-line = ls_Statement-trow.
         APPEND gs_token TO gt_tokens.
 
+        DATA lv_new TYPE xfeld.
+
         IF gt_kw = 'CLASS'.
           lv_class = abap_true.
         ENDIF.
@@ -6190,9 +6190,9 @@ CLASS lcl_source_parser IMPLEMENTATION.
           IF token = ''.
             CASE gt_kw.
               WHEN 'COMPUTE'.
-                IF  NOT lv_prev CO '0123456789.() ' .
-                  WRITE : 'including', lv_prev.
-                ENDIF.
+*                IF  NOT lv_prev CO '0123456789.() ' .
+*                  WRITE : 'including', lv_prev.
+*                ENDIF.
               WHEN 'CLEAR' OR 'SORT' OR 'CONDENSE'."no logic
             ENDCASE.
             EXIT.
@@ -6250,7 +6250,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
             ENDIF.
           ENDIF.
 
-
           DATA lv_temp TYPE char30.
           lv_temp = token.
 
@@ -6269,17 +6268,80 @@ CLASS lcl_source_parser IMPLEMENTATION.
             REPLACE ALL OCCURRENCES OF ')' IN lv_temp WITH ''.
           ENDIF.
 
+          IF token = 'NEW'.
+            lv_new = abap_true.
+          ENDIF.
 
           CASE gt_kw.
             WHEN 'COMPUTE'.
-              IF lv_temp CA '='.
+              IF lv_temp CA '=' AND lv_new IS INITIAL..
                 lv_change = lv_prev.
-              ELSEIF lv_temp CA '+-*/'.
-                IF  NOT lv_prev  CO '0123456789.() ' .
-                  lv_change = lv_prev.
+*              ELSEIF lv_temp CA '+-*/'.
+*                IF  NOT lv_prev  CO '0123456789.() ' .
+*                  lv_change = lv_prev.
+*                ENDIF.
+              ENDIF.
+
+              IF ( lv_prev = '=' OR lv_prev CA '+-/*' ) AND lv_temp <> 'NEW'.
+                IF NOT lv_temp  CA '()' .
+                  IF NOT lv_temp  CO '0123456789. '.
+                    "WRITE : 'including', lv_temp.
+                  ENDIF.
                 ENDIF.
               ENDIF.
 
+            WHEN 'PERFORM' .
+
+              IF  lv_temp = 'USING' OR lv_temp = 'CHANGING' .
+                CLEAR lv_prev.
+              ENDIF.
+
+              IF  lv_prev = 'USING' OR lv_prev = 'CHANGING' .
+
+                IF NOT lv_temp  CA '()' .
+                  IF NOT lv_temp  CO '0123456789. '.
+                    WRITE : 'using', lv_temp.
+                    WRITE : 'value', lv_temp.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+
+            WHEN 'CREATE' OR 'CALL'.
+              DATA: lv_import TYPE xfeld,
+                    lv_export.
+
+              IF token = 'EXPORTING' OR token = 'CHANGING' OR token = 'TABLES'.
+                lv_export = abap_true.
+                CLEAR lv_import.
+                CONTINUE.
+
+              ELSEIF token = 'IMPORTING'.
+                lv_import = abap_true.
+                CLEAR lv_export.
+                CONTINUE.
+
+              ENDIF.
+
+              IF lv_prev = 'OBJECT'.
+                "WRITE : 'value', lv_temp.
+*          CONTINUE.
+              ENDIF.
+
+              IF  lv_prev = '='.
+                IF NOT lv_temp  CA '()'.
+                  IF NOT lv_temp  CO '0123456789. '.
+                    IF lv_import = abap_true.
+                      "WRITE : 'using', lv_temp.
+                    ELSEIF lv_export = abap_true.
+                      "WRITE : 'including', lv_temp.
+                    ENDIF.
+                  ENDIF.
+                ENDIF.
+              ELSE.
+                IF NOT lv_temp  CO '0123456789. ' AND lv_temp <> '=' AND ( lv_import = abap_true OR lv_export = abap_true ).
+                  "WRITE : 'inner', lv_temp.
+                ENDIF.
+              ENDIF.
 
             WHEN 'CLEAR' OR 'SORT'.
               lv_change = lv_temp.
@@ -6327,8 +6389,12 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
 
           IF  NOT lv_temp  CA '()'.
-            IF lv_temp <> 'TABLE'  AND lv_prev <> '('.
-              lv_prev = lv_temp.
+            IF lv_temp <> 'TABLE' AND lv_temp <> 'NEW'  AND lv_prev <> '('.
+              IF  gt_kw <> 'PERFORM'.
+                lv_prev = lv_temp.
+              ELSEIF token = 'USING' OR token = 'CHANGING'.
+                lv_prev = lv_temp.
+              ENDIF.
             ENDIF.
           ENDIF.
 
