@@ -1029,9 +1029,18 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              fullname TYPE string,
            END OF ts_table,
 
+           BEGIN OF ts_calls,
+             event TYPE string,
+             name  TYPE string,
+             outer TYPE string,
+             inner TYPE string,
+           END OF ts_calls,
+           tt_calls TYPE STANDARD TABLE OF ts_calls WITH NON-UNIQUE KEY event,
+
            BEGIN OF ts_oper,
-             line TYPE i,
-             name TYPE string,
+             line     TYPE i,
+             name     TYPE string,
+             ts_calls TYPE tt_calls,
            END OF ts_oper,
 
            tt_opers TYPE STANDARD TABLE OF ts_oper WITH EMPTY KEY,
@@ -1930,7 +1939,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
         DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
-        "mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+*        IF m_counter = 1.
+*          mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+*        ENDIF.
         READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack_prev.
 
         MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
@@ -1991,6 +2002,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF mo_window->m_version IS INITIAL.
       DATA: lv_optimize TYPE xfeld.
+
       READ TABLE mo_window->mt_source WITH KEY include = ms_stack_prev-include INTO DATA(ls_source).
       IF sy-subrc = 0.
         READ TABLE ls_source-t_keywords WITH KEY line = ms_stack_prev-line INTO DATA(ls_oper).
@@ -2012,6 +2024,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
         ENDIF.
       ELSE.
+        lcl_source_parser=>parse_tokens( iv_program = mo_window->m_prg-program io_debugger = me ).
         READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO ls_source.
       ENDIF.
     ENDIF.
@@ -2224,6 +2237,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     LOOP AT mt_state ASSIGNING FIELD-SYMBOL(<state>).
       CLEAR <state>-done.
     ENDLOOP.
+
+    "check dependents variables.
+    IF mt_selected_var IS NOT INITIAL.
+      READ TABLE ls_source-t_keywords WITH KEY line = ms_stack_prev-line INTO DATA(ls_keyword).
+      LOOP AT ls_keyword-ts_calls INTO DATA(ls_call) WHERE event = 'FORM' AND name =  ms_stack-eventname.
+        READ TABLE mt_selected_var WITH KEY name = ls_call-outer TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0.
+          APPEND INITIAL LINE TO mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
+          <selected>-name = ls_call-inner.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
 
     CLEAR: mo_window->m_show_step.
     mo_tree_imp->m_prg_info = mo_window->m_prg.
@@ -6110,8 +6135,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
           gr_statement TYPE REF TO if_ci_kzn_statement_iterator,
           gr_procedure TYPE REF TO if_ci_kzn_statement_iterator,
           gs_token     TYPE lcl_window=>ts_oper,
+          gs_param     TYPE lcl_window=>ts_oper,
           gt_Tokens    TYPE lcl_window=>tt_opers,
           gt_params    TYPE lcl_window=>tt_opers,
+          ls_call      TYPE lcl_window=>ts_calls,
           lv_eventtype TYPE string,
           lv_eventname TYPE string,
           ls_param     TYPE lcl_window=>ts_params,
@@ -6119,10 +6146,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
           lv_type      TYPE char1,
           lv_class     TYPE xfeld,
           lv_preferred TYPE xfeld.
-
-    "CHECK io_debugger->mo_window->m_zcode IS INITIAL
-    "OR ( io_debugger->mo_window->m_zcode IS NOT INITIAL AND ( iv_program+0(1) = 'Z' OR iv_program+0(5) = 'SAPLZ' ) )
-    "OR io_debugger->mo_window->mt_source IS INITIAL.
 
     READ TABLE io_debugger->mo_window->mt_source WITH KEY include = iv_program INTO DATA(ls_source).
     IF sy-subrc <> 0.
@@ -6150,6 +6173,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
       DATA(lv_max) = lines( gr_scan->statements ).
       DO.
+        CLEAR gs_token-ts_calls.
         TRY.
             gr_procedure->next( ).
           CATCH cx_scan_iterator_reached_end.
@@ -6164,7 +6188,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
           EXIT.
         ENDIF.
         gs_token-line = ls_Statement-trow.
-        APPEND gs_token TO gt_tokens.
+
+        DATA lv_new TYPE xfeld.
 
         IF gt_kw = 'CLASS'.
           lv_class = abap_true.
@@ -6196,6 +6221,11 @@ CLASS lcl_source_parser IMPLEMENTATION.
             CONTINUE.
           ENDIF.
 
+          IF sy-index = 2 AND gt_kw = 'PERFORM'.
+            ls_call-name = token.
+            ls_call-event = 'FORM'.
+          ENDIF.
+
           IF sy-index = 2 AND lv_class = abap_true AND ls_param-class IS INITIAL.
             ls_param-class = token.
           ENDIF.
@@ -6207,9 +6237,9 @@ CLASS lcl_source_parser IMPLEMENTATION.
           IF token = ''.
             CASE gt_kw.
               WHEN 'COMPUTE'.
-                IF  NOT lv_prev CO '0123456789.() ' .
-                  WRITE : 'including', lv_prev.
-                ENDIF.
+*                IF  NOT lv_prev CO '0123456789.() ' .
+*                  WRITE : 'including', lv_prev.
+*                ENDIF.
               WHEN 'CLEAR' OR 'SORT' OR 'CONDENSE'."no logic
             ENDCASE.
             EXIT.
@@ -6218,17 +6248,17 @@ CLASS lcl_source_parser IMPLEMENTATION.
           IF token = 'USING' OR token = 'IMPORTING'.
             ls_param-type = 'I'.
             CLEAR: lv_type, lv_par.
-            CONTINUE.
+            "CONTINUE.
           ELSEIF token = 'CHANGING' OR token = 'EXPORTING' OR token = 'RETURNING'.
 
             IF ls_param-param IS NOT INITIAL.
-              APPEND ls_param TO ls_source-t_params.
+              "APPEND ls_param TO ls_source-t_params.
               CLEAR: lv_type, lv_par, ls_param-param.
             ENDIF.
 
             ls_param-type = 'E'.
             CLEAR: lv_type, lv_par.
-            CONTINUE.
+            "CONTINUE.
           ELSEIF token = 'OPTIONAL' OR token = 'PREFERRED'.
             CONTINUE.
           ELSEIF token = 'PARAMETER'.
@@ -6246,27 +6276,28 @@ CLASS lcl_source_parser IMPLEMENTATION.
             CONTINUE.
           ENDIF.
 
-          IF gt_kw = 'FORM' OR gt_kw = 'METHODS' OR gt_kw = 'CLASS-METHODS'.
-            IF lv_par = abap_true AND lv_type IS INITIAL AND  token NE 'TYPE'.
-              APPEND ls_param TO ls_source-t_params.
-              CLEAR: lv_par, ls_param-param.
-            ENDIF.
+          IF token <> 'CHANGING' AND token <> 'EXPORTING' AND token <> 'RETURNING' AND token <> 'IMPORTING' AND token <> 'USING'.
+            IF gt_kw = 'FORM' OR gt_kw = 'METHODS' OR gt_kw = 'CLASS-METHODS'.
+              IF lv_par = abap_true AND lv_type IS INITIAL AND  token NE 'TYPE'.
+                APPEND ls_param TO ls_source-t_params.
+                CLEAR: lv_par, ls_param-param.
+              ENDIF.
 
-            IF lv_par IS INITIAL.
-              ls_param-param = token.
-              lv_par = abap_true.
-              CONTINUE.
-            ENDIF.
-            IF lv_par = abap_true AND lv_type IS INITIAL AND token = 'TYPE'.
-              lv_type = abap_true.
-              CONTINUE.
-            ENDIF.
-            IF lv_par = abap_true AND lv_type = abap_true.
-              APPEND ls_param TO ls_source-t_params.
-              CLEAR: lv_type, lv_par, ls_param-param.
+              IF lv_par IS INITIAL.
+                ls_param-param = token.
+                lv_par = abap_true.
+                CONTINUE.
+              ENDIF.
+              IF lv_par = abap_true AND lv_type IS INITIAL AND token = 'TYPE'.
+                lv_type = abap_true.
+                CONTINUE.
+              ENDIF.
+              IF lv_par = abap_true AND lv_type = abap_true.
+                APPEND ls_param TO ls_source-t_params.
+                CLEAR: lv_type, lv_par, ls_param-param.
+              ENDIF.
             ENDIF.
           ENDIF.
-
 
           DATA lv_temp TYPE char30.
           lv_temp = token.
@@ -6286,17 +6317,88 @@ CLASS lcl_source_parser IMPLEMENTATION.
             REPLACE ALL OCCURRENCES OF ')' IN lv_temp WITH ''.
           ENDIF.
 
+          IF token = 'NEW'.
+            lv_new = abap_true.
+          ENDIF.
 
           CASE gt_kw.
             WHEN 'COMPUTE'.
-              IF lv_temp CA '='.
+              IF lv_temp CA '=' AND lv_new IS INITIAL..
                 lv_change = lv_prev.
-              ELSEIF lv_temp CA '+-*/'.
-                IF  NOT lv_prev  CO '0123456789.() ' .
-                  lv_change = lv_prev.
+              ENDIF.
+
+              IF ( lv_prev = '=' OR lv_prev CA '+-/*' ) AND lv_temp <> 'NEW'.
+                IF NOT lv_temp  CA '()' .
+                  IF NOT lv_temp  CO '0123456789. '.
+                    "WRITE : 'including', lv_temp.
+                  ENDIF.
                 ENDIF.
               ENDIF.
 
+            WHEN 'PERFORM' .
+
+              IF  lv_temp = 'USING' OR lv_temp = 'CHANGING' .
+                CLEAR lv_prev.
+              ENDIF.
+
+              IF  lv_prev = 'USING' OR lv_prev = 'CHANGING' .
+
+                IF NOT lv_temp  CA '()' .
+                  IF NOT lv_temp  CO '0123456789. '.
+                    ls_call-outer = lv_temp.
+                    APPEND ls_call TO gs_token-ts_calls.
+                    "WRITE : 'using', lv_temp.
+                    "WRITE : 'value', lv_temp.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+
+            WHEN 'CREATE' OR 'CALL'.
+              DATA: lv_import TYPE xfeld,
+                    lv_export.
+
+              IF lv_prev = 'FUNCTION' AND gt_kw = 'CALL'.
+                ls_call-event = 'FUNCTION'.
+                ls_call-name = token.
+              ENDIF.
+
+              IF token = 'EXPORTING' OR token = 'CHANGING' OR token = 'TABLES'.
+                lv_export = abap_true.
+                CLEAR lv_import.
+                CONTINUE.
+
+              ELSEIF token = 'IMPORTING'.
+                lv_import = abap_true.
+                CLEAR lv_export.
+                CONTINUE.
+
+              ENDIF.
+
+              IF lv_prev = 'OBJECT'.
+                "WRITE : 'value', lv_temp.
+*          CONTINUE.
+              ENDIF.
+
+              IF  lv_prev = '='.
+                IF NOT lv_temp  CA '()'.
+                  IF NOT lv_temp  CO '0123456789. '.
+                    IF lv_import = abap_true.
+                      ls_call-outer = lv_temp.
+                      APPEND ls_call TO gs_token-ts_calls.
+                      "WRITE : 'using', lv_temp.
+                    ELSEIF lv_export = abap_true.
+                      ls_call-outer = lv_temp.
+                      APPEND ls_call TO gs_token-ts_calls.
+                      "WRITE : 'including', lv_temp.
+                    ENDIF.
+                  ENDIF.
+                ENDIF.
+              ELSE.
+                IF NOT lv_temp  CO '0123456789. ' AND lv_temp <> '=' AND ( lv_import = abap_true OR lv_export = abap_true ).
+                  ls_call-inner = lv_temp.
+                  "WRITE : 'inner', lv_temp.
+                ENDIF.
+              ENDIF.
 
             WHEN 'CLEAR' OR 'SORT'.
               lv_change = lv_temp.
@@ -6333,8 +6435,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
             WHEN OTHERS.
 
-              gs_token-name = token.
-              APPEND gs_token TO gt_params.
+              gs_param-name = token.
+              APPEND gs_param TO gt_params.
 
           ENDCASE.
 
@@ -6344,14 +6446,18 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
 
           IF  NOT lv_temp  CA '()'.
-            IF lv_temp <> 'TABLE'  AND lv_prev <> '('.
-              lv_prev = lv_temp.
+            IF lv_temp <> 'TABLE' AND lv_temp <> 'NEW'  AND lv_prev <> '('.
+              IF  gt_kw <> 'PERFORM'.
+                lv_prev = lv_temp.
+              ELSEIF token = 'USING' OR token = 'CHANGING'.
+                lv_prev = lv_temp.
+              ENDIF.
             ENDIF.
           ENDIF.
 
           IF lv_change IS NOT INITIAL.
-            gs_token-name = lv_change.
-            APPEND gs_token TO gt_params.
+            gs_param-name = lv_change.
+            APPEND gs_param TO gt_params.
 
             IF lv_change+0(1) = '<'.
               IF lv_eventtype IS INITIAL. "Global fs
@@ -6386,11 +6492,27 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
         ENDWHILE.
 
+        APPEND gs_token TO gt_tokens.
         IF gr_procedure->statement_index = lv_max.
           EXIT.
         ENDIF.
 
       ENDDO.
+
+      "Fill keyword links for perform
+      LOOP AT gt_tokens ASSIGNING FIELD-SYMBOL(<s_token>) WHERE ts_calls IS NOT INITIAL.
+        READ TABLE <s_token>-ts_calls WITH KEY event = 'FORM' INTO ls_call.
+        IF sy-subrc = 0.
+          LOOP AT ls_source-t_params INTO ls_param WHERE event = ls_call-event .
+            READ TABLE <s_token>-ts_calls INDEX sy-tabix ASSIGNING FIELD-SYMBOL(<call>).
+            IF sy-subrc = 0.
+              <call>-inner = ls_param-param.
+            ENDIF.
+          ENDLOOP.
+
+        ENDIF.
+      ENDLOOP.
+
       ls_source-t_keywords = gt_tokens.
       ls_source-t_operands = gt_params.
       APPEND ls_source TO io_debugger->mo_window->mt_source.
@@ -6450,7 +6572,8 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDIF.
       ls_step = ls_Step2.
     ENDLOOP.
-  ENDMETHOD.
-ENDCLASS.ENDCLASS.*</SCRIPT:SCRIPT_CLASS>
 
+  ENDMETHOD.
+ENDCLASS.
+*</SCRIPT:SCRIPT_CLASS>
 *</SCRIPT:PERSISTENT>
