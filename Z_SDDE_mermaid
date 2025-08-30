@@ -1,4 +1,3 @@
-REPORT sd.
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -2013,18 +2012,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-    "check dependents variables.
-    IF mt_selected_var IS NOT INITIAL.
-      read table ls_source-t_keywords with key line = ms_stack_prev-line into data(ls_keyword).
-      LOOP AT ls_keyword-ts_calls INTO DATA(ls_call) where event = 'FORM' and name =  ms_stack-eventname.
-        Read table mt_selected_var with key name = ls_call-outer TRANSPORTING NO FIELDS.
-        IF sy-subrc = 0.
-          APPEND INITIAL LINE TO mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
-          <selected>-name = ls_call-inner.
-        ENDIF.
-      ENDLOOP.
-    ENDIF.
-
     IF mo_window->m_varhist IS NOT INITIAL.
       IF mo_tree_local->m_globals IS NOT INITIAL AND mo_tree_local->m_ldb IS NOT INITIAL.
         DATA: l_name(40),
@@ -2233,6 +2220,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     LOOP AT mt_state ASSIGNING FIELD-SYMBOL(<state>).
       CLEAR <state>-done.
     ENDLOOP.
+
+    "check dependents variables.
+    IF mt_selected_var IS NOT INITIAL.
+      READ TABLE ls_source-t_keywords WITH KEY line = ms_stack_prev-line INTO DATA(ls_keyword).
+      LOOP AT ls_keyword-ts_calls INTO DATA(ls_call) WHERE event = 'FORM' AND name =  ms_stack-eventname.
+        READ TABLE mt_selected_var WITH KEY name = ls_call-outer TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0.
+          APPEND INITIAL LINE TO mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
+          <selected>-name = ls_call-inner.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
 
     CLEAR: mo_window->m_show_step.
     mo_tree_imp->m_prg_info = mo_window->m_prg.
