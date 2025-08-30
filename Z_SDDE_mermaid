@@ -1,3 +1,4 @@
+REPORT sd.
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -1985,6 +1986,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF mo_window->m_version IS INITIAL.
       DATA: lv_optimize TYPE xfeld.
+
       READ TABLE mo_window->mt_source WITH KEY include = ms_stack_prev-include INTO DATA(ls_source).
       IF sy-subrc = 0.
         READ TABLE ls_source-t_keywords WITH KEY line = ms_stack_prev-line INTO DATA(ls_oper).
@@ -2006,8 +2008,21 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
         ENDIF.
       ELSE.
+        lcl_source_parser=>parse_tokens( iv_program = mo_window->m_prg-program io_debugger = me ).
         READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO ls_source.
       ENDIF.
+    ENDIF.
+
+    "check dependents variables.
+    IF mt_selected_var IS NOT INITIAL.
+      read table ls_source-t_keywords with key line = ms_stack_prev-line into data(ls_keyword).
+      LOOP AT ls_keyword-ts_calls INTO DATA(ls_call) where event = 'FORM' and name =  ms_stack-eventname.
+        Read table mt_selected_var with key name = ls_call-outer TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0.
+          APPEND INITIAL LINE TO mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
+          <selected>-name = ls_call-inner.
+        ENDIF.
+      ENDLOOP.
     ENDIF.
 
     IF mo_window->m_varhist IS NOT INITIAL.
@@ -6469,7 +6484,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
       ENDDO.
 
       "Fill keyword links for perform
-  
       LOOP AT gt_tokens ASSIGNING FIELD-SYMBOL(<s_token>) WHERE ts_calls IS NOT INITIAL.
         READ TABLE <s_token>-ts_calls WITH KEY event = 'FORM' INTO ls_call.
         IF sy-subrc = 0.
@@ -6487,7 +6501,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
       ls_source-t_operands = gt_params.
       APPEND ls_source TO io_debugger->mo_window->mt_source.
     ENDIF.
-    BREAK-POINT.
+
   ENDMETHOD.
 
 ENDCLASS.
