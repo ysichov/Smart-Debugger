@@ -1,3 +1,4 @@
+REPORT sd.
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -1026,7 +1027,13 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              ts_calls TYPE tt_calls,
            END OF ts_oper,
 
-           tt_opers TYPE STANDARD TABLE OF ts_oper WITH EMPTY KEY,
+           BEGIN OF ts_oper2,
+             line TYPE i,
+             name TYPE string,
+           END OF ts_oper2,
+
+           tt_opers  TYPE STANDARD TABLE OF ts_oper WITH EMPTY KEY,
+           tt_opers2 TYPE STANDARD TABLE OF ts_oper2 WITH EMPTY KEY,
 
            BEGIN OF ts_params,
              class     TYPE string,
@@ -1042,7 +1049,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              include    TYPE program,
              source     TYPE REF TO cl_ci_source_include,
              t_keywords TYPE tt_opers,
-             t_operands TYPE tt_opers,
+             t_operands TYPE tt_opers2,
              t_params   TYPE tt_params,
            END OF ts_progs,
 
@@ -1985,7 +1992,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF mo_window->m_version IS INITIAL.
       DATA: lv_optimize TYPE xfeld.
-
       READ TABLE mo_window->mt_source WITH KEY include = ms_stack_prev-include INTO DATA(ls_source).
       IF sy-subrc = 0.
         READ TABLE ls_source-t_keywords WITH KEY line = ms_stack_prev-line INTO DATA(ls_oper).
@@ -2154,6 +2160,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       DATA: lr_names TYPE RANGE OF string,
             lv_temp  TYPE char30.
 
+      DATA(lt_globals) = mt_globals.
+      DATA(lt_locals) = mt_locals.
+
       IF lv_optimize = abap_true AND m_update IS INITIAL.
 
         LOOP AT ls_source-t_operands INTO DATA(ls_param) WHERE line = ms_stack_prev-line.
@@ -2162,14 +2171,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDLOOP.
 
         IF sy-subrc = 0.
-          DELETE mt_globals WHERE name NOT IN lr_names.
-          DELETE mt_locals WHERE name NOT IN lr_names.
+          DELETE lt_globals WHERE name NOT IN lr_names.
+          DELETE lt_locals WHERE name NOT IN lr_names.
         ENDIF.
 
       ENDIF.
 
       IF mo_tree_local->m_locals IS NOT INITIAL.
-        LOOP AT mt_locals INTO DATA(ls_local).
+        LOOP AT lt_locals INTO DATA(ls_local).
 
           CASE ls_local-parkind.
             WHEN 0.
@@ -2193,7 +2202,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       IF mo_tree_local->m_globals IS NOT INITIAL.
 
-        LOOP AT mt_globals INTO DATA(ls_global)  WHERE parisval NE 'L'.
+        LOOP AT lt_globals INTO DATA(ls_global)  WHERE parisval NE 'L'.
           transfer_variable( EXPORTING i_name = ls_global-name iv_type = 'GLOBAL' ).
         ENDLOOP.
         READ TABLE mo_window->mt_globals_set WITH KEY program = ms_stack-program INTO DATA(ls_globals_set).
@@ -2212,7 +2221,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF mo_tree_local->m_ldb IS NOT INITIAL.
-      LOOP AT mt_globals INTO ls_global WHERE parisval = 'L'.
+      LOOP AT lt_globals INTO ls_global WHERE parisval = 'L'.
         transfer_variable( EXPORTING i_name = ls_global-name iv_type = 'LDB' ).
       ENDLOOP.
     ENDIF.
@@ -6118,9 +6127,9 @@ CLASS lcl_source_parser IMPLEMENTATION.
           gr_statement TYPE REF TO if_ci_kzn_statement_iterator,
           gr_procedure TYPE REF TO if_ci_kzn_statement_iterator,
           gs_token     TYPE lcl_window=>ts_oper,
-          gs_param     TYPE lcl_window=>ts_oper,
+          gs_param     TYPE lcl_window=>ts_oper2,
           gt_Tokens    TYPE lcl_window=>tt_opers,
-          gt_params    TYPE lcl_window=>tt_opers,
+          gt_params    TYPE lcl_window=>tt_opers2,
           ls_call      TYPE lcl_window=>ts_calls,
           lv_eventtype TYPE string,
           lv_eventname TYPE string,
@@ -6170,7 +6179,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
         IF sy-subrc <> 0.
           EXIT.
         ENDIF.
-        gs_token-line = ls_Statement-trow.
+        gs_token-line = gs_param-line = ls_Statement-trow.
 
         DATA lv_new TYPE xfeld.
 
@@ -6555,6 +6564,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDIF.
       ls_step = ls_Step2.
     ENDLOOP.
-
+ 
   ENDMETHOD.
 ENDCLASS.
