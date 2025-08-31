@@ -1,3 +1,4 @@
+REPORT sd.
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -1027,11 +1028,11 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
            END OF ts_oper,
 
            BEGIN OF ts_oper2,
-             line     TYPE i,
-             name     TYPE string,
+             line TYPE i,
+             name TYPE string,
            END OF ts_oper2,
 
-           tt_opers TYPE STANDARD TABLE OF ts_oper WITH EMPTY KEY,
+           tt_opers  TYPE STANDARD TABLE OF ts_oper WITH EMPTY KEY,
            tt_opers2 TYPE STANDARD TABLE OF ts_oper2 WITH EMPTY KEY,
 
            BEGIN OF ts_params,
@@ -1991,7 +1992,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF mo_window->m_version IS INITIAL.
       DATA: lv_optimize TYPE xfeld.
-
       READ TABLE mo_window->mt_source WITH KEY include = ms_stack_prev-include INTO DATA(ls_source).
       IF sy-subrc = 0.
         READ TABLE ls_source-t_keywords WITH KEY line = ms_stack_prev-line INTO DATA(ls_oper).
@@ -2160,6 +2160,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       DATA: lr_names TYPE RANGE OF string,
             lv_temp  TYPE char30.
 
+      DATA(lt_globals) = mt_globals.
+      DATA(lt_locals) = mt_locals.
+
       IF lv_optimize = abap_true AND m_update IS INITIAL.
 
         LOOP AT ls_source-t_operands INTO DATA(ls_param) WHERE line = ms_stack_prev-line.
@@ -2168,14 +2171,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDLOOP.
 
         IF sy-subrc = 0.
-          DELETE mt_globals WHERE name NOT IN lr_names.
-          DELETE mt_locals WHERE name NOT IN lr_names.
+          DELETE lt_globals WHERE name NOT IN lr_names.
+          DELETE lt_locals WHERE name NOT IN lr_names.
         ENDIF.
 
       ENDIF.
 
       IF mo_tree_local->m_locals IS NOT INITIAL.
-        LOOP AT mt_locals INTO DATA(ls_local).
+        LOOP AT lt_locals INTO DATA(ls_local).
 
           CASE ls_local-parkind.
             WHEN 0.
@@ -2199,7 +2202,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       IF mo_tree_local->m_globals IS NOT INITIAL.
 
-        LOOP AT mt_globals INTO DATA(ls_global)  WHERE parisval NE 'L'.
+        LOOP AT lt_globals INTO DATA(ls_global)  WHERE parisval NE 'L'.
           transfer_variable( EXPORTING i_name = ls_global-name iv_type = 'GLOBAL' ).
         ENDLOOP.
         READ TABLE mo_window->mt_globals_set WITH KEY program = ms_stack-program INTO DATA(ls_globals_set).
@@ -2218,7 +2221,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDIF.
 
     IF mo_tree_local->m_ldb IS NOT INITIAL.
-      LOOP AT mt_globals INTO ls_global WHERE parisval = 'L'.
+      LOOP AT lt_globals INTO ls_global WHERE parisval = 'L'.
         transfer_variable( EXPORTING i_name = ls_global-name iv_type = 'LDB' ).
       ENDLOOP.
     ENDIF.
