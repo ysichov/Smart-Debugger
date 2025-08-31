@@ -1026,7 +1026,13 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              ts_calls TYPE tt_calls,
            END OF ts_oper,
 
+           BEGIN OF ts_oper2,
+             line     TYPE i,
+             name     TYPE string,
+           END OF ts_oper2,
+
            tt_opers TYPE STANDARD TABLE OF ts_oper WITH EMPTY KEY,
+           tt_opers2 TYPE STANDARD TABLE OF ts_oper2 WITH EMPTY KEY,
 
            BEGIN OF ts_params,
              class     TYPE string,
@@ -1042,7 +1048,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              include    TYPE program,
              source     TYPE REF TO cl_ci_source_include,
              t_keywords TYPE tt_opers,
-             t_operands TYPE tt_opers,
+             t_operands TYPE tt_opers2,
              t_params   TYPE tt_params,
            END OF ts_progs,
 
@@ -6118,9 +6124,9 @@ CLASS lcl_source_parser IMPLEMENTATION.
           gr_statement TYPE REF TO if_ci_kzn_statement_iterator,
           gr_procedure TYPE REF TO if_ci_kzn_statement_iterator,
           gs_token     TYPE lcl_window=>ts_oper,
-          gs_param     TYPE lcl_window=>ts_oper,
+          gs_param     TYPE lcl_window=>ts_oper2,
           gt_Tokens    TYPE lcl_window=>tt_opers,
-          gt_params    TYPE lcl_window=>tt_opers,
+          gt_params    TYPE lcl_window=>tt_opers2,
           ls_call      TYPE lcl_window=>ts_calls,
           lv_eventtype TYPE string,
           lv_eventname TYPE string,
@@ -6170,7 +6176,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
         IF sy-subrc <> 0.
           EXIT.
         ENDIF.
-        gs_token-line = ls_Statement-trow.
+        gs_token-line = gs_param-line = ls_Statement-trow.
 
         DATA lv_new TYPE xfeld.
 
