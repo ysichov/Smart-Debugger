@@ -15,7 +15,6 @@ REPORT  rstpda_script_template.
 
 *<SCRIPT:SCRIPT_CLASS>
 
-REPORT sd.
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -1038,19 +1037,25 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
            END OF ts_calls,
            tt_calls TYPE STANDARD TABLE OF ts_calls WITH NON-UNIQUE KEY event,
 
-           BEGIN OF ts_oper,
+           BEGIN OF ts_kword,
              line     TYPE i,
              name     TYPE string,
              ts_calls TYPE tt_calls,
-           END OF ts_oper,
+           END OF ts_kword,
 
-           BEGIN OF ts_oper2,
-             line TYPE i,
-             name TYPE string,
-           END OF ts_oper2,
+           BEGIN OF ts_calculated,
+             line       TYPE i,
+             calculated TYPE string,
+           END OF ts_calculated,
 
-           tt_opers  TYPE STANDARD TABLE OF ts_oper WITH EMPTY KEY,
-           tt_opers2 TYPE STANDARD TABLE OF ts_oper2 WITH EMPTY KEY,
+           BEGIN OF ts_composing,
+             line      TYPE i,
+             composing TYPE string,
+           END OF ts_composing,
+
+           tt_kword      TYPE STANDARD TABLE OF ts_kword WITH EMPTY KEY,
+           tt_calculated TYPE STANDARD TABLE OF ts_calculated WITH EMPTY KEY,
+           tt_composed   TYPE STANDARD TABLE OF ts_composing WITH EMPTY KEY,
 
            BEGIN OF ts_params,
              class     TYPE string,
@@ -1063,11 +1068,12 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
            tt_params TYPE STANDARD TABLE OF ts_params WITH EMPTY KEY,
 
            BEGIN OF ts_progs,
-             include    TYPE program,
-             source     TYPE REF TO cl_ci_source_include,
-             t_keywords TYPE tt_opers,
-             t_operands TYPE tt_opers2,
-             t_params   TYPE tt_params,
+             include      TYPE program,
+             source       TYPE REF TO cl_ci_source_include,
+             t_keywords   TYPE tt_kword,
+             t_calculated TYPE tt_calculated,
+             t_composed   TYPE tt_composed,
+             t_params     TYPE tt_params,
            END OF ts_progs,
 
            BEGIN OF ts_locals,
@@ -2177,15 +2183,15 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       DATA: lr_names TYPE RANGE OF string,
             lv_temp  TYPE char30.
 
-      DATA(lt_globals) = mt_globals.
-      DATA(lt_locals) = mt_locals.
-
       IF lv_optimize = abap_true AND m_update IS INITIAL.
 
-        LOOP AT ls_source-t_operands INTO DATA(ls_param) WHERE line = ms_stack_prev-line.
-          lv_temp = ls_param-name.
+        LOOP AT ls_source-t_calculated INTO DATA(ls_param) WHERE line = ms_stack_prev-line.
+          lv_temp = ls_param-calculated.
           lr_names = VALUE #( BASE lr_names ( sign = 'I' option = 'EQ' low = lv_temp ) ).
         ENDLOOP.
+
+        DATA(lt_globals) = mt_globals.
+        DATA(lt_locals) = mt_locals.
 
         IF sy-subrc = 0.
           DELETE lt_globals WHERE name NOT IN lr_names.
@@ -6136,101 +6142,103 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
   METHOD parse_tokens.
 
-    DATA: lr_scan      TYPE REF TO cl_ci_scan,
-          lv_prev      TYPE string,
-          lv_change    TYPE string,
+    DATA: lr_scan       TYPE REF TO cl_ci_scan,
+          lv_prev       TYPE string,
+          lv_change     TYPE string,
 
-          gr_scan      TYPE REF TO cl_ci_scan,
-          gr_statement TYPE REF TO if_ci_kzn_statement_iterator,
-          gr_procedure TYPE REF TO if_ci_kzn_statement_iterator,
-          gs_token     TYPE lcl_window=>ts_oper,
-          gs_param     TYPE lcl_window=>ts_oper2,
-          gt_Tokens    TYPE lcl_window=>tt_opers,
-          gt_params    TYPE lcl_window=>tt_opers2,
-          ls_call      TYPE lcl_window=>ts_calls,
-          lv_eventtype TYPE string,
-          lv_eventname TYPE string,
-          ls_param     TYPE lcl_window=>ts_params,
-          lv_par       TYPE char1,
-          lv_type      TYPE char1,
-          lv_class     TYPE xfeld,
-          lv_preferred TYPE xfeld.
+          lo_scan       TYPE REF TO cl_ci_scan,
+          lo_statement  TYPE REF TO if_ci_kzn_statement_iterator,
+          lo_procedure  TYPE REF TO if_ci_kzn_statement_iterator,
+          ls_token      TYPE lcl_window=>ts_kword,
+          ls_calculated TYPE lcl_window=>ts_calculated,
+          ls_composed   TYPE lcl_window=>ts_composing,
+          lt_Tokens     TYPE lcl_window=>tt_kword,
+          lt_calculated TYPE lcl_window=>tt_calculated,
+          lt_composed   TYPE lcl_window=>tt_composed,
+          ls_call       TYPE lcl_window=>ts_calls,
+          lv_eventtype  TYPE string,
+          lv_eventname  TYPE string,
+          ls_param      TYPE lcl_window=>ts_params,
+          lv_par        TYPE char1,
+          lv_type       TYPE char1,
+          lv_class      TYPE xfeld,
+          lv_preferred  TYPE xfeld.
 
     READ TABLE io_debugger->mo_window->mt_source WITH KEY include = iv_program INTO DATA(ls_source).
     IF sy-subrc <> 0.
 
       ls_source-source = cl_ci_source_include=>create( p_name = iv_program ).
-      gr_scan = NEW cl_ci_scan( p_include = ls_source-source ).
+      lo_scan = NEW cl_ci_scan( p_include = ls_source-source ).
 
       ls_source-include = iv_program.
 
-      gr_statement = cl_cikzn_scan_iterator_factory=>get_statement_iterator( ciscan = gr_scan ).
-      gr_procedure = cl_cikzn_scan_iterator_factory=>get_procedure_iterator( ciscan = gr_scan ).
+      lo_statement = cl_cikzn_scan_iterator_factory=>get_statement_iterator( ciscan = lo_scan ).
+      lo_procedure = cl_cikzn_scan_iterator_factory=>get_procedure_iterator( ciscan = lo_scan ).
 
       TRY.
-          gr_statement->next( ).
+          lo_statement->next( ).
         CATCH cx_scan_iterator_reached_end.
           EXIT.
       ENDTRY.
 
-      DATA(gt_kw) = gr_statement->get_keyword( ).
+      DATA(lt_kw) = lo_statement->get_keyword( ).
 
-      DATA(token) = gr_statement->get_token( offset = 2 ).
+      DATA(token) = lo_statement->get_token( offset = 2 ).
 
-      gr_procedure->statement_index = gr_statement->statement_index.
-      gr_procedure->statement_type = gr_statement->statement_type.
+      lo_procedure->statement_index = lo_statement->statement_index.
+      lo_procedure->statement_type = lo_statement->statement_type.
 
-      DATA(lv_max) = lines( gr_scan->statements ).
+      DATA(lv_max) = lines( lo_scan->statements ).
       DO.
-        CLEAR gs_token-ts_calls.
+        CLEAR ls_token-ts_calls.
         TRY.
-            gr_procedure->next( ).
+            lo_procedure->next( ).
           CATCH cx_scan_iterator_reached_end.
         ENDTRY.
 
-        gt_kw = gr_procedure->get_keyword( ).
+        lt_kw = lo_procedure->get_keyword( ).
 
-        gs_token-name = gt_kw.
+        ls_token-name = lt_kw.
 
-        READ TABLE gr_scan->statements INDEX gr_procedure->statement_index INTO DATA(ls_statement).
+        READ TABLE lo_scan->statements INDEX lo_procedure->statement_index INTO DATA(ls_statement).
         IF sy-subrc <> 0.
           EXIT.
         ENDIF.
-        gs_token-line = gs_param-line = ls_Statement-trow.
+        ls_token-line = ls_calculated-line = ls_composed-line = ls_Statement-trow.
 
         DATA lv_new TYPE xfeld.
 
-        IF gt_kw = 'CLASS'.
+        IF lt_kw = 'CLASS'.
           lv_class = abap_true.
         ENDIF.
 
-        IF gt_kw = 'FORM' OR gt_kw = 'METHOD' OR gt_kw = 'METHODS' OR gt_kw = 'CLASS-METHODS'.
-          lv_eventtype = ls_param-event =  gt_kw.
+        IF lt_kw = 'FORM' OR lt_kw = 'METHOD' OR lt_kw = 'METHODS' OR lt_kw = 'CLASS-METHODS'.
+          lv_eventtype = ls_param-event =  lt_kw.
           CLEAR lv_eventname.
-          IF gt_kw = 'FORM'.
+          IF lt_kw = 'FORM'.
             CLEAR: lv_class, ls_param-class.
           ELSE.
             lv_eventtype = ls_param-event =  'METHOD'.
           ENDIF.
         ENDIF.
 
-        IF gt_kw = 'ENDFORM' OR gt_kw = 'ENDMETHOD'.
+        IF lt_kw = 'ENDFORM' OR lt_kw = 'ENDMETHOD'.
           CLEAR: lv_eventtype, lv_eventname.
         ENDIF.
 
         CLEAR lv_prev.
-        IF gt_kw = 'ASSIGN' OR gt_kw = 'ADD' OR gt_kw = 'SUBTRACT' .
+        IF lt_kw = 'ASSIGN' OR lt_kw = 'ADD' OR lt_kw = 'SUBTRACT' .
           DATA(lv_count) = 0.
         ENDIF.
 
         WHILE 1 = 1.
           CLEAR lv_change.
-          token = gr_procedure->get_token( offset = sy-index ).
-          IF sy-index = 1 AND gs_token-name = token.
+          token = lo_procedure->get_token( offset = sy-index ).
+          IF sy-index = 1 AND ls_token-name = token.
             CONTINUE.
           ENDIF.
 
-          IF sy-index = 2 AND gt_kw = 'PERFORM'.
+          IF sy-index = 2 AND lt_kw = 'PERFORM'.
             ls_call-name = token.
             ls_call-event = 'FORM'.
           ENDIF.
@@ -6244,11 +6252,12 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
 
           IF token = ''.
-            CASE gt_kw.
+            CASE lt_kw.
               WHEN 'COMPUTE'.
-*                IF  NOT lv_prev CO '0123456789.() ' .
-*                  WRITE : 'including', lv_prev.
-*                ENDIF.
+                IF  NOT lv_prev CO '0123456789.+-/* '.
+                  ls_composed-composing = lv_prev.
+                  APPEND  ls_composed TO lt_composed.
+                ENDIF.
               WHEN 'CLEAR' OR 'SORT' OR 'CONDENSE'."no logic
             ENDCASE.
             EXIT.
@@ -6286,7 +6295,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
 
           IF token <> 'CHANGING' AND token <> 'EXPORTING' AND token <> 'RETURNING' AND token <> 'IMPORTING' AND token <> 'USING'.
-            IF gt_kw = 'FORM' OR gt_kw = 'METHODS' OR gt_kw = 'CLASS-METHODS'.
+            IF lt_kw = 'FORM' OR lt_kw = 'METHODS' OR lt_kw = 'CLASS-METHODS'.
               IF lv_par = abap_true AND lv_type IS INITIAL AND  token NE 'TYPE'.
                 APPEND ls_param TO ls_source-t_params.
                 CLEAR: lv_par, ls_param-param.
@@ -6330,7 +6339,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
             lv_new = abap_true.
           ENDIF.
 
-          CASE gt_kw.
+          CASE lt_kw.
             WHEN 'COMPUTE'.
               IF lv_temp CA '=' AND lv_new IS INITIAL..
                 lv_change = lv_prev.
@@ -6339,7 +6348,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
               IF ( lv_prev = '=' OR lv_prev CA '+-/*' ) AND lv_temp <> 'NEW'.
                 IF NOT lv_temp  CA '()' .
                   IF NOT lv_temp  CO '0123456789. '.
-                    "WRITE : 'including', lv_temp.
+                    ls_composed-composing = lv_temp.
+                    APPEND  ls_composed TO lt_composed.
                   ENDIF.
                 ENDIF.
               ENDIF.
@@ -6355,7 +6365,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
                 IF NOT lv_temp  CA '()' .
                   IF NOT lv_temp  CO '0123456789. '.
                     ls_call-outer = lv_temp.
-                    APPEND ls_call TO gs_token-ts_calls.
+                    APPEND ls_call TO ls_token-ts_calls.
                     "WRITE : 'using', lv_temp.
                     "WRITE : 'value', lv_temp.
                   ENDIF.
@@ -6366,7 +6376,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
               DATA: lv_import TYPE xfeld,
                     lv_export.
 
-              IF lv_prev = 'FUNCTION' AND gt_kw = 'CALL'.
+              IF lv_prev = 'FUNCTION' AND lt_kw = 'CALL'.
                 ls_call-event = 'FUNCTION'.
                 ls_call-name = token.
               ENDIF.
@@ -6393,12 +6403,13 @@ CLASS lcl_source_parser IMPLEMENTATION.
                   IF NOT lv_temp  CO '0123456789. '.
                     IF lv_import = abap_true.
                       ls_call-outer = lv_temp.
-                      APPEND ls_call TO gs_token-ts_calls.
+                      APPEND ls_call TO ls_token-ts_calls.
                       "WRITE : 'using', lv_temp.
                     ELSEIF lv_export = abap_true.
                       ls_call-outer = lv_temp.
-                      APPEND ls_call TO gs_token-ts_calls.
-                      "WRITE : 'including', lv_temp.
+                      APPEND ls_call TO ls_token-ts_calls.
+                      ls_composed-composing = lv_temp.
+                      APPEND  ls_composed TO lt_composed.
                     ENDIF.
                   ENDIF.
                 ENDIF.
@@ -6425,7 +6436,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
               ADD 1 TO lv_count.
               IF lv_count = 1.
                 IF  NOT lv_temp CO '0123456789.() '.
-                  "WRITE : 'including', lv_temp.
+                   ls_composed-composing = lv_temp.
+                    APPEND  ls_composed to lt_composed.
                 ENDIF.
               ENDIF.
               IF lv_count = 3.
@@ -6444,9 +6456,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
             WHEN OTHERS.
 
-              gs_param-name = token.
-              APPEND gs_param TO gt_params.
-
           ENDCASE.
 
           IF lv_temp = '(' .
@@ -6456,7 +6465,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
           IF  NOT lv_temp  CA '()'.
             IF lv_temp <> 'TABLE' AND lv_temp <> 'NEW'  AND lv_prev <> '('.
-              IF  gt_kw <> 'PERFORM'.
+              IF  lt_kw <> 'PERFORM'.
                 lv_prev = lv_temp.
               ELSEIF token = 'USING' OR token = 'CHANGING'.
                 lv_prev = lv_temp.
@@ -6465,8 +6474,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
 
           IF lv_change IS NOT INITIAL.
-            gs_param-name = lv_change.
-            APPEND gs_param TO gt_params.
+            ls_calculated-calculated = lv_change.
+            APPEND ls_calculated TO lt_calculated.
 
             IF lv_change+0(1) = '<'.
               IF lv_eventtype IS INITIAL. "Global fs
@@ -6501,15 +6510,15 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
         ENDWHILE.
 
-        APPEND gs_token TO gt_tokens.
-        IF gr_procedure->statement_index = lv_max.
+        APPEND ls_token TO lt_tokens.
+        IF lo_procedure->statement_index = lv_max.
           EXIT.
         ENDIF.
 
       ENDDO.
 
       "Fill keyword links for perform
-      LOOP AT gt_tokens ASSIGNING FIELD-SYMBOL(<s_token>) WHERE ts_calls IS NOT INITIAL.
+      LOOP AT lt_tokens ASSIGNING FIELD-SYMBOL(<s_token>) WHERE ts_calls IS NOT INITIAL.
         READ TABLE <s_token>-ts_calls WITH KEY event = 'FORM' INTO ls_call.
         IF sy-subrc = 0.
           LOOP AT ls_source-t_params INTO ls_param WHERE event = ls_call-event .
@@ -6522,8 +6531,9 @@ CLASS lcl_source_parser IMPLEMENTATION.
         ENDIF.
       ENDLOOP.
 
-      ls_source-t_keywords = gt_tokens.
-      ls_source-t_operands = gt_params.
+      ls_source-t_keywords = lt_tokens.
+      ls_source-t_calculated = lt_calculated.
+      ls_source-t_composed = lt_composed.
       APPEND ls_source TO io_debugger->mo_window->mt_source.
     ENDIF.
 
@@ -6581,7 +6591,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDIF.
       ls_step = ls_Step2.
     ENDLOOP.
- 
   ENDMETHOD.
-ENDCLASS.*</SCRIPT:SCRIPT_CLASS>
+ENDCLASS.ENDCLASS.*</SCRIPT:SCRIPT_CLASS>
 *</SCRIPT:PERSISTENT>
