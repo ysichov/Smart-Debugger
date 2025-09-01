@@ -344,6 +344,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
 
            BEGIN OF t_sel_var,
              name   TYPE string,
+             is_sel TYPE xfeld,
              refval TYPE REF TO data,
            END OF t_sel_var.
 
@@ -508,8 +509,10 @@ ENDCLASS.
 CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_script.
   PUBLIC SECTION.
     DATA: mo_debugger TYPE REF TO lcl_debugger_script.
-    METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script,
-      steps_flow.
+    METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script iv_type TYPE string,
+      steps_flow,
+      magic_search
+      .
 ENDCLASS.
 
 CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
@@ -3334,10 +3337,9 @@ CLASS lcl_window IMPLEMENTATION.
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear all selected variables' text = 'Clear vars' )
      ( butn_type = 3  )
      ( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = 'MerMaid Flow diagram' text = 'Diagram' )
+     ( function = 'SMART' icon = CONV #( icon_activate ) quickinfo = 'Smart Search ' text = 'Show the Origin' )
      ( function = 'STEPS' icon = CONV #( icon_next_step ) quickinfo = 'Steps table' text = 'Steps' )
      ( function = 'HISTORY' icon = CONV #( icon_history ) quickinfo = 'History table' text = 'History' )
-*     ( function = 'F6BEG' icon = CONV #( icon_release ) quickinfo = 'Start of block' text = 'Start of block' )
-*     ( function = 'F6END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
      ( butn_type = 3  )
      ( function = 'ENGINE' icon = CONV #( icon_graduate ) quickinfo = 'Faster version but can skip some changes' text = 'Alpha' )
      ( function = 'DEBUG' icon = CONV #( icon_tools ) quickinfo = 'Debug' text = 'Debug' )
@@ -3518,7 +3520,10 @@ CLASS lcl_window IMPLEMENTATION.
         ENDIF.
 
       WHEN 'DIAGRAM'.
-        DATA(lo_mermaid) = NEW lcl_mermaid( mo_debugger ).
+        DATA(lo_mermaid) = NEW lcl_mermaid( io_debugger = mo_debugger iv_type =  'DIAG' ).
+
+      WHEN 'SMART'.
+        lo_mermaid = NEW lcl_mermaid( io_debugger = mo_debugger iv_type =  'SMART' ).
 
       WHEN 'CODE'.
         m_zcode = m_zcode BIT-XOR c_mask.
@@ -5922,6 +5927,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         l_node->set_row_style( if_salv_c_tree_style=>emphasized_b ).
         APPEND INITIAL LINE TO mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<sel>).
         <sel>-name = <fullname>.
+        <sel>-is_sel = abap_true.
       ENDIF.
 
       CASE <kind>.
@@ -6189,7 +6195,9 @@ CLASS lcl_source_parser IMPLEMENTATION.
         IF sy-subrc <> 0.
           EXIT.
         ENDIF.
-        ls_token-line = ls_calculated-line = ls_composed-line = ls_Statement-trow.
+
+        READ table lo_scan->tokens index ls_statement-from into data(l_token).
+        ls_token-line = ls_calculated-line = ls_composed-line = l_token-row.
 
         DATA lv_new TYPE xfeld.
 
@@ -6351,6 +6359,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
                   IF NOT lv_temp  CO '0123456789. '.
                     ls_call-outer = lv_temp.
                     APPEND ls_call TO ls_token-ts_calls.
+                    lv_change = lv_temp.
                     "WRITE : 'using', lv_temp.
                     "WRITE : 'value', lv_temp.
                   ENDIF.
@@ -6389,7 +6398,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
                     IF lv_import = abap_true.
                       ls_call-outer = lv_temp.
                       APPEND ls_call TO ls_token-ts_calls.
-                      "WRITE : 'using', lv_temp.
                     ELSEIF lv_export = abap_true.
                       ls_call-outer = lv_temp.
                       APPEND ls_call TO ls_token-ts_calls.
@@ -6537,7 +6545,13 @@ CLASS lcl_mermaid IMPLEMENTATION.
     mo_box = create( i_name = 'Flow' i_width = 700 i_hight = 300 ).
     SET HANDLER on_box_close FOR mo_box.
 
-    steps_flow( ).
+    CASE iv_type.
+      WHEN 'DIAG'.
+        steps_flow( ).
+      WHEN 'SMART'.
+        magic_search( ).
+    ENDCASE.
+
   ENDMETHOD.
 
   METHOD steps_flow.
@@ -6588,5 +6602,51 @@ CLASS lcl_mermaid IMPLEMENTATION.
       CATCH zcx_wd_gui_mermaid_js_diagram INTO DATA(error).
         MESSAGE error TYPE 'E'.
     ENDTRY.
+  ENDMETHOD.
+
+  METHOD magic_Search.
+
+    DATA: lv_add TYPE xfeld.
+    TYPES: BEGIN OF ts_line,
+             line TYPE i,
+           END OF ts_line.
+
+    DATA: ls_line  TYPE ts_line,
+          lt_lines TYPE TABLE OF ts_line.
+
+    LOOP AT mo_debugger->mt_vars_hist INTO DATA(ls_hist).
+      READ TABLE mo_debugger->mt_steps WITH KEY step = ls_hist-step INTO DATA(ls_Step).
+      READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO DATA(ls_source).
+      LOOP AT ls_source-t_composed INTO DATA(ls_composed) WHERE line = ls_step-line.
+        READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_composed-composing TRANSPORTING NO FIELDS.
+        IF sy-subrc <> 0.
+          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
+          <selected>-name = ls_composed-composing.
+        ENDIF.
+      ENDLOOP.
+    ENDLOOP.
+
+    LOOP AT mo_debugger->mt_vars_hist INTO ls_hist.
+      READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_hist-name TRANSPORTING NO FIELDS.
+      IF sy-subrc = 0.
+        READ TABLE mo_debugger->mt_steps WITH KEY step = ls_hist-step INTO ls_Step.
+        CLEAR lv_add.
+        READ TABLE  ls_source-t_composed WITH KEY line = ls_step-line TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0.
+          lv_add = abap_true.
+        ENDIF.
+        READ TABLE  ls_source-t_calculated WITH KEY line = ls_step-line TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0.
+          lv_add = abap_true.
+        ENDIF.
+        READ TABLE lt_lines WITH KEY line = ls_step-line TRANSPORTING NO FIELDS.
+
+        IF sy-subrc <> 0 AND lv_add = abap_true.
+          ls_line-line = ls_step-line.
+          INSERT ls_line INTO lt_lines INDEX 1.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+    BREAK-POINT.
   ENDMETHOD.
 ENDCLASS.
