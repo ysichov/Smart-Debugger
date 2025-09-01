@@ -2183,6 +2183,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       DATA: lr_names TYPE RANGE OF string,
             lv_temp  TYPE char30.
 
+      DATA(lt_globals) = mt_globals.
+      DATA(lt_locals) = mt_locals.
+
       IF lv_optimize = abap_true AND m_update IS INITIAL.
 
         LOOP AT ls_source-t_calculated INTO DATA(ls_param) WHERE line = ms_stack_prev-line.
@@ -2190,8 +2193,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lr_names = VALUE #( BASE lr_names ( sign = 'I' option = 'EQ' low = lv_temp ) ).
         ENDLOOP.
 
-        DATA(lt_globals) = mt_globals.
-        DATA(lt_locals) = mt_locals.
+
 
         IF sy-subrc = 0.
           DELETE lt_globals WHERE name NOT IN lr_names.
@@ -6436,8 +6438,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
               ADD 1 TO lv_count.
               IF lv_count = 1.
                 IF  NOT lv_temp CO '0123456789.() '.
-                   ls_composed-composing = lv_temp.
-                    APPEND  ls_composed to lt_composed.
+                  ls_composed-composing = lv_temp.
+                  APPEND  ls_composed TO lt_composed.
                 ENDIF.
               ENDIF.
               IF lv_count = 3.
@@ -6591,6 +6593,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDIF.
       ls_step = ls_Step2.
     ENDLOOP.
+
   ENDMETHOD.
-ENDCLASS.ENDCLASS.*</SCRIPT:SCRIPT_CLASS>
+ENDCLASS.ENDCLASS.ENDCLASS.*</SCRIPT:SCRIPT_CLASS>
 *</SCRIPT:PERSISTENT>
