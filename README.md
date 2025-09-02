@@ -72,4 +72,9 @@ Buttons were refactored.
  Button 'Only Z' means that we are saving history by default only for Z code. We can switch it to 'Z & Standard' state and save changes in Standard code also.
  
 
+Finally **Smart debugger** is becoming really Smart and can save time or money as Time is Money )
+
+After double-click on any variable(1) it works as watchpoint and collects not only selected variables but dependents(4) also (forms/methods/functions call). Button "Show the origin"(2) will paint all steps in the code where variables were changed and paints Mermaid diagram for it. Just Alpha version... And I disappointed with AI. It couldn't give me such results as good algorythm which can interprete ABAP code.
+
+<img width="1676" height="904" alt="image" src="https://github.com/user-attachments/assets/e19e609a-dfe2-402b-beaf-4b83e86d9eb7" />
 
