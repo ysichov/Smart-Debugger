@@ -361,6 +361,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
 
            BEGIN OF t_sel_var,
              name   TYPE string,
+             is_sel TYPE xfeld,
              refval TYPE REF TO data,
            END OF t_sel_var.
 
@@ -525,8 +526,10 @@ ENDCLASS.
 CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_script.
   PUBLIC SECTION.
     DATA: mo_debugger TYPE REF TO lcl_debugger_script.
-    METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script,
-      steps_flow.
+    METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script iv_type TYPE string,
+      steps_flow,
+      magic_search,
+      open_mermaid IMPORTING iv_mm_string type string.
 ENDCLASS.
 
 CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
@@ -1040,6 +1043,8 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
            BEGIN OF ts_kword,
              line     TYPE i,
              name     TYPE string,
+             from     TYPE i,
+             to       TYPE i,
              ts_calls TYPE tt_calls,
            END OF ts_kword,
 
@@ -1070,6 +1075,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
            BEGIN OF ts_progs,
              include      TYPE program,
              source       TYPE REF TO cl_ci_source_include,
+             scan         TYPE REF TO cl_ci_scan,
              t_keywords   TYPE tt_kword,
              t_calculated TYPE tt_calculated,
              t_composed   TYPE tt_composed,
@@ -1090,7 +1096,13 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              glob_fill   TYPE xfeld,
              globals_tab TYPE tpda_scr_globals_it,
              mt_fs       TYPE tpda_scr_locals_it,
-           END OF ts_globals.
+           END OF ts_globals,
+
+           BEGIN OF ts_watch,
+             program TYPE string,
+             line    TYPE i,
+           END OF ts_watch,
+           tt_watch TYPE STANDARD  TABLE OF ts_watch WITH EMPTY KEY.
 
     TYPES tt_table TYPE STANDARD TABLE OF ts_table
           WITH NON-UNIQUE DEFAULT KEY.
@@ -1125,6 +1137,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
           mo_salv_steps          TYPE REF TO cl_salv_table,
           mo_salv_hist           TYPE REF TO cl_salv_table,
           mt_breaks              TYPE tpda_bp_persistent_it,
+          mt_watch               TYPE tt_watch,
           m_hist_depth           TYPE i,
           m_start_stack          TYPE i,
           mt_source              TYPE STANDARD  TABLE OF ts_progs,
@@ -3351,10 +3364,9 @@ CLASS lcl_window IMPLEMENTATION.
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear all selected variables' text = 'Clear vars' )
      ( butn_type = 3  )
      ( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = 'MerMaid Flow diagram' text = 'Diagram' )
+     ( function = 'SMART' icon = CONV #( icon_wizard ) quickinfo = 'Smart Search ' text = 'Show the Origin' )
      ( function = 'STEPS' icon = CONV #( icon_next_step ) quickinfo = 'Steps table' text = 'Steps' )
      ( function = 'HISTORY' icon = CONV #( icon_history ) quickinfo = 'History table' text = 'History' )
-*     ( function = 'F6BEG' icon = CONV #( icon_release ) quickinfo = 'Start of block' text = 'Start of block' )
-*     ( function = 'F6END' icon = CONV #( icon_outgoing_org_unit ) quickinfo = 'End of block' text = 'End of block' )
      ( butn_type = 3  )
      ( function = 'ENGINE' icon = CONV #( icon_graduate ) quickinfo = 'Faster version but can skip some changes' text = 'Alpha' )
      ( function = 'DEBUG' icon = CONV #( icon_tools ) quickinfo = 'Debug' text = 'Debug' )
@@ -3397,6 +3409,14 @@ CLASS lcl_window IMPLEMENTATION.
       <line> = ls_break-linesrc.
     ENDLOOP.
     mo_code_viewer->set_marker( EXPORTING marker_number = 9 marker_lines = lt_lines ).
+
+    "watchpoints
+    CLEAR lt_lines.
+    LOOP AT mt_watch INTO DATA(ls_watch).
+      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
+      <line> = ls_watch-line.
+    ENDLOOP.
+    mo_code_viewer->set_marker( EXPORTING marker_number = 2 marker_lines = lt_lines ).
     mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
   ENDMETHOD.
 
@@ -3535,8 +3555,11 @@ CLASS lcl_window IMPLEMENTATION.
         ENDIF.
 
       WHEN 'DIAGRAM'.
-        DATA(lo_mermaid) = NEW lcl_mermaid( mo_debugger ).
+        DATA(lo_mermaid) = NEW lcl_mermaid( io_debugger = mo_debugger iv_type =  'DIAG' ).
 
+      WHEN 'SMART'.
+        lo_mermaid = NEW lcl_mermaid( io_debugger = mo_debugger iv_type =  'SMART' ).
+        mo_debugger->show_step( ).
       WHEN 'CODE'.
         m_zcode = m_zcode BIT-XOR c_mask.
         IF m_zcode IS INITIAL.
@@ -5939,6 +5962,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         l_node->set_row_style( if_salv_c_tree_style=>emphasized_b ).
         APPEND INITIAL LINE TO mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<sel>).
         <sel>-name = <fullname>.
+        <sel>-is_sel = abap_true.
       ENDIF.
 
       CASE <kind>.
@@ -6206,7 +6230,9 @@ CLASS lcl_source_parser IMPLEMENTATION.
         IF sy-subrc <> 0.
           EXIT.
         ENDIF.
-        ls_token-line = ls_calculated-line = ls_composed-line = ls_Statement-trow.
+
+        READ TABLE lo_scan->tokens INDEX ls_statement-from INTO DATA(l_token).
+        ls_token-line = ls_calculated-line = ls_composed-line = l_token-row.
 
         DATA lv_new TYPE xfeld.
 
@@ -6368,6 +6394,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
                   IF NOT lv_temp  CO '0123456789. '.
                     ls_call-outer = lv_temp.
                     APPEND ls_call TO ls_token-ts_calls.
+                    lv_change = lv_temp.
                     "WRITE : 'using', lv_temp.
                     "WRITE : 'value', lv_temp.
                   ENDIF.
@@ -6406,7 +6433,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
                     IF lv_import = abap_true.
                       ls_call-outer = lv_temp.
                       APPEND ls_call TO ls_token-ts_calls.
-                      "WRITE : 'using', lv_temp.
                     ELSEIF lv_export = abap_true.
                       ls_call-outer = lv_temp.
                       APPEND ls_call TO ls_token-ts_calls.
@@ -6511,7 +6537,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
             ENDIF.
           ENDIF.
         ENDWHILE.
-
+        ls_token-from = ls_statement-from.
+        ls_token-to = ls_statement-to.
         APPEND ls_token TO lt_tokens.
         IF lo_procedure->statement_index = lv_max.
           EXIT.
@@ -6532,7 +6559,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
         ENDIF.
       ENDLOOP.
-
+      ls_source-scan = lo_scan.
       ls_source-t_keywords = lt_tokens.
       ls_source-t_calculated = lt_calculated.
       ls_source-t_composed = lt_composed.
@@ -6554,7 +6581,13 @@ CLASS lcl_mermaid IMPLEMENTATION.
     mo_box = create( i_name = 'Flow' i_width = 700 i_hight = 300 ).
     SET HANDLER on_box_close FOR mo_box.
 
-    steps_flow( ).
+    CASE iv_type.
+      WHEN 'DIAG'.
+        steps_flow( ).
+      WHEN 'SMART'.
+        magic_search( ).
+    ENDCASE.
+
   ENDMETHOD.
 
   METHOD steps_flow.
@@ -6594,6 +6627,103 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ls_step = ls_Step2.
     ENDLOOP.
 
+    open_mermaid( lv_mm_string ).
+
   ENDMETHOD.
-ENDCLASS.ENDCLASS.ENDCLASS.*</SCRIPT:SCRIPT_CLASS>
+
+  METHOD magic_Search.
+
+    DATA: lv_add       TYPE xfeld,
+          lv_mm_String TYPE string,
+          lv_sub       TYPE string.
+
+    TYPES: BEGIN OF ts_line,
+             line TYPE i,
+           END OF ts_line.
+
+    DATA: ls_line  TYPE ts_line,
+          lt_lines TYPE TABLE OF ts_line.
+
+    LOOP AT mo_debugger->mt_vars_hist INTO DATA(ls_hist).
+      READ TABLE mo_debugger->mt_steps WITH KEY step = ls_hist-step INTO DATA(ls_Step).
+      READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO DATA(ls_source).
+      LOOP AT ls_source-t_composed INTO DATA(ls_composed) WHERE line = ls_step-line.
+        READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_composed-composing TRANSPORTING NO FIELDS.
+        IF sy-subrc <> 0.
+          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
+          <selected>-name = ls_composed-composing.
+        ENDIF.
+      ENDLOOP.
+    ENDLOOP.
+
+    LOOP AT mo_debugger->mt_vars_hist INTO ls_hist.
+      READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_hist-name TRANSPORTING NO FIELDS.
+      IF sy-subrc = 0.
+        READ TABLE mo_debugger->mt_steps WITH KEY step = ls_hist-step INTO ls_Step.
+        CLEAR lv_add.
+        READ TABLE  ls_source-t_composed WITH KEY line = ls_step-line TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0.
+          lv_add = abap_true.
+        ENDIF.
+        READ TABLE  ls_source-t_calculated WITH KEY line = ls_step-line TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0.
+          lv_add = abap_true.
+        ENDIF.
+        READ TABLE lt_lines WITH KEY line = ls_step-line TRANSPORTING NO FIELDS.
+
+        IF sy-subrc <> 0 AND lv_add = abap_true.
+          APPEND INITIAL LINE TO mo_debugger->mo_window->mt_watch ASSIGNING FIELD-SYMBOL(<watch>).
+          <watch>-program = ls_Step-program.
+          <watch>-line = ls_line-line = ls_step-line.
+          INSERT ls_line INTO lt_lines INDEX 1.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+
+    CHECK lt_lines IS NOT INITIAL.
+    lv_mm_string = |graph TD\n |.
+
+    LOOP AT lt_lines INTO DATA(ls_lines).
+      DATA(lv_ind) = sy-tabix.
+      IF sy-tabix <> 1.
+        IF lv_sub IS INITIAL.
+          lv_mm_string = |{ lv_mm_string }{ sy-tabix - 1 }-->|.
+        ELSE.
+          CLEAR lv_sub.
+        ENDIF.
+      ENDIF.
+
+      lv_mm_string = |{ lv_mm_string }{ sy-tabix }["|.
+      READ TABLE ls_source-t_keywords WITH KEY line = ls_lines-line INTO DATA(ls_keyword).
+      LOOP AT ls_source-scan->tokens FROM ls_keyword-from TO ls_keyword-to INTO DATA(ls_token).
+        lv_mm_string = |{ lv_mm_string } { ls_token-str }|.
+      ENDLOOP.
+
+      IF ls_keyword-ts_calls IS NOT INITIAL AND ls_keyword-name = 'PERFORM'.
+        lv_mm_string = |{ lv_mm_string }"]|.
+        lv_sub = '|"'.
+        LOOP AT ls_keyword-ts_calls INTO DATA(ls_call).
+          IF sy-tabix <> 1.
+            lv_sub = |{ lv_sub }, |.
+          ENDIF.
+          lv_sub = |{ lv_sub } { ls_call-outer } = { ls_call-inner }|.
+        ENDLOOP.
+        lv_sub = lv_sub && '"|'.
+        lv_mm_string = |{ lv_mm_string }-->{ lv_sub }{ lv_ind + 1 }\n subgraph S1["form: calc"]\n  direction TB\n|.
+
+      ELSE.
+        lv_mm_string = |{ lv_mm_string }"]\n|.
+      ENDIF.
+
+    ENDLOOP.
+
+    lv_mm_string = |{ lv_mm_string } end\n|.
+
+    open_mermaid( lv_mm_string ).
+
+  ENDMETHOD.
+
+  METHOD open_mermaid.
+  ENDMETHOD.
+ENDCLASS.ENDCLASS.ENDCLASS.ENDCLASS.*</SCRIPT:SCRIPT_CLASS>
 *</SCRIPT:PERSISTENT>
