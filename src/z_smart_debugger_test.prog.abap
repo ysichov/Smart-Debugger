@@ -529,7 +529,7 @@ CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_scr
     METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script iv_type TYPE string,
       steps_flow,
       magic_search,
-      open_mermaid IMPORTING iv_mm_string type string.
+      open_mermaid IMPORTING iv_mm_string TYPE string.
 ENDCLASS.
 
 CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
@@ -1045,7 +1045,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              name     TYPE string,
              from     TYPE i,
              to       TYPE i,
-             ts_calls TYPE tt_calls,
+             tt_calls TYPE tt_calls,
            END OF ts_kword,
 
            BEGIN OF ts_calculated,
@@ -2271,7 +2271,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     "check dependents variables.
     IF mt_selected_var IS NOT INITIAL.
       READ TABLE ls_source-t_keywords WITH KEY line = ms_stack_prev-line INTO DATA(ls_keyword).
-      LOOP AT ls_keyword-ts_calls INTO DATA(ls_call) WHERE event = 'FORM' AND name =  ms_stack-eventname.
+      LOOP AT ls_keyword-tt_calls INTO DATA(ls_call) WHERE event = 'FORM' AND name =  ms_stack-eventname.
         READ TABLE mt_selected_var WITH KEY name = ls_call-outer TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
           APPEND INITIAL LINE TO mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
@@ -6216,7 +6216,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
       DATA(lv_max) = lines( lo_scan->statements ).
       DO.
-        CLEAR ls_token-ts_calls.
+        CLEAR ls_token-tt_calls.
         TRY.
             lo_procedure->next( ).
           CATCH cx_scan_iterator_reached_end.
@@ -6393,7 +6393,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
                 IF NOT lv_temp  CA '()' .
                   IF NOT lv_temp  CO '0123456789. '.
                     ls_call-outer = lv_temp.
-                    APPEND ls_call TO ls_token-ts_calls.
+                    APPEND ls_call TO ls_token-tt_calls.
                     lv_change = lv_temp.
                     "WRITE : 'using', lv_temp.
                     "WRITE : 'value', lv_temp.
@@ -6432,10 +6432,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
                   IF NOT lv_temp  CO '0123456789. '.
                     IF lv_import = abap_true.
                       ls_call-outer = lv_temp.
-                      APPEND ls_call TO ls_token-ts_calls.
+                      APPEND ls_call TO ls_token-tt_calls.
                     ELSEIF lv_export = abap_true.
                       ls_call-outer = lv_temp.
-                      APPEND ls_call TO ls_token-ts_calls.
+                      APPEND ls_call TO ls_token-tt_calls.
                       ls_composed-composing = lv_temp.
                       APPEND  ls_composed TO lt_composed.
                     ENDIF.
@@ -6547,11 +6547,15 @@ CLASS lcl_source_parser IMPLEMENTATION.
       ENDDO.
 
       "Fill keyword links for perform
-      LOOP AT lt_tokens ASSIGNING FIELD-SYMBOL(<s_token>) WHERE ts_calls IS NOT INITIAL.
-        READ TABLE <s_token>-ts_calls WITH KEY event = 'FORM' INTO ls_call.
+
+      LOOP AT lt_tokens ASSIGNING FIELD-SYMBOL(<s_token>) WHERE tt_calls IS NOT INITIAL.
+
+        READ TABLE <s_token>-tt_calls WITH KEY event = 'FORM' INTO ls_call.
         IF sy-subrc = 0.
-          LOOP AT ls_source-t_params INTO ls_param WHERE event = ls_call-event .
-            READ TABLE <s_token>-ts_calls INDEX sy-tabix ASSIGNING FIELD-SYMBOL(<call>).
+          data(lv_index) = 0.
+          LOOP AT ls_source-t_params INTO ls_param WHERE event = ls_call-event and name = ls_call-name .
+            Add 1 to lv_index.
+            READ TABLE <s_token>-tt_calls INDEX lv_index ASSIGNING FIELD-SYMBOL(<call>).
             IF sy-subrc = 0.
               <call>-inner = ls_param-param.
             ENDIF.
@@ -6635,15 +6639,24 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
     DATA: lv_add       TYPE xfeld,
           lv_mm_String TYPE string,
-          lv_sub       TYPE string.
+          lv_sub       TYPE string,
+          lv_form      TYPE string.
 
     TYPES: BEGIN OF ts_line,
-             line TYPE i,
+             line    TYPE i,
+             event   TYPE string,
+             stack   type i,
+             code    TYPE string,
+             arrow   TYPE string,
+             subname TYPE string,
            END OF ts_line.
 
-    DATA: ls_line  TYPE ts_line,
-          lt_lines TYPE TABLE OF ts_line.
+    DATA: ls_line       TYPE ts_line,
+          lt_lines      TYPE TABLE OF ts_line,
+          lv_prev_stack TYPE i,
+          lv_opened     TYPE i.
 
+    "collecting dependents variables
     LOOP AT mo_debugger->mt_vars_hist INTO DATA(ls_hist).
       READ TABLE mo_debugger->mt_steps WITH KEY step = ls_hist-step INTO DATA(ls_Step).
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO DATA(ls_source).
@@ -6656,6 +6669,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDLOOP.
     ENDLOOP.
 
+    "collecting watchpoints
     LOOP AT mo_debugger->mt_vars_hist INTO ls_hist.
       READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_hist-name TRANSPORTING NO FIELDS.
       IF sy-subrc = 0.
@@ -6675,55 +6689,80 @@ CLASS lcl_mermaid IMPLEMENTATION.
           APPEND INITIAL LINE TO mo_debugger->mo_window->mt_watch ASSIGNING FIELD-SYMBOL(<watch>).
           <watch>-program = ls_Step-program.
           <watch>-line = ls_line-line = ls_step-line.
+          ls_line-event = ls_Step-eventname.
+          ls_line-stack = ls_step-stacklevel.
           INSERT ls_line INTO lt_lines INDEX 1.
         ENDIF.
       ENDIF.
     ENDLOOP.
 
-    CHECK lt_lines IS NOT INITIAL.
-    lv_mm_string = |graph TD\n |.
-
-    LOOP AT lt_lines INTO DATA(ls_lines).
+    "getting code texts and calls params
+    LOOP AT lt_lines ASSIGNING FIELD-SYMBOL(<line>).
       DATA(lv_ind) = sy-tabix.
-      IF sy-tabix <> 1.
+
+      READ TABLE ls_source-t_keywords WITH KEY line = <line>-line INTO DATA(ls_keyword).
+      LOOP AT ls_source-scan->tokens FROM ls_keyword-from TO ls_keyword-to INTO DATA(ls_token).
+        <line>-code = |{  <line>-code } { ls_token-str }|.
+      ENDLOOP.
+
+      IF ls_keyword-tt_calls IS NOT INITIAL AND ls_keyword-name = 'PERFORM'.
+        LOOP AT ls_keyword-tt_calls INTO DATA(ls_call).
+          IF sy-tabix <> 1.
+            <line>-arrow = |{ <line>-arrow }, |.
+          ENDIF.
+          <line>-arrow  = |{ <line>-arrow  } { ls_call-outer } = { ls_call-inner }|.
+          <line>-subname = |{ ls_call-event }: { ls_Call-name } |.
+        ENDLOOP.
+      ENDIF.
+    ENDLOOP.
+
+    "creating mermaid code
+    CHECK lt_lines IS NOT INITIAL.
+    lv_mm_string = |graph LR\n |.
+    LOOP AT lt_lines INTO ls_line.
+      lv_ind = sy-tabix.
+
+      IF lv_prev_stack IS INITIAL.
+        lv_prev_stack = ls_line-stack.
+      ENDIF.
+
+      IF lv_prev_stack > ls_line-stack AND lv_opened > 0 AND lv_sub IS INITIAL.
+        lv_mm_string = |{ lv_mm_string } end\n|.
+        SUBTRACT 1 FROM lv_opened.
+      ENDIF.
+
+      IF lv_ind <> 1.
         IF lv_sub IS INITIAL.
-          lv_mm_string = |{ lv_mm_string }{ sy-tabix - 1 }-->|.
+          lv_mm_string = |{ lv_mm_string }{ lv_ind - 1 }-->|.
         ELSE.
           CLEAR lv_sub.
         ENDIF.
       ENDIF.
 
-      lv_mm_string = |{ lv_mm_string }{ sy-tabix }["|.
-      READ TABLE ls_source-t_keywords WITH KEY line = ls_lines-line INTO DATA(ls_keyword).
-      LOOP AT ls_source-scan->tokens FROM ls_keyword-from TO ls_keyword-to INTO DATA(ls_token).
-        lv_mm_string = |{ lv_mm_string } { ls_token-str }|.
-      ENDLOOP.
+      lv_mm_string = |{ lv_mm_string }{ sy-tabix }[" { ls_line-code }|.
 
-      IF ls_keyword-ts_calls IS NOT INITIAL AND ls_keyword-name = 'PERFORM'.
+      IF ls_line-arrow IS NOT INITIAL.
+        ADD 1 TO lv_opened.
         lv_mm_string = |{ lv_mm_string }"]|.
-        lv_sub = '|"'.
-        LOOP AT ls_keyword-ts_calls INTO DATA(ls_call).
-          IF sy-tabix <> 1.
-            lv_sub = |{ lv_sub }, |.
-          ENDIF.
-          lv_sub = |{ lv_sub } { ls_call-outer } = { ls_call-inner }|.
-        ENDLOOP.
-        lv_sub = lv_sub && '"|'.
-        lv_mm_string = |{ lv_mm_string }-->{ lv_sub }{ lv_ind + 1 }\n subgraph S1["form: calc"]\n  direction TB\n|.
-
+        lv_sub = '|"' && ls_line-arrow && '"|'.
+        lv_mm_string = |{ lv_mm_string }-->{ lv_sub }{ lv_ind + 1 }\n subgraph S{ lv_ind }[{ ls_line-subname }]\n  direction TB\n|.
       ELSE.
         lv_mm_string = |{ lv_mm_string }"]\n|.
       ENDIF.
 
+      lv_prev_stack = ls_line-stack.
     ENDLOOP.
 
-    lv_mm_string = |{ lv_mm_string } end\n|.
+    IF lv_opened > 0.
+      lv_mm_string = |{ lv_mm_string } end\n|.
+    ENDIF.
 
     open_mermaid( lv_mm_string ).
 
   ENDMETHOD.
 
   METHOD open_mermaid.
+
   ENDMETHOD.
 ENDCLASS.
 *</SCRIPT:SCRIPT_CLASS>
