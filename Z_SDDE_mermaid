@@ -511,8 +511,8 @@ CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_scr
     DATA: mo_debugger TYPE REF TO lcl_debugger_script.
     METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script iv_type TYPE string,
       steps_flow,
-      magic_search
-      .
+      magic_search,
+      open_mermaid IMPORTING iv_mm_string type string.
 ENDCLASS.
 
 CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
@@ -6610,14 +6610,8 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ls_step = ls_Step2.
     ENDLOOP.
 
-    TRY.
-        DATA(diagram) = NEW zcl_wd_gui_mermaid_js_diagram( parent = mo_box ).
-        diagram->set_source_code_string( lv_mm_string ).
-        diagram->display( ).
+    open_mermaid( lv_mm_string ).
 
-      CATCH zcx_wd_gui_mermaid_js_diagram INTO DATA(error).
-        MESSAGE error TYPE 'E'.
-    ENDTRY.
   ENDMETHOD.
 
   METHOD magic_Search.
@@ -6707,10 +6701,16 @@ CLASS lcl_mermaid IMPLEMENTATION.
     ENDLOOP.
 
     lv_mm_string = |{ lv_mm_string } end\n|.
-    BREAK-POINT.
-    TRY.
+
+    open_mermaid( lv_mm_string ).
+
+  ENDMETHOD.
+
+  METHOD open_mermaid.
+
+     TRY.
         DATA(diagram) = NEW zcl_wd_gui_mermaid_js_diagram( parent = mo_box ).
-        diagram->set_source_code_string( lv_mm_string ).
+        diagram->set_source_code_string( iv_mm_string ).
         diagram->display( ).
 
       CATCH zcx_wd_gui_mermaid_js_diagram INTO DATA(error).
