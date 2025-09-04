@@ -47,11 +47,14 @@ CLASS lcl_table_viewer DEFINITION DEFERRED.
 CLASS lcl_mermaid DEFINITION DEFERRED.
 
 CLASS lcl_box_handler DEFINITION."for memory clearing
+
   PUBLIC SECTION.
     METHODS: on_box_close FOR EVENT close OF cl_gui_dialogbox_container IMPORTING sender.
+
 ENDCLASS.
 
 CLASS lcl_appl DEFINITION.
+
   PUBLIC SECTION.
     TYPES: BEGIN OF sign_option_icon_s,
              sign          TYPE tvarv_sign,
@@ -174,9 +177,11 @@ CLASS lcl_appl DEFINITION.
                                it_ref    TYPE REF TO data OPTIONAL
                                iv_name   TYPE string
                                io_window TYPE REF TO lcl_window.
+
 ENDCLASS.
 
 CLASS lcl_popup DEFINITION.
+
   PUBLIC SECTION.
     CLASS-DATA m_counter              TYPE i.
     DATA: m_additional_name      TYPE string,
@@ -200,9 +205,11 @@ CLASS lcl_popup IMPLEMENTATION.
 
   METHOD constructor.
     m_additional_name = i_additional_name.
+
   ENDMETHOD.
 
   METHOD create.
+
     DATA: l_top  TYPE i,
           l_left TYPE i.
 
@@ -229,6 +236,7 @@ CLASS lcl_popup IMPLEMENTATION.
     IF sy-subrc <> 0.
       RETURN.
     ENDIF.
+
   ENDMETHOD.
 
   METHOD on_box_close.
@@ -237,15 +245,15 @@ CLASS lcl_popup IMPLEMENTATION.
 
 ENDCLASS.
 
-
-
 CLASS lcl_ddic DEFINITION.
+
   PUBLIC SECTION.
     CLASS-METHODS: get_text_table IMPORTING i_tname TYPE tabname
                                   EXPORTING e_tab   TYPE tabname.
 ENDCLASS.
 
 CLASS lcl_ddic IMPLEMENTATION.
+
   METHOD get_text_table.
     CALL FUNCTION 'DDUT_TEXTTABLE_GET'
       EXPORTING
@@ -253,22 +261,28 @@ CLASS lcl_ddic IMPLEMENTATION.
       IMPORTING
         texttable = e_tab.
   ENDMETHOD.
+
 ENDCLASS.
 
 CLASS lcl_dd_data DEFINITION."drag&drop data
+
   PUBLIC  SECTION.
     DATA: m_row    TYPE i,
           m_column TYPE lvc_s_col.
+
 ENDCLASS.
 
 CLASS lcl_dragdrop DEFINITION.
+
   PUBLIC SECTION.
     CLASS-METHODS:
       drag FOR EVENT ondrag OF cl_gui_alv_grid IMPORTING e_dragdropobj e_row e_column ,
       drop FOR EVENT ondrop OF cl_gui_alv_grid IMPORTING e_dragdropobj e_row.
+
 ENDCLASS.
 
 CLASS lcl_alv_common DEFINITION.
+
   PUBLIC SECTION.
     CONSTANTS: c_white(4) TYPE x VALUE '00000001'. "white background
 
@@ -276,19 +290,24 @@ CLASS lcl_alv_common DEFINITION.
       refresh IMPORTING i_obj TYPE REF TO cl_gui_alv_grid i_layout TYPE lvc_s_layo OPTIONAL i_soft TYPE char01 OPTIONAL,
       translate_field IMPORTING i_lang TYPE ddlanguage OPTIONAL CHANGING c_fld TYPE lvc_s_fcat,
       get_selected IMPORTING i_obj TYPE REF TO cl_gui_alv_grid RETURNING VALUE(e_index) TYPE i.
+
 ENDCLASS.
 
 CLASS lcl_alv_common IMPLEMENTATION.
+
   METHOD refresh.
+
     DATA l_stable TYPE lvc_s_stbl.
     l_stable = 'XX'.
     IF i_layout IS SUPPLIED.
       i_obj->set_frontend_layout( i_layout ).
     ENDIF.
     i_obj->refresh_table_display( EXPORTING is_stable = l_stable i_soft_refresh = i_soft ).
+
   ENDMETHOD.
 
   METHOD translate_field.
+
     DATA: lt_field_info TYPE TABLE OF dfies.
 
     CALL FUNCTION 'DDIF_FIELDINFO_GET'
@@ -320,9 +339,11 @@ CLASS lcl_alv_common IMPLEMENTATION.
         ENDIF.
       ENDIF.
     ENDIF.
+
   ENDMETHOD.
 
   METHOD get_selected.
+
     i_obj->get_selected_cells( IMPORTING et_cell = DATA(lt_sel_cells) ).
     IF lines( lt_sel_cells ) > 0.
       e_index = lt_sel_cells[ 1 ]-row_id.
@@ -332,10 +353,13 @@ CLASS lcl_alv_common IMPLEMENTATION.
         e_index = lt_sel_rows[ 1 ]-index.
       ENDIF.
     ENDIF.
+
   ENDMETHOD.
+
 ENDCLASS.
 
 CLASS lcl_rtti DEFINITION.
+
   PUBLIC SECTION.
     CLASS-METHODS:
       create_table_by_name IMPORTING i_tname TYPE tabname
@@ -344,11 +368,16 @@ CLASS lcl_rtti DEFINITION.
       create_struc_handle IMPORTING i_tname  TYPE tabname
                           EXPORTING e_t_comp TYPE abap_component_tab
                                     e_handle TYPE REF TO cl_abap_structdescr.
+
 ENDCLASS.
+
 CLASS lcl_debugger_script DEFINITION DEFERRED.
+
 CLASS lcl_source_parser DEFINITION.
+
   PUBLIC SECTION.
     CLASS-METHODS: parse_tokens IMPORTING iv_program TYPE program io_debugger TYPE REF TO lcl_debugger_script.
+
 ENDCLASS.
 
 CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super.
@@ -524,15 +553,18 @@ ENDCLASS.
 
 
 CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_script.
+
   PUBLIC SECTION.
     DATA: mo_debugger TYPE REF TO lcl_debugger_script.
     METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script iv_type TYPE string,
       steps_flow,
       magic_search,
       open_mermaid IMPORTING iv_mm_string TYPE string.
+
 ENDCLASS.
 
 CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
+
   PUBLIC SECTION.
 
     TYPES: BEGIN OF t_classes_leaf,
@@ -669,6 +701,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
 ENDCLASS.
 
 CLASS lCL_AI_API DEFINITION.
+
   PUBLIC SECTION.
 
     METHODS  call_openai  IMPORTING iv_prompt TYPE string RETURNING VALUE(rv_answer) TYPE string.
@@ -690,6 +723,7 @@ CLASS lCL_AI_API DEFINITION.
                   iv_prompt        TYPE string
                   iv_content       TYPE string
         RETURNING VALUE(rv_answer) TYPE string.
+
 ENDCLASS.
 
 CLASS lCL_AI_API IMPLEMENTATION.
@@ -799,6 +833,7 @@ CLASS lCL_AI_API IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD output.
+
     DATA: lv_text(1000) TYPE c,
           lv_string     TYPE string,
           lv_content    TYPE string,
@@ -843,13 +878,14 @@ CLASS lCL_AI_API IMPLEMENTATION.
       lv_content = lv_string.
     ENDIF.
 
-
     rv_answer = lv_content.
+
   ENDMETHOD.
 
 ENDCLASS.
 
 CLASS lcl_AI DEFINITION INHERITING FROM lcl_popup.
+
   PUBLIC SECTION.
     DATA: mo_ai_box               TYPE REF TO cl_gui_dialogbox_container,
           mo_ai_splitter          TYPE REF TO cl_gui_splitter_container,
@@ -964,9 +1000,11 @@ CLASS lcl_ai IMPLEMENTATION.
 
     mo_prompt_text->set_text_as_r3table( lt_string ).
     cl_gui_control=>set_focus( mo_ai_box ).
+
   ENDMETHOD.
 
   METHOD add_ai_toolbar_buttons.
+
     DATA: lt_button TYPE ttb_button,
           lt_events TYPE cntl_simple_events,
           ls_events LIKE LINE OF lt_events.
@@ -1022,6 +1060,7 @@ CLASS lcl_ai IMPLEMENTATION.
 ENDCLASS.
 
 CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
+
   PUBLIC SECTION.
 
     TYPES: BEGIN OF ts_table,
@@ -1153,14 +1192,17 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
     METHODS set_program_line IMPORTING iv_line LIKE sy-index.
     METHODS create_code_viewer.
     METHODS show_stack.
+
 ENDCLASS.
 
 CLASS lcl_debugger_script IMPLEMENTATION.
+
   METHOD prologue.
     super->prologue( ).
   ENDMETHOD.                    "prolog
 
   METHOD init.
+
     CONSTANTS: c_mask TYPE x VALUE '01'.
 
     is_step = abap_on.
@@ -1184,9 +1226,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                      i_debugger = me ).
 
     mo_tree_local->m_locals = mo_tree_local->m_locals BIT-XOR c_mask.
+
   ENDMETHOD.
 
   METHOD create_simple_var.
+
     DATA: lr_symbsimple TYPE REF TO tpda_sys_symbsimple,
           lo_elem       TYPE REF TO cl_abap_elemdescr.
 
@@ -1212,9 +1256,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     CREATE DATA er_var TYPE HANDLE lo_elem.
     ASSIGN er_var->* TO FIELD-SYMBOL(<new_elem>).
     <new_elem> = <simple>-valstring.
+
   ENDMETHOD.
 
   METHOD create_simple_string.
+
     DATA: lr_string TYPE REF TO tpda_sys_symbstring,
           lr_struc  TYPE REF TO data,
           lo_elem   TYPE REF TO cl_abap_elemdescr,
@@ -1247,8 +1293,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_root.
         e_string = |Error: { i_name }|.
     ENDTRY.
+
   ENDMETHOD.
+
   METHOD create_struc.
+
     DATA: lo_new_type    TYPE REF TO cl_abap_structdescr,
           ls_comp        TYPE abap_componentdescr,
           lt_components  TYPE abap_component_tab,
@@ -1313,9 +1362,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ASSIGN COMPONENT l_comp-compname OF STRUCTURE <new_struc> TO FIELD-SYMBOL(<new>).
       <new> = lr_symbsimple->valstring.
     ENDLOOP.
+
   ENDMETHOD.
 
   METHOD get_deep_struc.
+
     DATA: lr_struc       TYPE REF TO data,
           lo_struc_descr TYPE REF TO cl_tpda_script_structdescr,
           comp_full      TYPE  tpda_scr_struct_comp_it,
@@ -1365,6 +1416,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD get_table. "construct deep tables
+
     DATA: r_data         TYPE REF TO data,
           lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
           table_clone    TYPE REF TO data,
@@ -1422,9 +1474,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           INSERT <new_line> INTO TABLE <new_table>.
         ENDDO.
     ENDTRY.
+
   ENDMETHOD.
 
   METHOD transfer_variable.
+
     DATA: lr_struc       TYPE REF TO data,
           lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
           table_clone    TYPE REF TO data,
@@ -1438,7 +1492,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           r_elem         TYPE REF TO data.
 
     DATA: lv_len TYPE i.
-
     FIELD-SYMBOLS: <lv_value> TYPE any.
 
     l_full_name = i_name.
@@ -1653,8 +1706,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDIF.
       CATCH cx_root.
     ENDTRY.
+
   ENDMETHOD.
+
   METHOD get_class_name.
+
     DATA: lo_object TYPE REF TO cl_tpda_script_objectdescr,
           lo_descr  TYPE REF TO cl_tpda_script_data_descr.
 
@@ -1677,6 +1733,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDIF.
       CATCH cx_tpda_varname .
     ENDTRY.
+
   ENDMETHOD.
 
   METHOD create_reference.
@@ -1746,6 +1803,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD create_struc2.
+
     DATA: lo_struc_descr TYPE REF TO cl_tpda_script_structdescr,
           lt_components  TYPE abap_component_tab,
           comp_full      TYPE  tpda_scr_struct_comp_it,
@@ -1784,15 +1842,19 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     get_deep_struc( EXPORTING i_name = i_name r_obj = r_data ).
     ASSIGN r_data->* TO FIELD-SYMBOL(<new_deep>).
+
   ENDMETHOD.
 
   METHOD script.
+
     run_script( ).
     show_step( ).
     me->break( ).
+
   ENDMETHOD.
 
   METHOD run_script_hist.
+
     DATA: lt_hist      LIKE mt_vars_hist_view,
           lv_hist_step TYPE i,
           lv_old_step  TYPE i.
@@ -1965,9 +2027,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     TRY.
         cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
         DATA(lt_stack) = cl_tpda_script_abapdescr=>get_abap_stack( ).
-*        IF m_counter = 1.
-*          mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
-*        ENDIF.
         READ TABLE mo_window->mt_stack INDEX 1 INTO ms_stack_prev.
 
         MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
@@ -2072,9 +2131,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
       IF mv_stack_changed = abap_true.
-
         IF mo_tree_local->m_locals IS NOT INITIAL.
-
           READ TABLE mo_window->mt_locals_set WITH KEY program = ms_stack-program
                                                        eventname = ms_stack-eventname
                                                        eventtype = ms_stack-eventtype
@@ -2205,8 +2262,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lv_temp = ls_param-calculated.
           lr_names = VALUE #( BASE lr_names ( sign = 'I' option = 'EQ' low = lv_temp ) ).
         ENDLOOP.
-
-
 
         IF sy-subrc = 0.
           DELETE lt_globals WHERE name NOT IN lr_names.
@@ -2462,6 +2517,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD set_selected_vars.
+
     DATA(lt_nodes) = mo_tree_local->tree->get_nodes( )->get_all_nodes( ).
     LOOP AT lt_nodes INTO DATA(ls_nodes).
       DATA(lv_name) = ls_nodes-node->get_text( ).
@@ -2529,6 +2585,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD f5.
+
     READ TABLE mo_window->mt_stack INTO DATA(stack) INDEX 1.
 
     IF mo_window->m_debug_button NE 'F5' AND mo_window->m_zcode IS NOT INITIAL.
@@ -2580,9 +2637,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF mo_window->m_debug_button = 'F5'.
       rv_stop = abap_true.
     ENDIF.
+
   ENDMETHOD.
 
   METHOD f6.
+
     TRY.
         CALL METHOD debugger_controller->debug_step
           EXPORTING
@@ -2591,9 +2650,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
+
   ENDMETHOD.
 
   METHOD f7.
+
     TRY.
         CALL METHOD debugger_controller->debug_step
           EXPORTING
@@ -2602,9 +2663,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
+
   ENDMETHOD.
 
   METHOD f8.
+
     TRY.
         CALL METHOD debugger_controller->debug_step
           EXPORTING
@@ -2613,10 +2676,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
+
   ENDMETHOD.
 
-
   METHOD make_Step.
+
     DATA: lv_stop TYPE xfeld.
 
     READ TABLE mo_window->mt_stack INDEX 1 INTO DATA(ls_stack).
@@ -2645,7 +2709,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
 
         WHEN 'F8'.
-          "CLEAR m_counter.
           IF mo_window->m_history IS INITIAL.
             lv_stop = f8( ).
           ELSE.
@@ -2676,6 +2739,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD show_step.
+
     show_variables( CHANGING it_var = mt_state ).
     set_selected_vars( ).
     mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
@@ -2752,6 +2816,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD save_hist.
+
     DATA: lv_add        TYPE xfeld,
           lv_add_hist   TYPE xfeld,
           lv_name2(100),
@@ -2940,6 +3005,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         INSERT <state> INTO mt_vars_hist INDEX 1.
       ENDIF.
     ENDIF.
+
   ENDMETHOD.
 
   METHOD traverse.
@@ -3017,9 +3083,11 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                        i_cl_leaf      = i_cl_leaf
                        iv_parent_name = iv_parent_name ).
     ENDCASE.
+
   ENDMETHOD.
 
   METHOD traverse_struct.
+
     DATA: lt_component    TYPE abap_component_tab,
           ls_component    LIKE LINE OF lt_component,
           lo_struct_descr TYPE REF TO cl_abap_structdescr,
@@ -3045,7 +3113,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     LOOP AT lt_component INTO ls_component.
       IF ls_component-name IS INITIAL AND ls_component-suffix IS NOT INITIAL.
-        "ls_component-name = ls_component-suffix.
         DATA(lv_suffix) =  ls_component-suffix.
       ENDIF.
 
@@ -3118,6 +3185,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                   i_suffix       = lv_suffix ).
       ENDIF.
     ENDLOOP.
+
   ENDMETHOD.
 
   METHOD traverse_elem.
@@ -3134,9 +3202,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
 ENDCLASS.                    "lcl_debugger_script IMPLEMENTATION
 
-
-
 CLASS lcl_types DEFINITION ABSTRACT.
+
   PUBLIC SECTION.
     TYPES:
       BEGIN OF selection_display_s,
@@ -3173,6 +3240,7 @@ CLASS lcl_types DEFINITION ABSTRACT.
       END OF t_sel_row.
 
     CLASS-DATA: mt_sel TYPE TABLE OF lcl_types=>selection_display_s.
+
 ENDCLASS.
 
 CLASS lcl_window IMPLEMENTATION.
@@ -3344,6 +3412,7 @@ CLASS lcl_window IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD add_toolbar_buttons.
+
     DATA: lt_button TYPE ttb_button,
           lt_events TYPE cntl_simple_events,
           ls_events LIKE LINE OF lt_events.
@@ -3386,6 +3455,7 @@ CLASS lcl_window IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD set_program.
+
     lcl_source_parser=>parse_tokens( iv_program = iv_program io_debugger = mo_debugger ).
     READ TABLE mt_source WITH KEY include = iv_program INTO DATA(ls_source).
     IF sy-subrc = 0.
@@ -3395,6 +3465,7 @@ CLASS lcl_window IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD set_program_line.
+
     TYPES: lntab TYPE STANDARD TABLE OF i.
     DATA lt_lines TYPE lntab.
 
@@ -3418,9 +3489,11 @@ CLASS lcl_window IMPLEMENTATION.
     ENDLOOP.
     mo_code_viewer->set_marker( EXPORTING marker_number = 2 marker_lines = lt_lines ).
     mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
+
   ENDMETHOD.
 
   METHOD create_code_viewer.
+
     CHECK mo_code_viewer IS INITIAL.
 
     CREATE OBJECT mo_code_viewer
@@ -3439,8 +3512,8 @@ CLASS lcl_window IMPLEMENTATION.
     mo_code_viewer->set_statusbar_mode( statusbar_mode = cl_gui_abapedit=>true ).
     mo_code_viewer->create_document( ).
     mo_code_viewer->set_readonly_mode( 1 ).
-  ENDMETHOD.
 
+  ENDMETHOD.
 
   METHOD show_stack.
     IF mo_salv_stack IS INITIAL.
@@ -3487,6 +3560,7 @@ CLASS lcl_window IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD hnd_toolbar.
+
     CONSTANTS: c_mask TYPE x VALUE '01'.
     FIELD-SYMBOLS: <fs_any> TYPE any.
     m_debug_button = fcode.
@@ -3560,6 +3634,10 @@ CLASS lcl_window IMPLEMENTATION.
       WHEN 'SMART'.
         lo_mermaid = NEW lcl_mermaid( io_debugger = mo_debugger iv_type =  'SMART' ).
         mo_debugger->show_step( ).
+
+      WHEN 'SANKEY'.
+        lo_mermaid = NEW lcl_mermaid( io_debugger = mo_debugger iv_type =  'SANKEY' ).
+
       WHEN 'CODE'.
         m_zcode = m_zcode BIT-XOR c_mask.
         IF m_zcode IS INITIAL.
@@ -3650,6 +3728,7 @@ CLASS lcl_window IMPLEMENTATION.
           ENDDO.
       ENDCASE.
     ENDIF.
+
   ENDMETHOD.
 
 ENDCLASS.
@@ -3657,6 +3736,7 @@ ENDCLASS.
 CLASS lcl_sel_opt DEFINITION DEFERRED.
 
 CLASS lcl_rtti IMPLEMENTATION.
+
   METHOD create_struc_handle.
     cl_abap_typedescr=>describe_by_name( EXPORTING  p_name         = i_tname
                                          RECEIVING  p_descr_ref    = DATA(lo_descr)
@@ -3666,9 +3746,11 @@ CLASS lcl_rtti IMPLEMENTATION.
     ELSE.
       RETURN.
     ENDIF.
+
   ENDMETHOD.
 
   METHOD create_table_by_name.
+
     DATA: lo_new_tab  TYPE REF TO cl_abap_tabledescr,
           lo_new_type TYPE REF TO cl_abap_structdescr.
 
@@ -3679,27 +3761,34 @@ CLASS lcl_rtti IMPLEMENTATION.
       p_unique     = abap_false ).
     CREATE DATA c_table TYPE HANDLE lo_new_tab.  "Create a New table type
   ENDMETHOD.
+
 ENDCLASS.
 
 CLASS lcl_data_transmitter DEFINITION.
+
   PUBLIC SECTION.
     EVENTS: data_changed EXPORTING VALUE(e_row) TYPE lcl_types=>t_sel_row,
       col_changed EXPORTING VALUE(e_column) TYPE lvc_fname.
     METHODS: emit IMPORTING e_row TYPE lcl_types=>t_sel_row,
       emit_col IMPORTING e_column TYPE lvc_fname.
+
 ENDCLASS.
 
 CLASS lcl_data_transmitter IMPLEMENTATION.
+
   METHOD  emit.
     RAISE EVENT data_changed EXPORTING e_row = e_row.
+
   ENDMETHOD.
 
   METHOD emit_col.
     RAISE EVENT col_changed EXPORTING e_column = e_column.
   ENDMETHOD.
+
 ENDCLASS.
 
 CLASS lcl_data_receiver DEFINITION.
+
   PUBLIC SECTION.
     DATA: mo_transmitter TYPE REF TO lcl_data_transmitter,
           lo_tab_from    TYPE REF TO lcl_table_viewer,
@@ -3720,9 +3809,11 @@ CLASS lcl_data_receiver DEFINITION.
         IMPORTING
           es_col_id
           es_row_no.
+
 ENDCLASS.
 
 CLASS lcl_sel_opt DEFINITION.
+
   PUBLIC SECTION.
     DATA: mo_viewer  TYPE REF TO lcl_table_viewer,
           mo_sel_alv TYPE REF TO cl_gui_alv_grid,
@@ -3752,9 +3843,11 @@ CLASS lcl_sel_opt DEFINITION.
       handle_user_command FOR EVENT user_command OF cl_gui_alv_grid IMPORTING e_ucomm,
       handle_doubleclick FOR EVENT double_click OF cl_gui_alv_grid IMPORTING e_column es_row_no,
       handle_context_menu_request FOR EVENT context_menu_request OF cl_gui_alv_grid IMPORTING e_object.
+
 ENDCLASS.
 
 CLASS lcl_table_viewer DEFINITION INHERITING FROM lcl_popup.
+
   PUBLIC SECTION.
     TYPES: BEGIN OF t_column_emitter,
              column  TYPE lvc_fname,
@@ -3801,15 +3894,18 @@ CLASS lcl_table_viewer DEFINITION INHERITING FROM lcl_popup.
       before_user_command FOR EVENT before_user_command OF cl_gui_alv_grid IMPORTING e_ucomm,
       handle_user_command FOR EVENT user_command OF cl_gui_alv_grid IMPORTING e_ucomm,
       handle_doubleclick FOR EVENT double_click OF cl_gui_alv_grid IMPORTING e_column es_row_no.
+
 ENDCLASS.
 
 CLASS lcl_text_viewer DEFINITION FINAL INHERITING FROM lcl_popup.
+
   PUBLIC SECTION.
     DATA: mo_text     TYPE REF TO cl_gui_textedit.
     METHODS: constructor IMPORTING ir_str TYPE REF TO data.
 ENDCLASS.
 
 CLASS lcl_text_viewer IMPLEMENTATION.
+
   METHOD constructor.
     super->constructor( ).
     mo_box = create( i_name = 'text' i_width = 200 i_hight = 100 ).
@@ -3863,7 +3959,9 @@ CLASS lcl_text_viewer IMPLEMENTATION.
 ENDCLASS.
 
 CLASS lcl_data_receiver IMPLEMENTATION.
+
   METHOD constructor.
+
     lo_sel_to = io_sel_to.
     m_from_field =  i_from_field.
     m_to_field =  i_to_field.
@@ -3879,18 +3977,22 @@ CLASS lcl_data_receiver IMPLEMENTATION.
     ELSE.
       SET HANDLER me->update FOR ALL INSTANCES.
     ENDIF.
+
   ENDMETHOD.
 
   METHOD shut_down.
+
     IF mo_transmitter IS NOT INITIAL.
       SET HANDLER me->update FOR mo_transmitter  ACTIVATION space.
     ELSE.
       SET HANDLER me->update FOR ALL INSTANCES  ACTIVATION space.
     ENDIF.
     CLEAR lo_sel_to.
+
   ENDMETHOD.
 
   METHOD on_grid_button_click.
+
     FIELD-SYMBOLS: <f_tab>   TYPE STANDARD TABLE.
 
     CHECK m_from_field = es_col_id-fieldname.
@@ -3900,9 +4002,11 @@ CLASS lcl_data_receiver IMPLEMENTATION.
     CHECK lo_sel_to IS NOT INITIAL.
     lo_sel_to->set_value( i_field = m_to_field i_low = <f_field> ).
     lo_sel_to->raise_selection_done( ).
+
   ENDMETHOD.
 
   METHOD  update.
+
     DATA: l_updated.
 
     READ TABLE lo_sel_to->mt_sel_tab ASSIGNING FIELD-SYMBOL(<to>) WITH KEY field_label = m_to_field.
@@ -3914,9 +4018,11 @@ CLASS lcl_data_receiver IMPLEMENTATION.
       <to>-transmitter->emit( EXPORTING e_row = e_row ).
     ENDIF.
     lo_sel_to->raise_selection_done( ).
+
   ENDMETHOD.
 
   METHOD update_col.
+
     DATA: l_updated,
           lt_sel_row   TYPE lcl_types=>t_sel_row.
 
@@ -3954,10 +4060,13 @@ CLASS lcl_data_receiver IMPLEMENTATION.
       <to>-transmitter->emit( EXPORTING e_row = lt_sel_row ).
       lo_sel_to->raise_selection_done( ).
     ENDIF.
+
   ENDMETHOD.
+
 ENDCLASS.
 
 CLASS lcl_box_handler IMPLEMENTATION.
+
   METHOD on_box_close.
     DATA: lv_tabix LIKE sy-tabix.
     sender->free( ).
@@ -3987,10 +4096,13 @@ CLASS lcl_box_handler IMPLEMENTATION.
       ENDIF.
     ENDIF.
   ENDMETHOD.                    "ON_BOX_CLOSE
+
 ENDCLASS.               "lcl_box_handler
 
 CLASS lcl_table_viewer IMPLEMENTATION.
+
   METHOD constructor.
+
     DATA: ls_comp         TYPE abap_componentdescr,
           lt_comp_notab   TYPE abap_component_tab,
           lt_comp_tab2str TYPE abap_component_tab,
@@ -4116,9 +4228,11 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     create_alv( ).
     create_sel_alv( ).
     mo_alv->set_focus( mo_alv ).
+
   ENDMETHOD.
 
   METHOD create_popup.
+
     mo_box = create( i_width = 800 i_hight = 150 ).
 
     CREATE OBJECT mo_splitter ##FM_SUBRC_OK
@@ -4150,9 +4264,11 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       lcl_appl=>m_ctrl_box_handler = NEW #( ).
     ENDIF.
     SET HANDLER lcl_appl=>m_ctrl_box_handler->on_box_close FOR mo_box.
+
   ENDMETHOD.
 
   METHOD create_alv.
+
     DATA: ls_layout TYPE lvc_s_layo,
           effect    TYPE i,
           lt_f4     TYPE lvc_t_f4.
@@ -4217,9 +4333,11 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     me->handle_user_command( EXPORTING e_ucomm = 'TECH' ).
     me->handle_user_command( EXPORTING e_ucomm = 'SHOW' ).
     mo_alv->set_toolbar_interactive( ).
+
   ENDMETHOD.
 
   METHOD translate_field.
+
     DATA: l_dd04 TYPE dd04v.
 
     READ TABLE mt_fields INTO DATA(l_field) WITH KEY field = c_fld-fieldname.
@@ -4241,18 +4359,22 @@ CLASS lcl_table_viewer IMPLEMENTATION.
         MOVE-CORRESPONDING l_dd04 TO c_fld.
       ENDIF.
     ENDIF.
+
   ENDMETHOD.
 
   METHOD create_sel_alv.
+
     IF mo_sel IS INITIAL.
       mo_sel     = NEW #( io_viewer = me io_container = mo_sel_parent ).
       SET HANDLER refresh_table FOR mo_sel.
     ELSE.
       mo_sel->update_sel_tab( ).
     ENDIF.
+
   ENDMETHOD.
 
   METHOD set_header.
+
     DATA: lv_text       TYPE as4text,
           lv_header(80) TYPE c.
 
@@ -4263,9 +4385,11 @@ CLASS lcl_table_viewer IMPLEMENTATION.
 
     lv_header = |{ m_tabname } - { lv_text } { m_additional_name }|.
     mo_box->set_caption( lv_header ).
+
   ENDMETHOD.
 
   METHOD handle_tab_toolbar.
+
     IF m_visible IS INITIAL.
       DATA(lt_toolbar) = VALUE ttb_button(
        ( function = 'SEL_ON' icon = icon_arrow_left quickinfo = 'Show Select-Options'  butn_type = 0 )
@@ -4283,9 +4407,11 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     ELSE.
       e_object->mt_toolbar =  lt_toolbar = VALUE ttb_button( BASE lt_toolbar ( LINES OF e_object->mt_toolbar ) ).
     ENDIF.
+
   ENDMETHOD.
 
   METHOD create_field_cat.
+
     DATA: lr_field       TYPE REF TO data,
           lr_table_descr TYPE REF TO cl_abap_structdescr,
           lr_data_descr  TYPE REF TO cl_abap_datadescr,
@@ -4348,9 +4474,11 @@ CLASS lcl_table_viewer IMPLEMENTATION.
         MOVE-CORRESPONDING l_dd04 TO <catalog>.
       ENDIF.
     ENDLOOP.
+
   ENDMETHOD.
 
   METHOD handle_doubleclick.
+
     DATA: lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
           table_clone    TYPE REF TO data.
     FIELD-SYMBOLS: <f_tab>  TYPE STANDARD TABLE.
@@ -4385,17 +4513,21 @@ CLASS lcl_table_viewer IMPLEMENTATION.
         mo_window->mo_debugger->mo_tree_local->display( ).
         mo_window->mo_debugger->mo_tree_exp->display( ).
     ENDCASE.
+
   ENDMETHOD.
 
   METHOD before_user_command.
+
     CASE e_ucomm.
       WHEN '&INFO'.
         DATA(l_url) = 'https://ysychov.wordpress.com/2020/02/10/simple-data-explorer/'.
         CALL FUNCTION 'CALL_BROWSER' EXPORTING url = l_url.
     ENDCASE.
+
   ENDMETHOD.
 
   METHOD handle_user_command.
+
     DATA: it_fields     TYPE lvc_t_fcat,
           lv_clause(45),
           lv_sel_width  TYPE i.
@@ -4479,9 +4611,11 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       ENDIF.
       lcl_alv_common=>refresh( mo_sel->mo_sel_alv ).
     ENDIF.
+
   ENDMETHOD.                           "handle_user_command
 
   METHOD refresh_table.
+
     DATA: ls_row    TYPE lcl_types=>t_sel_row,
           lt_filter TYPE lvc_t_filt.
 
@@ -4572,9 +4706,11 @@ CLASS lcl_sel_opt IMPLEMENTATION.
         it_fieldcatalog = mt_fcat.
 
     mo_sel_alv->set_toolbar_interactive( ).
+
   ENDMETHOD.
 
   METHOD init_fcat.
+
     mt_fcat = VALUE #(
      ( fieldname = 'IND'         coltext = '№'  outputlen = 3 style = '00000003' )
      ( fieldname = 'FIELD_LABEL' coltext = 'Label'  outputlen = 30 dragdropid = i_dd_handle )
@@ -4595,9 +4731,11 @@ CLASS lcl_sel_opt IMPLEMENTATION.
      ( fieldname = 'TRANSMITTER'   tech = abap_true  )
      ( fieldname = 'RECEIVER'    tech = abap_true  )
      ( fieldname = 'COLOR'    tech = abap_true  ) ).
+
   ENDMETHOD.
 
   METHOD raise_selection_done.
+
     DATA: ls_row TYPE lcl_types=>t_sel_row.
 
     lcl_alv_common=>refresh( mo_sel_alv ).
@@ -4608,9 +4746,11 @@ CLASS lcl_sel_opt IMPLEMENTATION.
         <sel>-transmitter->emit( e_row = ls_row ).
       ENDIF.
     ENDLOOP.
+
   ENDMETHOD.
 
   METHOD update_sel_tab.
+
     IF mt_sel_tab[] IS NOT INITIAL.
       DATA(lt_copy) = mt_sel_tab.
     ENDIF.
@@ -4638,15 +4778,19 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       lcl_alv_common=>translate_field( EXPORTING i_lang = mo_viewer->m_lang CHANGING c_fld = l_catalog ).
       <sel_tab>-name = l_catalog-scrtext_l.
     ENDLOOP.
+
   ENDMETHOD.
 
   METHOD handle_sel_toolbar.
+
     e_object->mt_toolbar[] = VALUE #( butn_type = 0 disabled = ''
      ( function = 'SEL_OFF' icon = icon_arrow_right    quickinfo = 'Hide' )
      ( function = 'SEL_CLEAR' icon = icon_delete_row    quickinfo = 'Clear Select-Options' ) ).
+
   ENDMETHOD.
 
   METHOD set_value.
+
     READ TABLE mt_sel_tab ASSIGNING FIELD-SYMBOL(<to>) WITH KEY field_label = i_field.
     CHECK sy-subrc = 0.
     IF i_low IS SUPPLIED.
@@ -4672,9 +4816,11 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       MOVE-CORRESPONDING <to> TO ls_row.
       <to>-transmitter->emit( EXPORTING e_row = ls_row ).
     ENDIF.
+
   ENDMETHOD.
 
   METHOD handle_doubleclick.
+
     DATA: it_bdcdata TYPE TABLE OF  bdcdata.
 
     CHECK es_row_no-row_id IS NOT INITIAL.
@@ -4703,9 +4849,11 @@ CLASS lcl_sel_opt IMPLEMENTATION.
           use_sec_langu     = abap_true
           display_shorttext = abap_true.
     ENDIF.
+
   ENDMETHOD.
 
   METHOD update_sel_row. "select patterns rules
+
     IF c_sel_row-high IS INITIAL AND c_sel_row-opti = 'BT'.
       CLEAR c_sel_row-opti.
     ENDIF.
@@ -4773,9 +4921,11 @@ CLASS lcl_sel_opt IMPLEMENTATION.
     IF c_sel_row-receiver IS BOUND AND c_sel_row-inherited IS INITIAL.
       c_sel_row-inherited = icon_businav_value_chain.
     ENDIF.
+
   ENDMETHOD.
 
   METHOD on_f4.
+
     DATA: return_tab TYPE STANDARD TABLE OF ddshretval,
           lt_objec   TYPE TABLE OF objec,
           ls_objec   TYPE objec,
@@ -4871,14 +5021,15 @@ CLASS lcl_sel_opt IMPLEMENTATION.
     ENDIF.
     er_event_data->m_event_handled = abap_true.
     raise_selection_done( ).
+
   ENDMETHOD.
 
   METHOD on_grid_button_click.
-    DATA:
-      l_tabfield TYPE rstabfield,
-      ls_opt     TYPE rsoptions VALUE 'XXXXXXXXXX',
-      lv_sign    TYPE raldb_sign,
-      lv_option  TYPE raldb_opti.
+
+    DATA: l_tabfield TYPE rstabfield,
+          ls_opt     TYPE rsoptions VALUE 'XXXXXXXXXX',
+          lv_sign    TYPE raldb_sign,
+          lv_option  TYPE raldb_opti.
 
     READ TABLE mt_sel_tab INDEX es_row_no-row_id ASSIGNING FIELD-SYMBOL(<tab>).
     CASE es_col_id.
@@ -4928,9 +5079,11 @@ CLASS lcl_sel_opt IMPLEMENTATION.
     ENDCASE.
     update_sel_row( CHANGING c_sel_row = <tab> ).
     RAISE EVENT selection_done.
+
   ENDMETHOD.
 
   METHOD on_data_changed.
+
     DATA: l_start TYPE i,
           lv_time TYPE sy-uzeit.
 
@@ -5012,14 +5165,18 @@ CLASS lcl_sel_opt IMPLEMENTATION.
     update_sel_row( CHANGING c_sel_row = <tab> ).
     lcl_alv_common=>refresh( EXPORTING i_obj = mo_sel_alv i_layout = ms_layout ).
     raise_selection_done( ).
+
   ENDMETHOD.
 
   METHOD on_data_changed_finished.
+
     CHECK e_modified IS NOT INITIAL.
     RAISE EVENT selection_done.
+
   ENDMETHOD.
 
   METHOD handle_context_menu_request.
+
     DATA: ls_func TYPE ui_func,
           lt_func TYPE ui_functions.
 
@@ -5052,9 +5209,11 @@ CLASS lcl_sel_opt IMPLEMENTATION.
           fcode = 'DELR'
           text  = 'Delete receiver'.
     ENDIF.
+
   ENDMETHOD.
 
   METHOD handle_user_command.
+
     DATA: lv_sel_width TYPE i.
 
     IF e_ucomm = 'SEL_OFF'. "Hide select-options alv
@@ -5101,11 +5260,15 @@ CLASS lcl_sel_opt IMPLEMENTATION.
 
     lcl_alv_common=>refresh( mo_viewer->mo_alv ).
     RAISE EVENT selection_done.
+
   ENDMETHOD.                           "handle_user_command
+
 ENDCLASS.
 
 CLASS lcl_appl IMPLEMENTATION.
+
   METHOD init_icons_table.
+
     m_option_icons = VALUE #(
      ( sign = space option = space  icon_name = icon_led_inactive )
      ( sign = 'I'   option = 'EQ'   icon_name = icon_equal_green )
@@ -5128,6 +5291,7 @@ CLASS lcl_appl IMPLEMENTATION.
      ( sign = 'E'   option = 'NP'   icon_name = icon_pattern_exclude_red )
      ( sign = 'E'   option = 'BT'   icon_name = icon_interval_include_red )
      ( sign = 'E'   option = 'NB'   icon_name = icon_interval_exclude_red ) ).
+
   ENDMETHOD.
 
   METHOD open_int_table.
@@ -5143,11 +5307,13 @@ CLASS lcl_appl IMPLEMENTATION.
     <obj>-alv_viewer->mo_sel->raise_selection_done( ).
 
   ENDMETHOD.
+
 ENDCLASS.
 
 CLASS lcl_rtti_tree IMPLEMENTATION.
 
   METHOD constructor.
+
     super->constructor( ).
     mo_debugger = i_debugger.
 
@@ -5181,6 +5347,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
     m_globals = '01'.
     tree->display( ).
+
   ENDMETHOD.
 
   METHOD add_buttons.
@@ -5301,9 +5468,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                                     iv_parent_name = iv_parent_name ).
 
     ENDCASE.
+
   ENDMETHOD.
 
   METHOD traverse_struct.
+
     DATA: lt_component    TYPE abap_component_tab,
           lo_struct_descr TYPE REF TO cl_abap_structdescr,
           ls_tree         TYPE ts_table,
@@ -5395,7 +5564,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         ENDIF.
       ENDIF.
 
-
       e_root_key = tree->get_nodes( )->add_node(
              related_node   = l_key
              relationship   = l_rel
@@ -5427,16 +5595,17 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         l_node->delete( ).
       ENDIF.
     ENDIF.
+
   ENDMETHOD.
 
   METHOD traverse_elem.
+
     DATA: lo_elem_descr TYPE REF TO cl_abap_elemdescr,
           ls_tree       TYPE ts_table,
           lv_text       TYPE lvc_value,
           lv_icon       TYPE salv_de_tree_image,
           l_key         TYPE salv_de_node_key,
           l_rel         TYPE salv_de_node_relation.
-
 
     lo_elem_descr ?= io_type_descr.
     ls_tree-ref = is_var-ref.
@@ -5589,6 +5758,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD traverse_obj.
+
     DATA: ls_tree TYPE ts_table,
           lv_text TYPE lvc_value,
           lv_icon TYPE salv_de_tree_image,
@@ -5660,6 +5830,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD traverse_table.
+
     DATA: lo_table_descr TYPE REF TO cl_abap_tabledescr,
           ls_tree        TYPE ts_table,
           lv_text        TYPE lvc_value,
@@ -5704,6 +5875,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         EXIT.
       ENDIF.
     ENDLOOP.
+
     IF l_node IS NOT INITIAL.
       TRY.
           FIELD-SYMBOLS: <old_value> TYPE any.
@@ -5815,6 +5987,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD add_obj_nodes.
+
     DATA lt_match TYPE match_result_tab.
     FIND ALL OCCURRENCES OF  '-' IN is_var-name RESULTS lt_match. "Only first level of instance should be here
     IF lines( lt_match ) > 1.
@@ -5860,11 +6033,14 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD delete_node.
+
     DATA(lo_nodes) = tree->get_nodes( ).
     DATA(l_node) =  lo_nodes->get_node( iv_key ).
     IF l_node IS NOT INITIAL.
       l_node->delete( ).
+
     ENDIF.
+
   ENDMETHOD.
 
   METHOD display.
@@ -5888,6 +6064,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDIF.
     ENDLOOP.
     tree->display( ).
+
   ENDMETHOD.
 
   METHOD hndl_user_command.
@@ -5939,9 +6116,11 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDIF.
       mo_debugger->show_step( ).
     ENDIF.
+
   ENDMETHOD.
 
   METHOD hndl_double_click.
+
     DATA(lo_nodes) = tree->get_nodes( ).
     DATA(l_node) =  lo_nodes->get_node( node_key ).
     DATA r_row TYPE REF TO data.
@@ -6023,14 +6202,18 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 ENDCLASS.
 
 CLASS lcl_dragdrop IMPLEMENTATION.
+
   METHOD drag.
+
     DATA(dataobj) = NEW lcl_dd_data( ).
     dataobj->m_row = e_row-index.
     dataobj->m_column = e_column.
     e_dragdropobj->object = dataobj.
+
   ENDMETHOD.
 
   METHOD drop."It should be refactored someday...
+
     DATA: ls_row          TYPE lcl_types=>t_sel_row,
           lv_set_receiver.
 
@@ -6160,9 +6343,10 @@ CLASS lcl_dragdrop IMPLEMENTATION.
 
     lo_alv ?= e_dragdropobj->droptargetctrl.
     lo_to->raise_selection_done( ).
-  ENDMETHOD.
-ENDCLASS.
 
+  ENDMETHOD.
+
+ENDCLASS.
 
 CLASS lcl_source_parser IMPLEMENTATION.
 
@@ -6552,9 +6736,9 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
         READ TABLE <s_token>-tt_calls WITH KEY event = 'FORM' INTO ls_call.
         IF sy-subrc = 0.
-          data(lv_index) = 0.
-          LOOP AT ls_source-t_params INTO ls_param WHERE event = ls_call-event and name = ls_call-name .
-            Add 1 to lv_index.
+          DATA(lv_index) = 0.
+          LOOP AT ls_source-t_params INTO ls_param WHERE event = ls_call-event AND name = ls_call-name .
+            ADD 1 TO lv_index.
             READ TABLE <s_token>-tt_calls INDEX lv_index ASSIGNING FIELD-SYMBOL(<call>).
             IF sy-subrc = 0.
               <call>-inner = ls_param-param.
@@ -6595,6 +6779,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD steps_flow.
+
     TYPES: BEGIN OF lty_entity,
              name TYPE string,
            END OF lty_entity.
@@ -6645,7 +6830,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
     TYPES: BEGIN OF ts_line,
              line    TYPE i,
              event   TYPE string,
-             stack   type i,
+             stack   TYPE i,
              code    TYPE string,
              arrow   TYPE string,
              subname TYPE string,
@@ -6727,8 +6912,15 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDIF.
 
       IF lv_prev_stack > ls_line-stack AND lv_opened > 0 AND lv_sub IS INITIAL.
-        lv_mm_string = |{ lv_mm_string } end\n|.
-        SUBTRACT 1 FROM lv_opened.
+        DATA(lv_times) = lv_prev_stack - ls_line-stack.
+        DO lv_times TIMES.
+          lv_mm_string = |{ lv_mm_string } end\n|.
+          SUBTRACT 1 FROM lv_opened.
+          IF lv_opened = 0.
+            EXIT.
+          ENDIF.
+        ENDDO.
+
       ENDIF.
 
       IF lv_ind <> 1.
@@ -6764,6 +6956,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
   METHOD open_mermaid.
 
   ENDMETHOD.
+
 ENDCLASS.
 *</SCRIPT:SCRIPT_CLASS>
 *</SCRIPT:PERSISTENT>
