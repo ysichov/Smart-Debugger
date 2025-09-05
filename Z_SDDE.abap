@@ -4560,7 +4560,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
           lv_sel_width  TYPE i.
 
     FIELD-SYMBOLS: <f_tab>  TYPE STANDARD  TABLE.
-
     ASSIGN mr_table->* TO <f_tab>.
     mo_alv->get_frontend_fieldcatalog( IMPORTING et_fieldcatalog = it_fields[] ).
     IF e_ucomm = 'SEL_ON' AND m_visible IS INITIAL.
@@ -4635,16 +4634,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
 
     CALL METHOD mo_alv->set_frontend_fieldcatalog EXPORTING it_fieldcatalog = it_fields[].
 
-    CALL METHOD mo_alv->set_table_for_first_display
-      EXPORTING
-        i_save          = abap_true
-        i_default       = abap_true
-        "is_layout       = ms_layout
-      CHANGING
-        it_outtab       = mr_table->*
-        it_fieldcatalog = it_fields[].
     lcl_alv_common=>refresh( mo_alv ).
-    "mo_alv->refresh_table_display( ).
     IF mo_sel IS BOUND.
       IF  e_ucomm = 'HIDE' OR e_ucomm = 'SHOW' OR e_ucomm = 'UPDATE' .
         mo_sel->update_sel_tab( ).
@@ -5258,6 +5248,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
     DATA: lv_sel_width TYPE i.
 
     IF e_ucomm = 'SEL_OFF'. "Hide select-options alv
+
       mo_viewer->m_visible = ''.
 
       lv_sel_width = 0.
@@ -7003,7 +6994,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
       lv_mm_string = |{ lv_mm_string } end\n|.
       SUBTRACT 1 FROM lv_opened.
     ENDDO.
-    
+
     open_mermaid( lv_mm_string ).
 
   ENDMETHOD.
