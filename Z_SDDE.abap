@@ -1168,6 +1168,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
           mo_salv_hist           TYPE REF TO cl_salv_table,
           mt_breaks              TYPE tpda_bp_persistent_it,
           mt_watch               TYPE tt_watch,
+          mt_coverage            TYPE tt_watch,
           m_hist_depth           TYPE i,
           m_start_stack          TYPE i,
           mt_source              TYPE STANDARD  TABLE OF ts_progs,
@@ -1178,7 +1179,8 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
     METHODS: constructor IMPORTING i_debugger TYPE REF TO lcl_debugger_script i_additional_name TYPE string OPTIONAL,
       add_toolbar_buttons,
       hnd_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode,
-      set_program IMPORTING iv_program TYPE program.
+      set_program IMPORTING iv_program TYPE program,
+      show_coverage.
 
     METHODS set_program_line IMPORTING iv_line LIKE sy-index.
     METHODS create_code_viewer.
@@ -1520,43 +1522,60 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           READ TABLE ls_Source-tt_tabs WITH KEY name = i_name INTO DATA(ls_var).
           lo_table_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
 
-          DATA(lt_comp_tpda) = lo_table_descr->components( ).
-
-          DATA: lt_comp TYPE abap_component_tab,
-                ls_comp TYPE abap_componentdescr.
-
-          LOOP AT lt_comp_tpda INTO DATA(ls_comp_tpda).
-            REPLACE ALL OCCURRENCES OF '\TYPE=' IN ls_comp_tpda-abstypename WITH ''.
-            DATA(lo_descr) = cl_abap_typedescr=>describe_by_name( ls_comp_tpda-abstypename ).
-            IF lo_descr IS INSTANCE OF cl_abap_elemdescr.
-              DATA(lo_elem) = CAST cl_abap_elemdescr( lo_descr ).
-              CLEAR ls_comp.
-              ls_comp-name = ls_comp_tpda-compname.
-              ls_comp-type = lo_elem.
-              APPEND ls_comp TO lt_comp.
-            ENDIF.
-          ENDLOOP.
-
-          "--- создаём структуру на основе component_tab
-          DATA(lo_struct) = cl_abap_structdescr=>create( lt_comp ).
-
-          "--- создаём таблицу этой структуры
-          DATA(lo_table)  = cl_abap_tabledescr=>create( lo_struct ).
-
-          "--- создаём реальный объект таблицы
-          DATA lr_table TYPE REF TO data.
-          CREATE DATA lr_table TYPE HANDLE lo_table.
-
-          ASSIGN lr_table->* TO FIELD-SYMBOL(<lt_dyn>).
+*          DATA(lt_comp_tpda) = lo_table_descr->components( ).
+*
+*          DATA: lt_comp TYPE abap_component_tab,
+*                ls_comp TYPE abap_componentdescr.
+*
+*          LOOP AT lt_comp_tpda INTO DATA(ls_comp_tpda).
+*            REPLACE ALL OCCURRENCES OF '\TYPE-POOL=ABAP\TYPE=' IN ls_comp_tpda-abstypename WITH ''.
+*            REPLACE ALL OCCURRENCES OF '\TYPE=' IN ls_comp_tpda-abstypename WITH ''.
+*            REPLACE ALL OCCURRENCES OF '\TYPE-POOL=' IN ls_comp_tpda-abstypename WITH ''.
+*
+*            IF ls_comp_tpda-abstypename+0(3) = '%_T' OR
+*              ls_comp_tpda-abstypename+0(11) = '\INTERFACE=' OR
+*              ls_comp_tpda-abstypename+0(7) = '\CLASS='.
+*              DATA(lv_old_generation) = abap_true.
+*              EXIT.
+*            ENDIF.
+*
+*            DATA(lo_descr) = cl_abap_typedescr=>describe_by_name( ls_comp_tpda-abstypename ).
+*            IF lo_descr IS INSTANCE OF cl_abap_elemdescr.
+*              DATA(lo_elem) = CAST cl_abap_elemdescr( lo_descr ).
+*              CLEAR ls_comp.
+*              ls_comp-name = ls_comp_tpda-compname.
+*              ls_comp-type = lo_elem.
+*              APPEND ls_comp TO lt_comp.
+*            ENDIF.
+*          ENDLOOP.
+*
+*          lv_old_generation = abap_true.
+*          IF lv_old_generation IS INITIAL.
+*            "--- создаём структуру на основе component_tab
+*            DATA(lo_struct) = cl_abap_structdescr=>create( lt_comp ).
+*
+*            "--- создаём таблицу этой структуры
+*            DATA(lo_table)  = cl_abap_tabledescr=>create( lo_struct ).
+*
+*            "--- создаём реальный объект таблицы
+*            DATA lr_table TYPE REF TO data.
+*            CREATE DATA lr_table TYPE HANDLE lo_table.
+*
+*            ASSIGN lr_table->* TO FIELD-SYMBOL(<lt_dyn>).
+*          ENDIF.
 
           table_clone = lo_table_descr->elem_clone( ).
-          ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
+          "ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
 
-          MOVE-CORRESPONDING <f> TO <lt_dyn>.
+*          IF lv_old_generation IS INITIAL.
+*            MOVE-CORRESPONDING <f> TO <lt_dyn>.
+*          ELSE.
+          ASSIGN table_clone->* TO FIELD-SYMBOL(<lt_dyn>).
+*          ENDIF.
 
           "check header area
           DATA td       TYPE sydes_desc.
-          DESCRIBE FIELD <f> INTO td.
+          DESCRIBE FIELD <lt_dyn> INTO td.
 
           READ TABLE td-names INTO DATA(l_names) INDEX 1.
           IF sy-subrc = 0.
@@ -3461,6 +3480,8 @@ CLASS lcl_window IMPLEMENTATION.
      ( butn_type = 3  )
      ( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = 'MerMaid Flow diagram' text = 'Diagram' )
      ( function = 'SMART' icon = CONV #( icon_wizard ) quickinfo = 'Smart Search ' text = 'Show the Origin' )
+     ( function = 'COVERAGE' icon = CONV #( icon_wizard ) quickinfo = 'Coverage ' text = 'Coverage' )
+     ( butn_type = 3  )
      ( function = 'STEPS' icon = CONV #( icon_next_step ) quickinfo = 'Steps table' text = 'Steps' )
      ( function = 'HISTORY' icon = CONV #( icon_history ) quickinfo = 'History table' text = 'History' )
      ( butn_type = 3  )
@@ -3513,6 +3534,13 @@ CLASS lcl_window IMPLEMENTATION.
     LOOP AT mt_watch INTO DATA(ls_watch).
       APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
       <line> = ls_watch-line.
+    ENDLOOP.
+
+    "coverage
+    CLEAR lt_lines.
+    LOOP AT mt_coverage INTO DATA(ls_coverage).
+      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
+      <line> = ls_coverage-line.
     ENDLOOP.
 
     mo_code_viewer->set_marker( EXPORTING marker_number = 8 marker_lines = lt_lines ).
@@ -3584,6 +3612,19 @@ CLASS lcl_window IMPLEMENTATION.
     ELSE.
       mo_salv_stack->refresh( ).
     ENDIF.
+
+  ENDMETHOD.
+
+  METHOD show_coverage.
+
+    CLEAR: mt_watch, mt_coverage.
+    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step) WHERE include = mo_debugger->mo_window->m_prg-include .
+      APPEND INITIAL LINE TO mt_coverage ASSIGNING FIELD-SYMBOL(<fs_coverage>).
+      <fs_coverage>-line = ls_Step-line.
+    ENDLOOP.
+
+    SORT mt_coverage.
+    DELETE ADJACENT DUPLICATES FROM mt_coverage.
 
   ENDMETHOD.
 
@@ -3663,8 +3704,9 @@ CLASS lcl_window IMPLEMENTATION.
         lo_mermaid = NEW lcl_mermaid( io_debugger = mo_debugger iv_type =  'SMART' ).
         mo_debugger->show_step( ).
 
-      WHEN 'SANKEY'.
-        lo_mermaid = NEW lcl_mermaid( io_debugger = mo_debugger iv_type =  'SANKEY' ).
+      WHEN 'COVERAGE'.
+        show_coverage( ).
+        mo_debugger->show_step( ).
 
       WHEN 'CODE'.
         m_zcode = m_zcode BIT-XOR c_mask.
@@ -4540,12 +4582,15 @@ CLASS lcl_table_viewer IMPLEMENTATION.
           ENDTRY.
         ENDIF.
       WHEN 'STEP'.
-        ASSIGN COMPONENT 'STEP' OF STRUCTURE <tab> TO FIELD-SYMBOL(<step>).
-        mo_window->mo_debugger->run_script_hist( <step> ).
-        READ TABLE   mo_window->mo_debugger->mt_steps INTO DATA(ls_step) WITH KEY step = <step>.
-        mo_window->set_program( CONV #( ls_step-include ) ).
-        mo_window->set_program_line( ls_step-line ).
+        "ASSIGN COMPONENT 'STEP' OF STRUCTURE <tab> TO FIELD-SYMBOL(<step>).
+        "mo_window->mo_debugger->run_script_hist( <step> ).
 
+        MOVE-CORRESPONDING <tab> TO mo_window->m_prg.
+        MOVE-CORRESPONDING <tab> TO mo_window->mo_debugger->ms_stack.
+        mo_window->show_coverage( ).
+        "READ TABLE   mo_window->mo_debugger->mt_steps INTO DATA(ls_step) WITH KEY step = <step>.
+        mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+        mo_window->set_program_line( mo_window->m_prg-line ).
         mo_window->mo_debugger->mo_tree_imp->display( ).
         mo_window->mo_debugger->mo_tree_local->display( ).
         mo_window->mo_debugger->mo_tree_exp->display( ).
@@ -5337,12 +5382,12 @@ CLASS lcl_appl IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD init_lang.
-    SELECT c~spras t~sptxt INTO CORRESPONDING FIELDS OF TABLE mt_lang
-      FROM t002c AS c
-      INNER JOIN t002t AS t
-      ON c~spras = t~sprsl
-      WHERE t~spras = sy-langu
-      ORDER BY c~ladatum DESCENDING c~lauzeit DESCENDING.
+*    SELECT c~spras t~sptxt INTO CORRESPONDING FIELDS OF TABLE mt_lang
+*      FROM t002c AS c
+*      INNER JOIN t002t AS t
+*      ON c~spras = t~sprsl
+*      WHERE t~spras = sy-langu
+*      ORDER BY c~ladatum DESCENDING c~lauzeit DESCENDING.
   ENDMETHOD.
 
   METHOD open_int_table.
@@ -6924,6 +6969,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
     ENDLOOP.
 
     "collecting watchpoints
+    CLEAR mo_debugger->mo_window->mt_coverage.
     LOOP AT mo_debugger->mt_vars_hist INTO ls_hist.
       READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_hist-name TRANSPORTING NO FIELDS.
       IF sy-subrc = 0.
@@ -7028,6 +7074,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD open_mermaid.
+
 
   ENDMETHOD.
 
