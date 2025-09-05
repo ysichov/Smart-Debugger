@@ -172,7 +172,7 @@ CLASS lcl_appl DEFINITION.
 
     CLASS-METHODS:
       init_icons_table,
-
+      init_lang,
       open_int_table IMPORTING it_tab    TYPE ANY TABLE OPTIONAL
                                it_ref    TYPE REF TO data OPTIONAL
                                iv_name   TYPE string
@@ -1206,6 +1206,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     CONSTANTS: c_mask TYPE x VALUE '01'.
 
     is_step = abap_on.
+    lcl_appl=>init_lang( ).
     lcl_appl=>init_icons_table( ).
 
     mo_window = NEW lcl_window( me ).
@@ -1426,7 +1427,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     FIELD-SYMBOLS: <f>         TYPE ANY TABLE,
                    <new_table> TYPE ANY TABLE.
-
+    "BREAK-POINT.
     ASSIGN c_obj->* TO <new_table>.
     lo_tabl ?= cl_abap_typedescr=>describe_by_data( <new_table> ).
     lo_struc ?= lo_tabl->get_table_line_type( ).
@@ -1524,9 +1525,42 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDIF.
 
         IF m_quick-typid = 'h'."internal table
+
           lo_table_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
+
+          DATA(lt_comp_tpda) = lo_table_descr->components( ).
+
+          DATA: lt_comp TYPE abap_component_tab,
+                ls_comp TYPE abap_componentdescr.
+
+          LOOP AT lt_comp_tpda INTO DATA(ls_comp_tpda).
+            REPLACE ALL OCCURRENCES OF '\TYPE=' IN ls_comp_tpda-abstypename WITH ''.
+            DATA(lo_descr) = cl_abap_typedescr=>describe_by_name( ls_comp_tpda-abstypename ).
+            IF lo_descr IS INSTANCE OF cl_abap_elemdescr.
+              DATA(lo_elem) = CAST cl_abap_elemdescr( lo_descr ).
+              CLEAR ls_comp.
+              ls_comp-name = ls_comp_tpda-compname.
+              ls_comp-type = lo_elem.
+              APPEND ls_comp TO lt_comp.
+            ENDIF.
+          ENDLOOP.
+
+          "--- создаём структуру на основе component_tab
+          DATA(lo_struct) = cl_abap_structdescr=>create( lt_comp ).
+
+          "--- создаём таблицу этой структуры
+          DATA(lo_table)  = cl_abap_tabledescr=>create( lo_struct ).
+
+          "--- создаём реальный объект таблицы
+          DATA lr_table TYPE REF TO data.
+          CREATE DATA lr_table TYPE HANDLE lo_table.
+
+          ASSIGN lr_table->* TO FIELD-SYMBOL(<lt_dyn>).
+
           table_clone = lo_table_descr->elem_clone( ).
           ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
+
+          MOVE-CORRESPONDING <f> TO <lt_dyn>.
 
           "check header area
           DATA td       TYPE sydes_desc.
@@ -1541,7 +1575,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                   RECEIVING
                     p_symb_quick = DATA(l_quick).
 
-                lo_tabl ?= cl_abap_typedescr=>describe_by_data( <f> ).
+                lo_tabl ?= cl_abap_typedescr=>describe_by_data( <lt_dyn> ).
+
                 lo_struc ?= lo_tabl->get_table_line_type( ).
                 CREATE DATA r_header TYPE HANDLE lo_struc.
                 ASSIGN r_header->* TO FIELD-SYMBOL(<header>).
@@ -1560,7 +1595,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
               CATCH cx_tpda_varname .
             ENDTRY.
           ENDIF.
-          GET REFERENCE OF <f> INTO lr_struc.
+          GET REFERENCE OF <lt_dyn> INTO lr_struc.
 
           traverse( io_type_descr  = cl_abap_typedescr=>describe_by_data_ref( lr_struc )
                     iv_name        = l_name
@@ -3074,7 +3109,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                        iv_parent_name = iv_parent_name ).
 
       WHEN c_kind-table.
-
         traverse_elem( iv_name        = iv_name
                        iv_fullname    = iv_fullname
                        iv_type        = iv_type
@@ -3487,7 +3521,8 @@ CLASS lcl_window IMPLEMENTATION.
       APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
       <line> = ls_watch-line.
     ENDLOOP.
-    mo_code_viewer->set_marker( EXPORTING marker_number = 2 marker_lines = lt_lines ).
+
+    mo_code_viewer->set_marker( EXPORTING marker_number = 8 marker_lines = lt_lines ).
     mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
 
   ENDMETHOD.
@@ -4396,6 +4431,15 @@ CLASS lcl_table_viewer IMPLEMENTATION.
        ( butn_type = 3 ) ).
     ENDIF.
 
+    APPEND VALUE #( function = 'TECH' icon = icon_wd_caption quickinfo = 'Tech names'  butn_type = 0 ) TO lt_toolbar.
+
+    LOOP AT lcl_appl=>mt_lang INTO DATA(lang).
+      IF sy-tabix > 10.
+        EXIT.
+      ENDIF.
+      APPEND VALUE #( function = lang-spras icon = icon_foreign_trade quickinfo = lang-sptxt butn_type = 0 text = lang-sptxt ) TO lt_toolbar.
+    ENDLOOP.
+
     lt_toolbar = VALUE ttb_button( BASE lt_toolbar
      ( function = 'SHOW'  icon = icon_list  quickinfo = 'Show empty columns'   butn_type = 0  )
      ( function = 'TBAR' icon = COND #( WHEN m_std_tbar IS INITIAL THEN icon_column_right ELSE icon_column_left )
@@ -4562,6 +4606,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       LOOP AT it_fields ASSIGNING FIELD-SYMBOL(<fields>) WHERE domname NE 'MANDT'.
         <fields>-col_pos = sy-tabix.
         CASE e_ucomm.
+
           WHEN 'SHOW'.
             IF m_show_empty = abap_false.
               <fields>-no_out = ' '.
@@ -4574,8 +4619,10 @@ CLASS lcl_table_viewer IMPLEMENTATION.
                 <fields>-no_out = abap_true.
               ENDIF.
             ENDIF.
+
           WHEN 'TECH'. "technical field name
             <fields>-scrtext_l = <fields>-scrtext_m = <fields>-scrtext_s =  <fields>-reptext = <fields>-fieldname.
+
           WHEN OTHERS. "header names translation
             IF line_exists( lcl_appl=>mt_lang[ spras = e_ucomm ] ).
               translate_field( EXPORTING i_lang = CONV #( e_ucomm )  CHANGING c_fld = <fields> ).
@@ -4604,12 +4651,23 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     ENDIF.
 
     CALL METHOD mo_alv->set_frontend_fieldcatalog EXPORTING it_fieldcatalog = it_fields[].
+
+    CALL METHOD mo_alv->set_table_for_first_display
+      EXPORTING
+        i_save          = abap_true
+        i_default       = abap_true
+        "is_layout       = ms_layout
+      CHANGING
+        it_outtab       = mr_table->*
+        it_fieldcatalog = it_fields[].
     lcl_alv_common=>refresh( mo_alv ).
+    "mo_alv->refresh_table_display( ).
     IF mo_sel IS BOUND.
       IF  e_ucomm = 'HIDE' OR e_ucomm = 'SHOW' OR e_ucomm = 'UPDATE' .
         mo_sel->update_sel_tab( ).
       ENDIF.
       lcl_alv_common=>refresh( mo_sel->mo_sel_alv ).
+      mo_sel->mo_sel_alv->refresh_table_display(  ).
     ENDIF.
 
   ENDMETHOD.                           "handle_user_command
@@ -5292,6 +5350,15 @@ CLASS lcl_appl IMPLEMENTATION.
      ( sign = 'E'   option = 'BT'   icon_name = icon_interval_include_red )
      ( sign = 'E'   option = 'NB'   icon_name = icon_interval_exclude_red ) ).
 
+  ENDMETHOD.
+
+  METHOD init_lang.
+    SELECT c~spras t~sptxt INTO CORRESPONDING FIELDS OF TABLE mt_lang
+      FROM t002c AS c
+      INNER JOIN t002t AS t
+      ON c~spras = t~sprsl
+      WHERE t~spras = sy-langu
+      ORDER BY c~ladatum DESCENDING c~lauzeit DESCENDING.
   ENDMETHOD.
 
   METHOD open_int_table.
@@ -6145,7 +6212,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDIF.
 
       CASE <kind>.
-        WHEN cl_abap_datadescr=>typekind_table.
+        WHEN cl_abap_datadescr=>typekind_table."BREAK-POINT.
           lcl_appl=>open_int_table( iv_name = <fullname> it_ref = <ref> io_window = mo_debugger->mo_window ).
         WHEN cl_abap_datadescr=>typekind_string.
           NEW lcl_text_viewer( <ref> ).
@@ -6837,7 +6904,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
            END OF ts_line.
 
     DATA: ls_line       TYPE ts_line,
-          lt_lines      TYPE TABLE OF ts_line,
+          lt_lines      TYPE STANDARD TABLE OF ts_line,
           lv_prev_stack TYPE i,
           lv_opened     TYPE i.
 
@@ -6904,6 +6971,10 @@ CLASS lcl_mermaid IMPLEMENTATION.
     "creating mermaid code
     CHECK lt_lines IS NOT INITIAL.
     lv_mm_string = |graph LR\n |.
+
+    IF lt_lines[ lines( lt_lines ) ]-arrow IS NOT INITIAL.
+      CLEAR lt_lines[ lines( lt_lines ) ]-arrow .
+    ENDIF.
     LOOP AT lt_lines INTO ls_line.
       lv_ind = sy-tabix.
 
@@ -6945,16 +7016,17 @@ CLASS lcl_mermaid IMPLEMENTATION.
       lv_prev_stack = ls_line-stack.
     ENDLOOP.
 
-    IF lv_opened > 0.
+    DO lv_opened TIMES.
       lv_mm_string = |{ lv_mm_string } end\n|.
-    ENDIF.
-
+      SUBTRACT 1 FROM lv_opened.
+    ENDDO.
+    
+    BREAK-POINT.
     open_mermaid( lv_mm_string ).
 
   ENDMETHOD.
 
   METHOD open_mermaid.
-
   ENDMETHOD.
 
 ENDCLASS.
