@@ -551,7 +551,6 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
 
 ENDCLASS.
 
-
 CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_script.
 
   PUBLIC SECTION.
@@ -1111,6 +1110,14 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
            END OF ts_params,
            tt_params TYPE STANDARD TABLE OF ts_params WITH EMPTY KEY,
 
+           BEGIN OF ts_int_tabs,
+             eventtype TYPE string,
+             eventname TYPE string,
+             name      TYPE string,
+             type      TYPE string,
+           END OF ts_int_tabs,
+           tt_tabs TYPE STANDARD TABLE OF ts_int_tabs WITH EMPTY KEY,
+
            BEGIN OF ts_progs,
              include      TYPE program,
              source       TYPE REF TO cl_ci_source_include,
@@ -1119,6 +1126,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              t_calculated TYPE tt_calculated,
              t_composed   TYPE tt_composed,
              t_params     TYPE tt_params,
+             tt_tabs      TYPE tt_tabs,
            END OF ts_progs,
 
            BEGIN OF ts_locals,
@@ -1427,7 +1435,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     FIELD-SYMBOLS: <f>         TYPE ANY TABLE,
                    <new_table> TYPE ANY TABLE.
-    "BREAK-POINT.
+
     ASSIGN c_obj->* TO <new_table>.
     lo_tabl ?= cl_abap_typedescr=>describe_by_data( <new_table> ).
     lo_struc ?= lo_tabl->get_table_line_type( ).
@@ -1525,7 +1533,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDIF.
 
         IF m_quick-typid = 'h'."internal table
-
+          READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO DATA(ls_source).
+          READ TABLE ls_Source-tt_tabs WITH KEY name = i_name INTO DATA(ls_var).
           lo_table_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
 
           DATA(lt_comp_tpda) = lo_table_descr->components( ).
@@ -2998,7 +3007,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
       lo_elem = cl_abap_typedescr=>describe_by_data_ref( <state>-ref ).
-      <state>-type = lo_elem->absolute_name.
+      IF <state>-type IS INITIAL.
+        <state>-type = lo_elem->absolute_name.
+      ENDIF.
 
       IF lv_add = abap_on.
 
@@ -3033,7 +3044,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         IF <state>-instance <> ls_hist-instance.
           <state>-del = abap_true.
           INSERT <state> INTO mt_vars_hist INDEX 1.
-          "mo_tree_local->del_variable( EXPORTING iv_full_name = conv #( <state>-name ) ).
         ENDIF.
       ELSE.
         <state>-first = 'X'.
@@ -5908,7 +5918,14 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     ls_tree-fullname = |{ is_var-short } ({ lines })|.
     ls_tree-kind = lo_table_descr->type_kind.
     IF is_var-instance NE '{A:initial}'.
-      ls_tree-typename = replace( val = lo_table_descr->absolute_name sub = '\TYPE=' with = '' ).
+
+      READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = mo_debugger->ms_stack-include INTO DATA(ls_source).
+      READ TABLE ls_source-tt_tabs WITH KEY name = is_var-short INTO DATA(ls_tab).
+      IF sy-subrc <> 0.
+        ls_tree-typename = replace( val = lo_table_descr->absolute_name sub = '\TYPE=' with = '' ).
+      ELSE.
+        ls_tree-typename = ls_tab-type.
+      ENDIF.
     ENDIF.
     lv_icon = icon_view_table.
 
@@ -6424,6 +6441,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
           lt_calculated TYPE lcl_window=>tt_calculated,
           lt_composed   TYPE lcl_window=>tt_composed,
           ls_call       TYPE lcl_window=>ts_calls,
+          ls_tabs       TYPE lcl_window=>ts_int_tabs,
+          lt_tabs       TYPE lcl_window=>tt_tabs,
           lv_eventtype  TYPE string,
           lv_eventname  TYPE string,
           ls_param      TYPE lcl_window=>ts_params,
@@ -6483,17 +6502,18 @@ CLASS lcl_source_parser IMPLEMENTATION.
         ENDIF.
 
         IF lt_kw = 'FORM' OR lt_kw = 'METHOD' OR lt_kw = 'METHODS' OR lt_kw = 'CLASS-METHODS'.
-          lv_eventtype = ls_param-event =  lt_kw.
+          ls_tabs-eventtype = lv_eventtype = ls_param-event =  lt_kw.
+
           CLEAR lv_eventname.
           IF lt_kw = 'FORM'.
             CLEAR: lv_class, ls_param-class.
           ELSE.
-            lv_eventtype = ls_param-event =  'METHOD'.
+            ls_tabs-eventtype = lv_eventtype = ls_param-event =  'METHOD'.
           ENDIF.
         ENDIF.
 
         IF lt_kw = 'ENDFORM' OR lt_kw = 'ENDMETHOD'.
-          CLEAR: lv_eventtype, lv_eventname.
+          CLEAR: lv_eventtype, lv_eventname, ls_tabs.
         ENDIF.
 
         CLEAR lv_prev.
@@ -6508,6 +6528,11 @@ CLASS lcl_source_parser IMPLEMENTATION.
             CONTINUE.
           ENDIF.
 
+          IF sy-index = 2 AND ( lt_kw = 'DATA' OR lt_kw = 'PARAMETERS' ).
+            WRITE: 'var =', token.
+            ls_tabs-name = token.
+          ENDIF.
+
           IF sy-index = 2 AND lt_kw = 'PERFORM'.
             ls_call-name = token.
             ls_call-event = 'FORM'.
@@ -6518,7 +6543,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
 
           IF sy-index = 2 AND lv_eventtype IS NOT INITIAL AND lv_eventname IS INITIAL.
-            lv_eventname = ls_param-name =  token.
+            ls_tabs-eventname = lv_eventname = ls_param-name =  token.
           ENDIF.
 
           IF token = ''.
@@ -6610,6 +6635,12 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
 
           CASE lt_kw.
+            WHEN 'DATA' OR 'PARAMETERS'.
+              IF (  lv_prev = 'OF' ) AND lv_temp <> 'TABLE' AND lv_temp <> 'OF'.
+                ls_tabs-type = lv_temp.
+                APPEND ls_tabs TO lt_tabs.
+              ENDIF.
+
             WHEN 'COMPUTE'.
               IF lv_temp CA '=' AND lv_new IS INITIAL..
                 lv_change = lv_prev.
@@ -6637,8 +6668,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
                     ls_call-outer = lv_temp.
                     APPEND ls_call TO ls_token-tt_calls.
                     lv_change = lv_temp.
-                    "WRITE : 'using', lv_temp.
-                    "WRITE : 'value', lv_temp.
                   ENDIF.
                 ENDIF.
               ENDIF.
@@ -6686,7 +6715,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
               ELSE.
                 IF NOT lv_temp  CO '0123456789. ' AND lv_temp <> '=' AND ( lv_import = abap_true OR lv_export = abap_true ).
                   ls_call-inner = lv_temp.
-                  "WRITE : 'inner', lv_temp.
                 ENDIF.
               ENDIF.
 
@@ -6721,7 +6749,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
             WHEN 'SELECT'.
               IF  ( lv_prev =  'INTO' OR lv_prev =  '(' ) AND ( lv_temp <> 'TABLE' AND lv_temp <> '('  AND lv_temp <> ')' AND  lv_temp <> ',' ).
                 lv_change = lv_temp.
-
               ENDIF.
 
             WHEN OTHERS.
@@ -6809,6 +6836,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
       ls_source-t_keywords = lt_tokens.
       ls_source-t_calculated = lt_calculated.
       ls_source-t_composed = lt_composed.
+      ls_source-tt_tabs = lt_tabs.
       APPEND ls_source TO io_debugger->mo_window->mt_source.
     ENDIF.
 
@@ -7020,5 +7048,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
   ENDMETHOD.
 
 ENDCLASS.
+
 *</SCRIPT:SCRIPT_CLASS>
 *</SCRIPT:PERSISTENT>
