@@ -434,8 +434,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                   iv_cl_leaf     TYPE int4
                   iv_parent_name TYPE string
                   ir_up          TYPE any OPTIONAL
-                  i_instance     TYPE string OPTIONAL
-                  iv_tabletype   TYPE string OPTIONAL,
+                  i_instance     TYPE string OPTIONAL,
 
       f5 RETURNING VALUE(rv_stop) TYPE xfeld,
       f6 RETURNING VALUE(rv_stop) TYPE xfeld,
@@ -1419,7 +1418,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     FIELD-SYMBOLS: <f>         TYPE ANY TABLE,
                    <new_table> TYPE ANY TABLE.
- 
+
     ASSIGN c_obj->* TO <new_table>.
     lo_tabl ?= cl_abap_typedescr=>describe_by_data( <new_table> ).
     lo_struc ?= lo_tabl->get_table_line_type( ).
@@ -2942,10 +2941,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       <state>-step = m_hist_step.
     ENDIF.
     <state>-instance = i_instance.
-
-    IF iv_tabletype IS NOT INITIAL.
-      <state>-type = iv_tabletype.
-    ENDIF.
 
     IF ir_up IS SUPPLIED.
       <state>-ref = ir_up.
