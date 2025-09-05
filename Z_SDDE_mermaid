@@ -3504,7 +3504,8 @@ CLASS lcl_window IMPLEMENTATION.
       APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
       <line> = ls_watch-line.
     ENDLOOP.
-    mo_code_viewer->set_marker( EXPORTING marker_number = 2 marker_lines = lt_lines ).
+
+    mo_code_viewer->set_marker( EXPORTING marker_number = 8 marker_lines = lt_lines ).
     mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
 
   ENDMETHOD.
@@ -4630,6 +4631,8 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       m_lang = e_ucomm.
       set_header( ).
       mo_sel->set_value( i_field = 'SPRSL' i_low = m_lang ).
+      ADD 1 TO mo_sel_width.
+      mo_splitter->set_column_width( EXPORTING id = 1 width = mo_sel_width ).
     ENDIF.
 
     CALL METHOD mo_alv->set_frontend_fieldcatalog EXPORTING it_fieldcatalog = it_fields[].
@@ -6886,7 +6889,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
            END OF ts_line.
 
     DATA: ls_line       TYPE ts_line,
-          lt_lines      TYPE TABLE OF ts_line,
+          lt_lines      TYPE STANDARD TABLE OF ts_line,
           lv_prev_stack TYPE i,
           lv_opened     TYPE i.
 
@@ -6953,6 +6956,10 @@ CLASS lcl_mermaid IMPLEMENTATION.
     "creating mermaid code
     CHECK lt_lines IS NOT INITIAL.
     lv_mm_string = |graph LR\n |.
+
+    IF lt_lines[ lines( lt_lines ) ]-arrow IS NOT INITIAL.
+      CLEAR lt_lines[ lines( lt_lines ) ]-arrow .
+    ENDIF.
     LOOP AT lt_lines INTO ls_line.
       lv_ind = sy-tabix.
 
@@ -6994,10 +7001,12 @@ CLASS lcl_mermaid IMPLEMENTATION.
       lv_prev_stack = ls_line-stack.
     ENDLOOP.
 
-    IF lv_opened > 0.
+    DO lv_opened TIMES.
       lv_mm_string = |{ lv_mm_string } end\n|.
-    ENDIF.
-
+      SUBTRACT 1 FROM lv_opened.
+    ENDDO.
+    
+    BREAK-POINT.
     open_mermaid( lv_mm_string ).
 
   ENDMETHOD.
