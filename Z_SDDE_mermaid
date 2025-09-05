@@ -4631,8 +4631,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       m_lang = e_ucomm.
       set_header( ).
       mo_sel->set_value( i_field = 'SPRSL' i_low = m_lang ).
-      ADD 1 TO mo_sel_width.
-      mo_splitter->set_column_width( EXPORTING id = 1 width = mo_sel_width ).
     ENDIF.
 
     CALL METHOD mo_alv->set_frontend_fieldcatalog EXPORTING it_fieldcatalog = it_fields[].
