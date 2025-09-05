@@ -7004,7 +7004,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
       SUBTRACT 1 FROM lv_opened.
     ENDDO.
     
-    BREAK-POINT.
     open_mermaid( lv_mm_string ).
 
   ENDMETHOD.
