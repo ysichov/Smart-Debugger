@@ -86,3 +86,7 @@ After double-click on any variable(1) it works as watchpoint and collects not on
 
 <img width="1676" height="904" alt="image" src="https://github.com/user-attachments/assets/e19e609a-dfe2-402b-beaf-4b83e86d9eb7" />
 
+Button "Coverage" - will show code coverage on all stacks level
+
+<img width="1752" height="894" alt="image" src="https://github.com/user-attachments/assets/2490c4f5-f24e-47e5-adcd-ea5558b62372" />
+
