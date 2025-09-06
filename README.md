@@ -64,12 +64,20 @@ So for direction 'Forward' we have the same 4 debug button as in classic debugge
  <img width="906" height="438" alt="image" src="https://github.com/user-attachments/assets/7731bab7-49b2-4133-b3b5-63cca1561d4b" />
 Buttons were refactored.
 
- Button - Alpha - fasj version which analyse ABAP code to reduce checked variables. It is working like switch to Beta - slower but more precise version.
+ Button - Alpha - fast version which analyse ABAP code to reduce checked variables. It is working like switch to Beta - slower but more precise version.
  Button 'History On' we are saving all variables changes - by default
  
  Button 'Depth' have Depth 9 - which means that we analyse 9 stack levels. We can set it from 0 to 9. Zero means that we are writing history only for current stack level. Depth 1 - means that we are saving current level and level of functions/method/forms which run on current level... And so on
 
  Button 'Only Z' means that we are saving history by default only for Z code. We can switch it to 'Z & Standard' state and save changes in Standard code also.
+
+ Button 'Clear  Vars" - clear all selected Watchpoints
+
+Button "Diagram" - will show all calls which were performed along code execution as Mermaid Diagram. This button will be active only when Mermaid is installed
+https://github.com/ysichov/abapMermaid - should be used this fork with scroll enabled
+<img width="1855" height="851" alt="image" src="https://github.com/user-attachments/assets/e2e3b4a7-988f-4e66-8068-65383f63aed4" />
+
+ 
  
 
 Finally **Smart debugger** is becoming really Smart and can save time or money as Time is Money )
