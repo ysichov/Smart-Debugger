@@ -71,22 +71,18 @@ Buttons were refactored.
 
  Button 'Only Z' means that we are saving history by default only for Z code. We can switch it to 'Z & Standard' state and save changes in Standard code also.
 
- Button 'Clear  Vars" - clear all selected Watchpoints
-
-Button "Diagram" - will show all calls which were performed along code execution as Mermaid Diagram. This button will be active only when Mermaid is installed
+ Button "Diagram" - will show all calls which were performed along code execution as Mermaid Diagram. This button will be active only when Mermaid is installed
 https://github.com/ysichov/abapMermaid - should be used this fork with scroll enabled
 <img width="1855" height="851" alt="image" src="https://github.com/user-attachments/assets/e2e3b4a7-988f-4e66-8068-65383f63aed4" />
 
  
- 
-
 Finally **Smart debugger** is becoming really Smart and can save time or money as Time is Money )
 
 After double-click on any variable(1) it works as watchpoint and collects not only selected variables but dependents(4) also (forms/methods/functions call). Button "Show the origin"(2) will paint all steps in the code where variables were changed and paints Mermaid diagram for it. Just Alpha version... And I disappointed with AI. It couldn't give me such results as good algorythm which can interprete ABAP code.
 
 <img width="1676" height="904" alt="image" src="https://github.com/user-attachments/assets/e19e609a-dfe2-402b-beaf-4b83e86d9eb7" />
 
-Button "Coverage" - will show code coverage on all stacks level
+Button "Coverage" - will show code coverage on all stacks levels
 
 <img width="1752" height="894" alt="image" src="https://github.com/user-attachments/assets/2490c4f5-f24e-47e5-adcd-ea5558b62372" />
 
