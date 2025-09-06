@@ -168,11 +168,13 @@ CLASS lcl_appl DEFINITION.
                 mt_lang            TYPE TABLE OF t_lang,
                 mt_obj             TYPE TABLE OF t_obj, "main object table
                 m_ctrl_box_handler TYPE REF TO lcl_box_handler,
-                c_dragdropalv      TYPE REF TO cl_dragdrop.
+                c_dragdropalv      TYPE REF TO cl_dragdrop,
+                is_mermaid_active  TYPE xfeld.
 
     CLASS-METHODS:
       init_icons_table,
       init_lang,
+      check_mermaid,
       open_int_table IMPORTING it_tab    TYPE ANY TABLE OPTIONAL
                                it_ref    TYPE REF TO data OPTIONAL
                                iv_name   TYPE string
@@ -1216,6 +1218,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     CONSTANTS: c_mask TYPE x VALUE '01'.
 
     is_step = abap_on.
+    lcl_appl=>check_mermaid( ).
     lcl_appl=>init_lang( ).
     lcl_appl=>init_icons_table( ).
 
@@ -2658,9 +2661,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-    IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack IS INITIAL.
-      m_target_stack = stack-stacklevel.
-    ENDIF.
+*    IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack IS INITIAL.
+*      m_target_stack = stack-stacklevel.
+*    ENDIF.
 
     IF mo_window->m_debug_button = 'F7' AND m_target_stack IS INITIAL.
       m_target_stack = stack-stacklevel - 1.
@@ -2676,11 +2679,17 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     ENDTRY.
 
     "step out and not save history for standard code if it is swithed off
-    cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
-    IF  mo_window->m_zcode IS NOT INITIAL AND
-      ( mo_window->m_prg-program+0(1) <> 'Z' AND stack-program+0(5) <> 'SAPLZ' ).
-      f7( ).
-      RETURN.
+    IF  mo_window->m_zcode IS NOT INITIAL.
+
+      cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
+      DO.
+        IF   mo_window->m_prg-program+0(1) <> 'Z' AND stack-program+0(5) <> 'SAPLZ' .
+          f7( ).
+        ELSE.
+          EXIT.
+        ENDIF.
+        cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
+      ENDDO.
     ENDIF.
 
     IF mv_f7_stop = abap_true.
@@ -3495,7 +3504,8 @@ CLASS lcl_window IMPLEMENTATION.
      ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear all selected variables' text = 'Clear vars' )
      ( butn_type = 3  )
-     ( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = 'MerMaid Flow diagram' text = 'Diagram' )
+     ( COND #( WHEN lcl_appl=>is_mermaid_active = abap_true
+      THEN VALUE #( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = 'MerMaid Flow diagram' text = 'Diagram' ) ) )
      ( function = 'SMART' icon = CONV #( icon_wizard ) quickinfo = 'Smart Search ' text = 'Show the Origin' )
      ( function = 'COVERAGE' icon = CONV #( icon_wizard ) quickinfo = 'Coverage ' text = 'Coverage' )
      ( butn_type = 3  )
@@ -3534,14 +3544,8 @@ CLASS lcl_window IMPLEMENTATION.
     TYPES: lntab TYPE STANDARD TABLE OF i.
     DATA lt_lines TYPE lntab.
 
-    APPEND INITIAL LINE TO lt_lines ASSIGNING FIELD-SYMBOL(<line>).
-    <line> = iv_line.
-    mo_code_viewer->set_marker( EXPORTING marker_number = 7 marker_lines = lt_lines ).
-
-    CLEAR lt_lines.
-
     LOOP AT mt_breaks INTO DATA(ls_break) WHERE inclnamesrc = m_prg-include.
-      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
+      APPEND INITIAL LINE TO lt_lines ASSIGNING FIELD-SYMBOL(<line>).
       <line> = ls_break-linesrc.
     ENDLOOP.
     mo_code_viewer->set_marker( EXPORTING marker_number = 9 marker_lines = lt_lines ).
@@ -3554,13 +3558,12 @@ CLASS lcl_window IMPLEMENTATION.
     ENDLOOP.
 
     "coverage
-    CLEAR lt_lines.
     LOOP AT mt_coverage INTO DATA(ls_coverage).
       APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
       <line> = ls_coverage-line.
     ENDLOOP.
 
-    mo_code_viewer->set_marker( EXPORTING marker_number = 8 marker_lines = lt_lines ).
+    mo_code_viewer->set_marker( EXPORTING marker_number = 2 marker_lines = lt_lines ).
     mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
 
   ENDMETHOD.
@@ -3634,8 +3637,19 @@ CLASS lcl_window IMPLEMENTATION.
 
   METHOD show_coverage.
 
-    CLEAR: mt_watch, mt_coverage.
-    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step) WHERE include = mo_debugger->mo_window->m_prg-include .
+    CLEAR: mt_watch, mt_coverage,mt_stack.
+    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
+
+      READ TABLE mt_stack WITH KEY include = ls_Step-include TRANSPORTING NO FIELDS.
+      IF sy-subrc <> 0.
+        APPEND INITIAL LINE TO mt_stack ASSIGNING FIELD-SYMBOL(<stack>).
+        MOVE-CORRESPONDING ls_step TO <stack>.
+      ENDIF.
+
+      IF ls_step-include <> mo_debugger->mo_window->m_prg-include.
+        CONTINUE.
+      ENDIF.
+
       APPEND INITIAL LINE TO mt_coverage ASSIGNING FIELD-SYMBOL(<fs_coverage>).
       <fs_coverage>-line = ls_Step-line.
     ENDLOOP.
@@ -4599,18 +4613,17 @@ CLASS lcl_table_viewer IMPLEMENTATION.
           ENDTRY.
         ENDIF.
       WHEN 'STEP'.
-        "ASSIGN COMPONENT 'STEP' OF STRUCTURE <tab> TO FIELD-SYMBOL(<step>).
-        "mo_window->mo_debugger->run_script_hist( <step> ).
-
         MOVE-CORRESPONDING <tab> TO mo_window->m_prg.
         MOVE-CORRESPONDING <tab> TO mo_window->mo_debugger->ms_stack.
+
         mo_window->show_coverage( ).
-        "READ TABLE   mo_window->mo_debugger->mt_steps INTO DATA(ls_step) WITH KEY step = <step>.
-        mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
-        mo_window->set_program_line( mo_window->m_prg-line ).
-        mo_window->mo_debugger->mo_tree_imp->display( ).
-        mo_window->mo_debugger->mo_tree_local->display( ).
-        mo_window->mo_debugger->mo_tree_exp->display( ).
+        mo_window->mo_debugger->show_step( ).
+
+*        mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+*        mo_window->set_program_line( mo_window->m_prg-line ).
+*        mo_window->mo_debugger->mo_tree_imp->display( ).
+*        mo_window->mo_debugger->mo_tree_local->display( ).
+*        mo_window->mo_debugger->mo_tree_exp->display( ).
     ENDCASE.
 
   ENDMETHOD.
@@ -5406,6 +5419,25 @@ CLASS lcl_appl IMPLEMENTATION.
 *      WHERE t~spras = sy-langu
 *      ORDER BY c~ladatum DESCENDING c~lauzeit DESCENDING.
   ENDMETHOD.
+
+METHOD check_mermaid.
+
+      CALL FUNCTION 'SEO_CLASS_EXISTENCE_CHECK'
+      EXPORTING
+        clskey        = 'ZCL_WD_GUI_MERMAID_JS_DIAGRAM '
+      exceptions
+        not_specified = 1
+        not_existing  = 2
+        is_interface  = 3
+        no_text       = 4
+        inconsistent  = 5
+        OTHERS        = 6.
+
+    IF sy-subrc = 0.
+     is_mermaid_active = abap_true.
+    ENDIF.
+
+ENDMETHOD.
 
   METHOD open_int_table.
 
@@ -6265,7 +6297,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDIF.
 
       CASE <kind>.
-        WHEN cl_abap_datadescr=>typekind_table."BREAK-POINT.
+        WHEN cl_abap_datadescr=>typekind_table.
           lcl_appl=>open_int_table( iv_name = <fullname> it_ref = <ref> io_window = mo_debugger->mo_window ).
         WHEN cl_abap_datadescr=>typekind_string.
           NEW lcl_text_viewer( <ref> ).
@@ -6894,11 +6926,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
   METHOD constructor.
 
     super->constructor( ).
-
     mo_debugger = io_debugger.
-
-    mo_box = create( i_name = 'Flow' i_width = 700 i_hight = 300 ).
-    SET HANDLER on_box_close FOR mo_box.
 
     CASE iv_type.
       WHEN 'DIAG'.
@@ -7012,7 +7040,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
         ENDIF.
       ENDIF.
     ENDLOOP.
-
     "getting code texts and calls params
     LOOP AT lt_lines ASSIGNING FIELD-SYMBOL(<line>).
       DATA(lv_ind) = sy-tabix.
@@ -7092,8 +7119,9 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
   METHOD open_mermaid.
 
+   CHECK lcl_appl=>is_mermaid_active = abap_true.
 
-  ENDMETHOD.
+   ENDMETHOD.
 
 ENDCLASS.
 *</SCRIPT:SCRIPT_CLASS>
