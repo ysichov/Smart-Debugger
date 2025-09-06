@@ -124,14 +124,14 @@ CLASS lcl_appl DEFINITION.
            END OF t_lang,
 
            BEGIN OF t_stack,
-             step         TYPE i,
-             stackpointer TYPE tpda_stack_pointer,
-             stacklevel   TYPE tpda_stack_level,
-             program      TYPE tpda_program,
-             include      TYPE tpda_include,
-             line         TYPE tpda_sc_line,
-             eventtype    TYPE tpda_event_type,
-             eventname    TYPE tpda_event,
+             step       TYPE i,
+             "stackpointer TYPE tpda_stack_pointer,
+             stacklevel TYPE tpda_stack_level,
+             line       TYPE tpda_sc_line,
+             eventtype  TYPE tpda_event_type,
+             eventname  TYPE tpda_event,
+             program    TYPE tpda_program,
+             include    TYPE tpda_include,
            END OF t_stack,
 
            BEGIN OF t_step_counter,
@@ -364,6 +364,16 @@ CLASS lcl_source_parser DEFINITION.
     CLASS-METHODS: parse_tokens IMPORTING iv_program TYPE program io_debugger TYPE REF TO lcl_debugger_script.
 
 ENDCLASS.
+
+CLASS lcl_event_handler DEFINITION.
+  PUBLIC SECTION.
+    DATA: mo_debugger TYPE REF TO lcl_debugger_script.
+    METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script,
+      on_double_click
+        FOR EVENT double_click OF cl_salv_events_table
+        IMPORTING row column.
+ENDCLASS.
+
 
 CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super.
 
@@ -3257,6 +3267,33 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
 ENDCLASS.                    "lcl_debugger_script IMPLEMENTATION
 
+CLASS lcl_event_handler IMPLEMENTATION.
+
+  METHOD constructor.
+    mo_debugger = io_debugger.
+  ENDMETHOD.
+
+  METHOD on_double_click.
+
+    READ TABLE mo_debugger->mo_window->mt_stack INDEX row INTO DATA(ls_stack).
+    "only for coverage stack selection should work.
+
+    CHECK mo_debugger->mo_window->mt_coverage IS NOT INITIAL.
+
+    "check if we have recorded steps for choosen stack level
+    READ TABLE  mo_debugger->mt_steps WITH KEY program = ls_Stack-program include = ls_stack-include TRANSPORTING NO FIELDS.
+    CHECK sy-subrc = 0.
+
+    MOVE-CORRESPONDING ls_stack TO mo_debugger->mo_window->m_prg.
+    MOVE-CORRESPONDING ls_stack TO mo_debugger->ms_stack.
+
+    mo_debugger->mo_window->show_coverage( ).
+    mo_debugger->show_step( ).
+
+  ENDMETHOD.
+ENDCLASS.
+
+
 CLASS lcl_types DEFINITION ABSTRACT.
 
   PUBLIC SECTION.
@@ -3527,13 +3564,19 @@ CLASS lcl_window IMPLEMENTATION.
     TYPES: lntab TYPE STANDARD TABLE OF i.
     DATA lt_lines TYPE lntab.
 
+    "blue arrow - current line
+    APPEND INITIAL LINE TO lt_lines ASSIGNING FIELD-SYMBOL(<line>).
+    <line> = iv_line.
+    mo_code_viewer->set_marker( EXPORTING marker_number = 7 marker_lines = lt_lines ).
+
+    "breakpoints
     LOOP AT mt_breaks INTO DATA(ls_break) WHERE inclnamesrc = m_prg-include.
-      APPEND INITIAL LINE TO lt_lines ASSIGNING FIELD-SYMBOL(<line>).
+      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
       <line> = ls_break-linesrc.
     ENDLOOP.
     mo_code_viewer->set_marker( EXPORTING marker_number = 9 marker_lines = lt_lines ).
 
-    "watchpoints
+    "watchpoints or coverage
     CLEAR lt_lines.
     LOOP AT mt_watch INTO DATA(ls_watch).
       APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
@@ -3547,6 +3590,7 @@ CLASS lcl_window IMPLEMENTATION.
     ENDLOOP.
 
     mo_code_viewer->set_marker( EXPORTING marker_number = 2 marker_lines = lt_lines ).
+
     mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
 
   ENDMETHOD.
@@ -3592,9 +3636,10 @@ CLASS lcl_window IMPLEMENTATION.
 
       lo_column ?= lo_columns->get_column( 'STEP' ).
       lo_column->set_output_length( '3' ).
+      lo_column->set_short_text( 'STEP' ).
 
-      lo_column ?= lo_columns->get_column( 'STACKPOINTER' ).
-      lo_column->set_output_length( '5' ).
+      "lo_column ?= lo_columns->get_column( 'STACKPOINTER' ).
+      "lo_column->set_output_length( '5' ).
 
       lo_column ?= lo_columns->get_column( 'STACKLEVEL' ).
       lo_column->set_output_length( '5' ).
@@ -3610,6 +3655,13 @@ CLASS lcl_window IMPLEMENTATION.
 
       lo_column ?= lo_columns->get_column( 'EVENTNAME' ).
       lo_column->set_output_length( '50' ).
+
+      DATA(lo_event) =  mo_salv_stack->get_event( ).
+
+      DATA(lo_handler) = NEW lcl_event_handler( mo_debugger ).
+
+      " Event double click
+      SET HANDLER lo_handler->on_double_click FOR lo_event.
 
       mo_salv_stack->display( ).
     ELSE.
@@ -4601,12 +4653,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
 
         mo_window->show_coverage( ).
         mo_window->mo_debugger->show_step( ).
-
-*        mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
-*        mo_window->set_program_line( mo_window->m_prg-line ).
-*        mo_window->mo_debugger->mo_tree_imp->display( ).
-*        mo_window->mo_debugger->mo_tree_local->display( ).
-*        mo_window->mo_debugger->mo_tree_exp->display( ).
     ENDCASE.
 
   ENDMETHOD.
@@ -5403,12 +5449,12 @@ CLASS lcl_appl IMPLEMENTATION.
 *      ORDER BY c~ladatum DESCENDING c~lauzeit DESCENDING.
   ENDMETHOD.
 
-METHOD check_mermaid.
+  METHOD check_mermaid.
 
-      CALL FUNCTION 'SEO_CLASS_EXISTENCE_CHECK'
+    CALL FUNCTION 'SEO_CLASS_EXISTENCE_CHECK'
       EXPORTING
         clskey        = 'ZCL_WD_GUI_MERMAID_JS_DIAGRAM '
-      exceptions
+      EXCEPTIONS
         not_specified = 1
         not_existing  = 2
         is_interface  = 3
@@ -5417,10 +5463,10 @@ METHOD check_mermaid.
         OTHERS        = 6.
 
     IF sy-subrc = 0.
-     is_mermaid_active = abap_true.
+      is_mermaid_active = abap_true.
     ENDIF.
 
-ENDMETHOD.
+  ENDMETHOD.
 
   METHOD open_int_table.
 
@@ -7102,8 +7148,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
   METHOD open_mermaid.
 
-   CHECK lcl_appl=>is_mermaid_active = abap_true.
 
-   ENDMETHOD.
+  ENDMETHOD.
 
 ENDCLASS.
