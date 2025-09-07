@@ -31,6 +31,7 @@ REPORT  rstpda_script_template.
 
 *  & External resources
 *  & https://github.com/WegnerDan/abapMermaid
+*  & https://github.com/ysichov/abapMermaid - should be used this fork with scroll enabled
 *  & https://gist.github.com/AtomKrieg/7f4ec2e2f49b82def162e85904b7e25b - data object visualizer
 
 *  & Inspired by
@@ -711,7 +712,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
 
 ENDCLASS.
 
-CLASS lCL_AI_API DEFINITION.
+CLASS lcl_ai_api DEFINITION.
 
   PUBLIC SECTION.
 
@@ -737,7 +738,7 @@ CLASS lCL_AI_API DEFINITION.
 
 ENDCLASS.
 
-CLASS lCL_AI_API IMPLEMENTATION.
+CLASS lcl_ai_api IMPLEMENTATION.
 
   METHOD call_openai.
     DATA: lv_prompt   TYPE string,
@@ -854,7 +855,7 @@ CLASS lCL_AI_API IMPLEMENTATION.
              role              TYPE string,
              content           TYPE string,
              reasoning_content TYPE string,
-           END           OF lty_s_MESSAGE,
+           END           OF lty_s_message,
            lty_t_message TYPE STANDARD TABLE OF lty_s_message WITH NON-UNIQUE DEFAULT KEY,
            BEGIN OF lty_s_choice,
              index         TYPE string,
@@ -895,7 +896,7 @@ CLASS lCL_AI_API IMPLEMENTATION.
 
 ENDCLASS.
 
-CLASS lcl_AI DEFINITION INHERITING FROM lcl_popup.
+CLASS lcl_ai DEFINITION INHERITING FROM lcl_popup.
 
   PUBLIC SECTION.
     DATA: mo_ai_box               TYPE REF TO cl_gui_dialogbox_container,
@@ -920,7 +921,7 @@ CLASS lcl_ai IMPLEMENTATION.
   METHOD constructor.
     super->constructor( ).
 
-    mo_AI_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.9' i_width = 1400 i_hight = 400 ).
+    mo_ai_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.9' i_width = 1400 i_hight = 400 ).
     CREATE OBJECT mo_ai_splitter
       EXPORTING
         parent  = mo_ai_box
@@ -1044,7 +1045,7 @@ CLASS lcl_ai IMPLEMENTATION.
       WHEN 'AI'.
 
         cl_gui_cfw=>flush( ).
-        DATA(lo_AI) = NEW lcl_ai_api( ).
+        DATA(lo_ai) = NEW lcl_ai_api( ).
 
         DATA lt_text TYPE TABLE OF char255.
         CALL METHOD mo_prompt_text->get_text_as_stream
@@ -1549,7 +1550,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
         IF m_quick-typid = 'h'."internal table
           READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO DATA(ls_source).
-          READ TABLE ls_Source-tt_tabs WITH KEY name = i_name INTO DATA(ls_var).
+          READ TABLE ls_source-tt_tabs WITH KEY name = i_name INTO DATA(ls_var).
+
+
           lo_table_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
 
 *          DATA(lt_comp_tpda) = lo_table_descr->components( ).
@@ -1595,6 +1598,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 *          ENDIF.
 
           table_clone = lo_table_descr->elem_clone( ).
+
+
           "ASSIGN table_clone->* TO FIELD-SYMBOL(<f>).
 
 *          IF lv_old_generation IS INITIAL.
@@ -2107,7 +2112,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
         MOVE-CORRESPONDING lt_stack TO mo_window->mt_stack.
         READ TABLE mo_window->mt_stack INDEX 1 ASSIGNING FIELD-SYMBOL(<stack>).
-        <Stack>-step = m_step.
+        <stack>-step = m_step.
         ms_stack = <stack>.
 
         CALL METHOD cl_tpda_script_bp_services=>get_all_bps RECEIVING p_bps_it = mo_window->mt_breaks.
@@ -2146,7 +2151,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
             mo_tree_local->clear( ).
             mo_tree_exp->clear( ).
             mo_tree_imp->clear( ).
-            IF ms_stack_prev-program <> ms_Stack-program.
+            IF ms_stack_prev-program <> ms_stack-program.
               CLEAR mt_state.
             ELSE.
               DELETE mt_state WHERE leaf NE 'GLOBAL'. "AND leaf NE 'SYST'.
@@ -2211,9 +2216,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           READ TABLE mo_window->mt_locals_set WITH KEY program = ms_stack-program
                                                        eventname = ms_stack-eventname
                                                        eventtype = ms_stack-eventtype
-             INTO DATA(ls_local_Set).
+             INTO DATA(ls_local_set).
 
-          IF sy-subrc = 0 AND ls_local_Set-loc_fill = abap_true.
+          IF sy-subrc = 0 AND ls_local_set-loc_fill = abap_true.
             mt_locals = ls_local_set-locals_tab.
           ELSE.
             CALL METHOD cl_tpda_script_data_descr=>locals RECEIVING p_locals_it = mt_locals.
@@ -2297,9 +2302,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
         IF ( mo_tree_local->m_globals IS NOT INITIAL OR  mo_tree_local->m_ldb IS NOT INITIAL ) AND ms_stack_prev-program <> ms_stack-program.
 
-          READ TABLE mo_window->mt_globals_set WITH KEY program = ms_stack-program INTO DATA(ls_global_Set).
+          READ TABLE mo_window->mt_globals_set WITH KEY program = ms_stack-program INTO DATA(ls_global_set).
 
-          IF sy-subrc = 0 AND ls_global_Set-glob_fill = abap_true.
+          IF sy-subrc = 0 AND ls_global_set-glob_fill = abap_true.
             mt_globals = ls_global_set-globals_tab.
           ELSE.
 
@@ -2362,7 +2367,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         ENDLOOP.
 
         READ TABLE mo_window->mt_locals_set
-         WITH KEY program = ms_stack-program eventtype = ms_Stack-eventtype eventname = ms_Stack-eventname
+         WITH KEY program = ms_stack-program eventtype = ms_stack-eventtype eventname = ms_stack-eventname
          INTO DATA(ls_locals_set).
         LOOP AT ls_locals_set-mt_fs INTO DATA(ls_fs).
           transfer_variable( EXPORTING i_name = ls_fs-name iv_type = 'LOCAL' ).
@@ -2761,7 +2766,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD make_Step.
+  METHOD make_step.
 
     DATA: lv_stop TYPE xfeld.
 
@@ -3298,7 +3303,7 @@ CLASS lcl_event_handler IMPLEMENTATION.
     CHECK mo_debugger->mo_window->mt_coverage IS NOT INITIAL.
 
     "check if we have recorded steps for choosen stack level
-    READ TABLE  mo_debugger->mt_steps WITH KEY program = ls_Stack-program include = ls_stack-include TRANSPORTING NO FIELDS.
+    READ TABLE  mo_debugger->mt_steps WITH KEY program = ls_stack-program include = ls_stack-include TRANSPORTING NO FIELDS.
     CHECK sy-subrc = 0.
 
     MOVE-CORRESPONDING ls_stack TO mo_debugger->mo_window->m_prg.
@@ -3692,7 +3697,7 @@ CLASS lcl_window IMPLEMENTATION.
     CLEAR: mt_watch, mt_coverage,mt_stack.
     LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
 
-      READ TABLE mt_stack WITH KEY include = ls_Step-include TRANSPORTING NO FIELDS.
+      READ TABLE mt_stack WITH KEY include = ls_step-include TRANSPORTING NO FIELDS.
       IF sy-subrc <> 0.
         APPEND INITIAL LINE TO mt_stack ASSIGNING FIELD-SYMBOL(<stack>).
         MOVE-CORRESPONDING ls_step TO <stack>.
@@ -3703,7 +3708,7 @@ CLASS lcl_window IMPLEMENTATION.
       ENDIF.
 
       APPEND INITIAL LINE TO mt_coverage ASSIGNING FIELD-SYMBOL(<fs_coverage>).
-      <fs_coverage>-line = ls_Step-line.
+      <fs_coverage>-line = ls_step-line.
     ENDLOOP.
 
     SORT mt_coverage.
@@ -4094,14 +4099,15 @@ CLASS lcl_text_viewer IMPLEMENTATION.
     ENDIF.
 
     mo_text->set_readonly_mode( ).
-
     FIELD-SYMBOLS <str> TYPE string.
     ASSIGN ir_str->* TO <str>.
     DATA lt_string TYPE TABLE OF char255.
+
     WHILE strlen( <str> ) > 255.
       APPEND <str>+0(255) TO lt_string.
       SHIFT <str> LEFT BY 255 PLACES.
     ENDWHILE.
+
     APPEND <str> TO lt_string.
     mo_text->set_text_as_r3table( lt_string ).
     CALL METHOD cl_gui_cfw=>flush.
@@ -4649,6 +4655,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     ASSIGN mr_table->* TO  <f_tab>.
     READ TABLE <f_tab> INDEX es_row_no-row_id ASSIGNING FIELD-SYMBOL(<tab>).
     ASSIGN COMPONENT e_column-fieldname  OF STRUCTURE <tab> TO FIELD-SYMBOL(<val>).
+
     CASE e_column-fieldname.
       WHEN 'VALUE'.
         IF sy-subrc = 0.
@@ -4670,6 +4677,13 @@ CLASS lcl_table_viewer IMPLEMENTATION.
 
         mo_window->show_coverage( ).
         mo_window->mo_debugger->show_step( ).
+      WHEN OTHERS. "check if it is an embedded table.
+        TRY.
+            lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| ).
+            table_clone = lo_table_descr->elem_clone( ).
+            lcl_appl=>open_int_table( EXPORTING iv_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone io_window = mo_window ).
+          CATCH cx_sy_move_cast_error.
+        ENDTRY.
     ENDCASE.
 
   ENDMETHOD.
@@ -5962,7 +5976,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       DATA(lo_nodes) = tree->get_nodes( ).
       DATA(l_node) =  lo_nodes->get_node( l_var-key ).
 
-      IF l_Var-ref = ir_up.
+      IF l_var-ref = ir_up.
         RETURN.
       ENDIF.
 
@@ -6560,7 +6574,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ls_token      TYPE lcl_window=>ts_kword,
           ls_calculated TYPE lcl_window=>ts_calculated,
           ls_composed   TYPE lcl_window=>ts_composing,
-          lt_Tokens     TYPE lcl_window=>tt_kword,
+          lt_tokens     TYPE lcl_window=>tt_kword,
           lt_calculated TYPE lcl_window=>tt_calculated,
           lt_composed   TYPE lcl_window=>tt_composed,
           ls_call       TYPE lcl_window=>ts_calls,
@@ -6898,6 +6912,9 @@ CLASS lcl_source_parser IMPLEMENTATION.
             APPEND ls_calculated TO lt_calculated.
 
             IF lv_change+0(1) = '<'.
+              DATA: lt_split TYPE TABLE OF string.
+              SPLIT lv_change AT '-' INTO TABLE lt_split.
+              lv_change = lt_split[ 1 ].
               IF lv_eventtype IS INITIAL. "Global fs
                 READ TABLE io_debugger->mo_window->mt_globals_set WITH KEY program = iv_program ASSIGNING FIELD-SYMBOL(<globals_set>).
                 IF sy-subrc <> 0.
@@ -6989,46 +7006,58 @@ CLASS lcl_mermaid IMPLEMENTATION.
              name TYPE string,
            END OF lty_entity.
 
-    DATA: lv_mm_String TYPE string,
+    DATA: lv_mm_string TYPE string,
           lv_name      TYPE string,
           lt_entities  TYPE TABLE OF lty_entity,
           ls_entity    TYPE lty_entity,
           lv_ind1      TYPE i,
-          lv_ind2      TYPE i.
+          lv_ind2      TYPE i,
+          lt_parts     TYPE TABLE OF string,
+          ls_step      LIKE LINE OF mo_debugger->mt_steps.
 
-    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
-      ls_entity-name = |{ ls_step-eventtype }/{ ls_step-eventname }|.
+    DATA(lt_copy) = mo_debugger->mt_steps.
+    LOOP AT lt_copy ASSIGNING FIELD-SYMBOL(<copy>).
+      IF <copy>-eventtype = 'METHOD'.
+        SPLIT <copy>-program AT '=' INTO TABLE lt_parts.
+        <copy>-eventname = ls_entity-name = |"{ lt_parts[ 1 ] }->{ <copy>-eventname }"|.
+      ELSEIF <copy>-eventtype = 'FUNCTION'.
+        <copy>-eventname = ls_entity-name = |"{ <copy>-eventtype }:{ <copy>-eventname }"|.
+      ELSE.
+        <copy>-eventname = ls_entity-name = |"{ <copy>-program }:{ <copy>-eventname }"|.
+      ENDIF.
+
       COLLECT ls_entity INTO lt_entities.
     ENDLOOP.
 
     CLEAR ls_step.
 
     lv_mm_string = |graph LR\n |.
-    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step2).
+    LOOP AT lt_copy INTO DATA(ls_step2).
       IF ls_step IS INITIAL.
-        ls_step = ls_Step2.
+        ls_step = ls_step2.
         CONTINUE.
       ENDIF.
       IF ls_step2-stacklevel > ls_step-stacklevel.
-        ls_entity-name = |{ ls_step-eventtype }/{ ls_step-eventname }|.
-        READ TABLE lt_entities WITH KEY name = ls_entity-name TRANSPORTING NO FIELDS.
+
+        "ls_entity-name = |{ ls_Step-eventtype }/{ ls_step-eventname }|.
+        READ TABLE lt_entities WITH KEY name = ls_step-eventname TRANSPORTING NO FIELDS.
         lv_ind1 = sy-tabix.
-        lv_name = |{ ls_step2-eventtype }/{ ls_step2-eventname }|.
-        READ TABLE lt_entities WITH KEY name = lv_name TRANSPORTING NO FIELDS.
+        "lv_name = |{ ls_Step2-eventtype }/{ ls_step2-eventname }|.
+        READ TABLE lt_entities WITH KEY name = ls_step2-eventname TRANSPORTING NO FIELDS.
         lv_ind2 = sy-tabix.
-        lv_mm_string = |{ lv_mm_string }{ lv_ind1 }[{ ls_entity-name }] --> { lv_ind2 }[{ lv_name }]\n|.
+        lv_mm_string = |{ lv_mm_string }{ lv_ind1 }[{ ls_step-eventname }] --> { lv_ind2 }[{ ls_step2-eventname }]\n|.
       ENDIF.
-      ls_step = ls_Step2.
+      ls_step = ls_step2.
     ENDLOOP.
 
     open_mermaid( lv_mm_string ).
 
   ENDMETHOD.
 
-  METHOD magic_Search.
+  METHOD magic_search.
 
     DATA: lv_add       TYPE xfeld,
-          lv_mm_String TYPE string,
+          lv_mm_string TYPE string,
           lv_sub       TYPE string,
           lv_form      TYPE string.
 
@@ -7048,7 +7077,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
     "collecting dependents variables
     LOOP AT mo_debugger->mt_vars_hist INTO DATA(ls_hist).
-      READ TABLE mo_debugger->mt_steps WITH KEY step = ls_hist-step INTO DATA(ls_Step).
+      READ TABLE mo_debugger->mt_steps WITH KEY step = ls_hist-step INTO DATA(ls_step).
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO DATA(ls_source).
       LOOP AT ls_source-t_composed INTO DATA(ls_composed) WHERE line = ls_step-line.
         READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_composed-composing TRANSPORTING NO FIELDS.
@@ -7064,7 +7093,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
     LOOP AT mo_debugger->mt_vars_hist INTO ls_hist.
       READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_hist-name TRANSPORTING NO FIELDS.
       IF sy-subrc = 0.
-        READ TABLE mo_debugger->mt_steps WITH KEY step = ls_hist-step INTO ls_Step.
+        READ TABLE mo_debugger->mt_steps WITH KEY step = ls_hist-step INTO ls_step.
         CLEAR lv_add.
         READ TABLE  ls_source-t_composed WITH KEY line = ls_step-line TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
@@ -7078,9 +7107,9 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
         IF sy-subrc <> 0 AND lv_add = abap_true.
           APPEND INITIAL LINE TO mo_debugger->mo_window->mt_watch ASSIGNING FIELD-SYMBOL(<watch>).
-          <watch>-program = ls_Step-program.
+          <watch>-program = ls_step-program.
           <watch>-line = ls_line-line = ls_step-line.
-          ls_line-event = ls_Step-eventname.
+          ls_line-event = ls_step-eventname.
           ls_line-stack = ls_step-stacklevel.
           INSERT ls_line INTO lt_lines INDEX 1.
         ENDIF.
@@ -7101,7 +7130,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
             <line>-arrow = |{ <line>-arrow }, |.
           ENDIF.
           <line>-arrow  = |{ <line>-arrow  } { ls_call-outer } = { ls_call-inner }|.
-          <line>-subname = |{ ls_call-event }: { ls_Call-name } |.
+          <line>-subname = |{ ls_call-event }: { ls_call-name } |.
         ENDLOOP.
       ENDIF.
     ENDLOOP.
@@ -7165,7 +7194,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
   METHOD open_mermaid.
 
-
+ 
   ENDMETHOD.
 
 ENDCLASS.
