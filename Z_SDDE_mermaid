@@ -1490,7 +1490,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     DATA: lr_struc       TYPE REF TO data,
           lo_table_descr TYPE REF TO cl_tpda_script_tabledescr,
           table_clone    TYPE REF TO data,
-          table_clone2   TYPE REF TO data,
           l_name         TYPE string,
           l_full_name    TYPE string,
           lo_deep_handle TYPE REF TO cl_abap_datadescr,
@@ -1535,9 +1534,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         IF m_quick-typid = 'h'."internal table
           READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO DATA(ls_source).
           READ TABLE ls_source-tt_tabs WITH KEY name = i_name INTO DATA(ls_var).
-
-          lo_table_descr ?= cl_tpda_script_data_descr=>factory( 'LT_SPFLI[ 1 ]-SFLIGHT_TAB' ).
-          table_clone2 = lo_table_descr->elem_clone( ).
 
 
           lo_table_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
@@ -4665,12 +4661,12 @@ CLASS lcl_table_viewer IMPLEMENTATION.
         mo_window->show_coverage( ).
         mo_window->mo_debugger->show_step( ).
       WHEN OTHERS. "check if it is an embedded table.
-          TRY.
-              lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| ).
-              table_clone = lo_table_descr->elem_clone( ).
-              lcl_appl=>open_int_table( EXPORTING iv_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone io_window = mo_window ).
-            CATCH cx_sy_move_cast_error.
-          ENDTRY.
+        TRY.
+            lo_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| ).
+            table_clone = lo_table_descr->elem_clone( ).
+            lcl_appl=>open_int_table( EXPORTING iv_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone io_window = mo_window ).
+          CATCH cx_sy_move_cast_error.
+        ENDTRY.
     ENDCASE.
 
   ENDMETHOD.
@@ -6899,8 +6895,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
             APPEND ls_calculated TO lt_calculated.
 
             IF lv_change+0(1) = '<'.
-              data: lt_split type table of string.
-              split lv_change AT '-' into table lt_split.
+              DATA: lt_split TYPE TABLE OF string.
+              SPLIT lv_change AT '-' INTO TABLE lt_split.
               lv_change = lt_split[ 1 ].
               IF lv_eventtype IS INITIAL. "Global fs
                 READ TABLE io_debugger->mo_window->mt_globals_set WITH KEY program = iv_program ASSIGNING FIELD-SYMBOL(<globals_set>).
