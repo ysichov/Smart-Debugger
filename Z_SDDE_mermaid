@@ -7022,13 +7022,11 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDIF.
       IF ls_step2-stacklevel > ls_step-stacklevel.
 
-        "ls_entity-name = |{ ls_Step-eventtype }/{ ls_step-eventname }|.
         READ TABLE lt_entities WITH KEY name = ls_step-eventname TRANSPORTING NO FIELDS.
         lv_ind1 = sy-tabix.
-        "lv_name = |{ ls_Step2-eventtype }/{ ls_step2-eventname }|.
         READ TABLE lt_entities WITH KEY name = ls_step2-eventname TRANSPORTING NO FIELDS.
         lv_ind2 = sy-tabix.
-        lv_mm_string = |{ lv_mm_string }{ lv_ind1 }[{ ls_step-eventname }] --> { lv_ind2 }[{ ls_step2-eventname }]\n|.
+        lv_mm_string = |{ lv_mm_string }{ lv_ind1 }({ ls_step-eventname }) --> { lv_ind2 }({ ls_step2-eventname })\n|.
       ENDIF.
       ls_step = ls_step2.
     ENDLOOP.
@@ -7098,6 +7096,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
         ENDIF.
       ENDIF.
     ENDLOOP.
+
     "getting code texts and calls params
     LOOP AT lt_lines ASSIGNING FIELD-SYMBOL(<line>).
       DATA(lv_ind) = sy-tabix.
@@ -7118,13 +7117,14 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDIF.
     ENDLOOP.
 
+    IF lt_lines[ lines( lt_lines ) ]-arrow IS NOT INITIAL.
+      CLEAR lt_lines[ lines( lt_lines ) ]-arrow .
+    ENDIF.
+
     "creating mermaid code
     CHECK lt_lines IS NOT INITIAL.
     lv_mm_string = |graph LR\n |.
 
-    IF lt_lines[ lines( lt_lines ) ]-arrow IS NOT INITIAL.
-      CLEAR lt_lines[ lines( lt_lines ) ]-arrow .
-    ENDIF.
     LOOP AT lt_lines INTO ls_line.
       lv_ind = sy-tabix.
 
@@ -7134,6 +7134,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
       IF lv_prev_stack > ls_line-stack AND lv_opened > 0 AND lv_sub IS INITIAL.
         DATA(lv_times) = lv_prev_stack - ls_line-stack.
+
         DO lv_times TIMES.
           lv_mm_string = |{ lv_mm_string } end\n|.
           SUBTRACT 1 FROM lv_opened.
@@ -7152,15 +7153,15 @@ CLASS lcl_mermaid IMPLEMENTATION.
         ENDIF.
       ENDIF.
 
-      lv_mm_string = |{ lv_mm_string }{ sy-tabix }[" { ls_line-code }|.
+      lv_mm_string = |{ lv_mm_string }{ sy-tabix }(" { ls_line-code }|.
 
       IF ls_line-arrow IS NOT INITIAL.
         ADD 1 TO lv_opened.
-        lv_mm_string = |{ lv_mm_string }"]|.
+        lv_mm_string = |{ lv_mm_string }")|.
         lv_sub = '|"' && ls_line-arrow && '"|'.
         lv_mm_string = |{ lv_mm_string }-->{ lv_sub }{ lv_ind + 1 }\n subgraph S{ lv_ind }[{ ls_line-subname }]\n  direction TB\n|.
       ELSE.
-        lv_mm_string = |{ lv_mm_string }"]\n|.
+        lv_mm_string = |{ lv_mm_string }")\n|.
       ENDIF.
 
       lv_prev_stack = ls_line-stack.
