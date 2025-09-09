@@ -2172,7 +2172,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
         ENDIF.
       ELSE.
-        lcl_source_parser=>parse_tokens( iv_program = mo_window->m_prg-program io_debugger = me ).
+        lcl_source_parser=>parse_tokens( iv_program = mo_window->m_prg-include io_debugger = me ).
         READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO ls_source.
       ENDIF.
     ENDIF.
@@ -2675,13 +2675,12 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       CATCH cx_tpda_scr_rtctrl_status .
       CATCH cx_tpda_scr_rtctrl .
     ENDTRY.
-
     "step out and not save history for standard code if it is swithed off
     IF  mo_window->m_zcode IS NOT INITIAL.
 
       cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
       DO.
-        IF   mo_window->m_prg-program+0(1) <> 'Z' AND stack-program+0(5) <> 'SAPLZ' .
+        IF   mo_window->m_prg-program+0(1) <> 'Z' AND mo_window->m_prg-program+0(5) <> 'SAPLZ' .
           f7( ).
         ELSE.
           EXIT.
@@ -6685,7 +6684,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ELSEIF token = 'CHANGING' OR token = 'EXPORTING' OR token = 'RETURNING'.
 
             IF ls_param-param IS NOT INITIAL.
-
+              APPEND ls_param TO ls_source-t_params.
               CLEAR: lv_type, lv_par, ls_param-param.
             ENDIF.
 
@@ -6826,6 +6825,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
                     IF lv_import = abap_true.
                       ls_call-outer = lv_temp.
                       APPEND ls_call TO ls_token-tt_calls.
+                      ls_calculated-calculated = lv_temp.
+                      APPEND  ls_calculated TO lt_calculated.
                     ELSEIF lv_export = abap_true.
                       ls_call-outer = lv_temp.
                       APPEND ls_call TO ls_token-tt_calls.
@@ -7045,6 +7046,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
           lv_form      TYPE string.
 
     TYPES: BEGIN OF ts_line,
+             include TYPE string,
              line    TYPE i,
              event   TYPE string,
              stack   TYPE i,
@@ -7057,10 +7059,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
           lt_lines      TYPE STANDARD TABLE OF ts_line,
           lv_prev_stack TYPE i,
           lv_opened     TYPE i.
-
-    DATA(lt_steps) = mo_debugger->mt_steps.
-    SORT lt_steps BY step DESCENDING.
-
 
     LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO DATA(ls_source).
@@ -7075,6 +7073,9 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDLOOP.
     ENDLOOP.
 
+
+    DATA(lt_steps) = mo_debugger->mt_steps.
+    SORT lt_steps BY step DESCENDING.
 
     "collecting dependents variables
     LOOP AT lt_steps INTO ls_step.
@@ -7133,6 +7134,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
             <watch>-line = ls_line-line = ls_step-line.
             ls_line-event = ls_step-eventname.
             ls_line-stack = ls_step-stacklevel.
+            ls_line-include = ls_step-include.
             INSERT ls_line INTO lt_lines INDEX 1.
           ENDIF.
         ENDIF.
@@ -7145,18 +7147,24 @@ CLASS lcl_mermaid IMPLEMENTATION.
     LOOP AT lt_lines ASSIGNING FIELD-SYMBOL(<line>).
       DATA(lv_ind) = sy-tabix.
 
+      READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = <line>-include INTO ls_source.
       READ TABLE ls_source-t_keywords WITH KEY line = <line>-line INTO ls_keyword.
       LOOP AT ls_source-scan->tokens FROM ls_keyword-from TO ls_keyword-to INTO DATA(ls_token).
         <line>-code = |{  <line>-code } { ls_token-str }|.
       ENDLOOP.
 
-      IF ls_keyword-tt_calls IS NOT INITIAL AND ls_keyword-name = 'PERFORM'.
+      IF ls_keyword-tt_calls IS NOT INITIAL AND ( ls_keyword-name = 'PERFORM' OR  ls_keyword-name = 'CALL' ).
         LOOP AT ls_keyword-tt_calls INTO ls_call.
           IF sy-tabix <> 1.
             <line>-arrow = |{ <line>-arrow }, |.
           ENDIF.
           <line>-arrow  = |{ <line>-arrow  } { ls_call-outer } = { ls_call-inner }|.
-          <line>-subname = |{ ls_call-event }: { ls_call-name } |.
+          IF ls_call-event = 'FUNCTION'.
+            <line>-subname = ls_call-name.
+            REPLACE ALL OCCURRENCES OF '''' in <line>-subname with ''.
+          ELSE.
+            <line>-subname = |{ ls_call-event }: { ls_call-name } |.
+          ENDIF.
         ENDLOOP.
       ENDIF.
     ENDLOOP.
@@ -7223,8 +7231,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD open_mermaid.
-
-  
 
   ENDMETHOD.
 
