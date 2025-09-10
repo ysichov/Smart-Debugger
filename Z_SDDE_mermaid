@@ -1,3 +1,4 @@
+REPORT test.
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -1945,6 +1946,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
       lv_old_step = m_hist_step.
+      
       IF mo_window->m_direction IS NOT INITIAL AND m_hist_step > 1 AND mo_window->m_debug_button IS NOT INITIAL.
         SUBTRACT 1 FROM m_hist_step.
       ENDIF.
