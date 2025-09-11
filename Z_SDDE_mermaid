@@ -555,10 +555,10 @@ CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_scr
           mo_mm_toolbar   TYPE REF TO cl_gui_container,
           mo_toolbar      TYPE REF TO cl_gui_toolbar,
           mo_diagram      TYPE REF TO zcl_wd_gui_mermaid_js_diagram,
-    mv_type         type string.
+          mv_type         TYPE string.
 
     METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script
-                                   iv_type TYPE string,
+                                   iv_type     TYPE string,
 
       steps_flow IMPORTING iv_direction TYPE ui_func OPTIONAL,
       magic_search IMPORTING iv_direction TYPE ui_func OPTIONAL,
@@ -3502,8 +3502,8 @@ CLASS lcl_window IMPLEMENTATION.
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear all selected variables' text = 'Clear vars' )
      ( butn_type = 3  )
      ( COND #( WHEN lcl_appl=>is_mermaid_active = abap_true
-      THEN VALUE #( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = 'MerMaid Flow diagram' text = 'Diagram' ) ) )
-     ( function = 'SMART' icon = CONV #( icon_wizard ) quickinfo = 'Smart Search ' text = 'Show the Origin' )
+      THEN VALUE #( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = ' Calls Flow' text = 'Diagram' ) ) )
+     ( function = 'SMART' icon = CONV #( icon_wizard ) quickinfo = 'Calculations sequence' text = 'Calculations Flow' )
      ( function = 'COVERAGE' icon = CONV #( icon_wizard ) quickinfo = 'Coverage ' text = 'Coverage' )
      ( butn_type = 3  )
      ( function = 'STEPS' icon = CONV #( icon_next_step ) quickinfo = 'Steps table' text = 'Steps' )
@@ -3511,7 +3511,7 @@ CLASS lcl_window IMPLEMENTATION.
      ( butn_type = 3  )
      ( function = 'ENGINE' icon = CONV #( icon_graduate ) quickinfo = 'Faster version but can skip some changes' text = 'Alpha' )
      ( function = 'DEBUG' icon = CONV #( icon_tools ) quickinfo = 'Debug' text = 'Debug' )
-     ( function = 'INFO' icon = CONV #( icon_information ) quickinfo = 'Documentation' text = '' )
+     ( function = 'INFO' icon = CONV #( icon_bw_gis ) quickinfo = 'Documentation' text = '' )
                     ).
 
     mo_toolbar->add_button_group( lt_button ).
@@ -3776,6 +3776,10 @@ CLASS lcl_window IMPLEMENTATION.
         DATA(l_url) = 'https://ysychov.wordpress.com/2020/07/27/abap-simple-debugger-data-explorer/'.
         CALL FUNCTION 'CALL_BROWSER' EXPORTING url = l_url.
 
+        l_url = 'https://github.com/ysichov/Smart-Debugger'.
+        CALL FUNCTION 'CALL_BROWSER' EXPORTING url = l_url.
+
+
       WHEN 'STEPS'.
 
         lcl_appl=>open_int_table( iv_name = 'Steps' it_tab = mo_debugger->mt_steps io_window = mo_debugger->mo_window ).
@@ -4021,8 +4025,8 @@ CLASS lcl_text_viewer IMPLEMENTATION.
 
   METHOD constructor.
     super->constructor( ).
-    mo_box = create( i_name = 'text' i_width = 200 i_hight = 100 ).
-    CREATE OBJECT mo_splitter ##FM_SUBRC_OK
+    mo_box = create( i_name = 'text' i_width = 700 i_hight = 200 ).
+    CREATE OBJECT mo_splitter
       EXPORTING
         parent  = mo_box
         rows    = 1
@@ -4349,7 +4353,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
 
     mo_box = create( i_width = 800 i_hight = 150 ).
 
-    CREATE OBJECT mo_splitter ##FM_SUBRC_OK
+    CREATE OBJECT mo_splitter
       EXPORTING
         parent  = mo_box
         rows    = 1
@@ -5033,7 +5037,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
           ENDIF.
 
           IF c_sel_row-int_type = 'D'.
-            CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL' ##FM_SUBRC_OK
+            CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
               EXPORTING
                 date_external            = <field>
               IMPORTING
@@ -5352,7 +5356,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       mo_viewer->m_visible = ''.
 
       lv_sel_width = 0.
-      CALL METHOD mo_viewer->mo_splitter->get_column_width ##FM_SUBRC_OK
+      CALL METHOD mo_viewer->mo_splitter->get_column_width
         EXPORTING
           id                = 1
         IMPORTING
@@ -6577,6 +6581,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
         lt_kw = lo_procedure->get_keyword( ).
 
+        IF lt_kw IS INITIAL.
+          CONTINUE.
+        ENDIF.
+
         ls_token-name = lt_kw.
 
         READ TABLE lo_scan->statements INDEX lo_procedure->statement_index INTO DATA(ls_statement).
@@ -6999,12 +7007,9 @@ CLASS lcl_source_parser IMPLEMENTATION.
       ENDDO.
 
       "Fill keyword links for perform
-
       LOOP AT lt_tokens ASSIGNING FIELD-SYMBOL(<s_token>) WHERE tt_calls IS NOT INITIAL.
 
-        "READ TABLE <s_token>-tt_calls WITH KEY event = 'FORM' INTO ls_call.
         READ TABLE <s_token>-tt_calls INDEX 1 INTO ls_call.
-        "IF sy-subrc = 0.
         DATA(lv_index) = 0.
         LOOP AT ls_source-t_params INTO ls_param WHERE event = ls_call-event AND name = ls_call-name .
           ADD 1 TO lv_index.
@@ -7014,7 +7019,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
         ENDLOOP.
 
-        "ENDIF.
       ENDLOOP.
 
       "clear value(var) to var.
@@ -7039,7 +7043,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
   METHOD constructor.
 
-    data lv_text type text100.
+    DATA lv_text TYPE text100.
 
     super->constructor( ).
 
@@ -7048,7 +7052,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
     CHECK lcl_appl=>is_mermaid_active = abap_true.
 
-     CASE mv_type.
+    CASE mv_type.
       WHEN 'DIAG'.
         lv_text = 'Calls flow'.
       WHEN 'SMART'.
@@ -7104,7 +7108,8 @@ CLASS lcl_mermaid IMPLEMENTATION.
   METHOD steps_flow.
 
     TYPES: BEGIN OF lty_entity,
-             name TYPE string,
+             event TYPE string,
+             name  TYPE string,
            END OF lty_entity.
 
     DATA: lv_mm_string TYPE string,
@@ -7118,9 +7123,19 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
     DATA(lt_copy) = mo_debugger->mt_steps.
     LOOP AT lt_copy ASSIGNING FIELD-SYMBOL(<copy>).
+      CLEAR <copy>-time.
+    ENDLOOP.
+
+    SORT lt_copy BY line.
+    DELETE ADJACENT DUPLICATES FROM lt_copy.
+    SORT lt_copy BY step.
+
+    LOOP AT lt_copy ASSIGNING <copy>.
       IF <copy>-eventtype = 'METHOD'.
         SPLIT <copy>-program AT '=' INTO TABLE lt_parts.
         <copy>-eventname = ls_entity-name = |"{ lt_parts[ 1 ] }->{ <copy>-eventname }"|.
+        ls_entity-event = <copy>-eventtype.
+
       ELSEIF <copy>-eventtype = 'FUNCTION'.
         <copy>-eventname = ls_entity-name = |"{ <copy>-eventtype }:{ <copy>-eventname }"|.
       ELSE.
@@ -7374,6 +7389,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
      ( function = 'TD' icon = CONV #( icon_view_expand_vertical ) quickinfo = 'Vertical' text = '' )
      ( function = 'LR' icon = CONV #( icon_view_expand_horizontal ) quickinfo = 'Horizontal' text = '' )
      ( butn_type = 3  )
+     ( function = 'TEXT' icon = CONV #( icon_wd_caption ) quickinfo = 'Mermaid Diagram text' text = '' )
                     ).
 
     mo_toolbar->add_button_group( lt_button ).
@@ -7390,11 +7406,23 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
   METHOD hnd_toolbar.
 
+
+    IF fcode = 'TEXT'.
+      DATA: lv_mm_string TYPE string,
+            lv_ref       TYPE REF TO data.
+      lv_mm_string = mo_diagram->get_source_code_string( ).
+      GET REFERENCE OF lv_mm_string INTO lv_ref.
+      NEW lcl_text_viewer( lv_ref ).
+
+      RETURN.
+    ENDIF.
+
     CASE mv_type.
       WHEN 'DIAG'.
         steps_flow( fcode ).
       WHEN 'SMART'.
         magic_search( fcode ).
+
     ENDCASE.
 
   ENDMETHOD.
