@@ -1,4 +1,3 @@
-REPORT test.
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -1946,7 +1945,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
       lv_old_step = m_hist_step.
-      
       IF mo_window->m_direction IS NOT INITIAL AND m_hist_step > 1 AND mo_window->m_debug_button IS NOT INITIAL.
         SUBTRACT 1 FROM m_hist_step.
       ENDIF.
@@ -7147,6 +7145,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
              code    TYPE string,
              arrow   TYPE string,
              subname TYPE string,
+             del     TYPE flag,
            END OF ts_line.
 
     DATA: ls_line       TYPE ts_line,
@@ -7232,18 +7231,26 @@ CLASS lcl_mermaid IMPLEMENTATION.
           APPEND INITIAL LINE TO mo_debugger->mo_window->mt_watch ASSIGNING FIELD-SYMBOL(<watch>).
           <watch>-program = ls_step-program.
           <watch>-line = ls_line-line = ls_step-line.
-          ls_line-event = ls_step-eventname.
-          ls_line-stack = ls_step-stacklevel.
-          ls_line-include = ls_step-include.
-          INSERT ls_line INTO lt_lines INDEX 1.
+
+          LOOP AT lt_lines ASSIGNING FIELD-SYMBOL(<line>) WHERE line = ls_line-line and event = ls_step-eventname and stack = ls_step-stacklevel .
+           <line>-del = abap_true.
+          ENDLOOP.
+          
+            ls_line-event = ls_step-eventname.
+            ls_line-stack = ls_step-stacklevel.
+            ls_line-include = ls_step-include.
+            INSERT ls_line INTO lt_lines INDEX 1.
+          
         ENDIF.
 
       ENDLOOP.
 
     ENDLOOP.
+    
+    delete lt_lines where del = abap_true.
 
     "getting code texts and calls params
-    LOOP AT lt_lines ASSIGNING FIELD-SYMBOL(<line>).
+    LOOP AT lt_lines ASSIGNING <line>.
       DATA(lv_ind) = sy-tabix.
 
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = <line>-include INTO ls_source.
@@ -7269,7 +7276,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
     "creating mermaid code
     CHECK lt_lines IS NOT INITIAL.
-    lv_mm_string = |graph LR\n |.
+    lv_mm_string = |graph TD\n |.
 
     LOOP AT lt_lines INTO ls_line.
       lv_ind = sy-tabix.
