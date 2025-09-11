@@ -550,10 +550,20 @@ ENDCLASS.
 CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_script.
 
   PUBLIC SECTION.
-    DATA: mo_debugger TYPE REF TO lcl_debugger_script.
-    METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script iv_type TYPE string,
-      steps_flow,
-      magic_search,
+    DATA: mo_debugger     TYPE REF TO lcl_debugger_script,
+          mo_mm_container TYPE REF TO cl_gui_container,
+          mo_mm_toolbar   TYPE REF TO cl_gui_container,
+          mo_toolbar      TYPE REF TO cl_gui_toolbar,
+          mo_diagram      TYPE REF TO zcl_wd_gui_mermaid_js_diagram,
+    mv_type         type string.
+
+    METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script
+                                   iv_type TYPE string,
+
+      steps_flow IMPORTING iv_direction TYPE ui_func OPTIONAL,
+      magic_search IMPORTING iv_direction TYPE ui_func OPTIONAL,
+      add_toolbar_buttons,
+      hnd_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode,
       open_mermaid IMPORTING iv_mm_string TYPE string.
 
 ENDCLASS.
@@ -3391,44 +3401,7 @@ CLASS lcl_window IMPLEMENTATION.
       RECEIVING
         container = mo_tables_container ).
 
-*    CREATE OBJECT mo_splitter_steps ##FM_SUBRC_OK
-*      EXPORTING
-*        parent  = mo_tables_container
-*        rows    = 1
-*        columns = 3
-*      EXCEPTIONS
-*        OTHERS  = 1.
-
-    "mo_splitter_steps->set_column_width( EXPORTING id = 1 width = '40' ).
-
-*    mo_splitter_steps->get_container(
-*            EXPORTING
-*              row       = 1
-*              column    = 1
-*            RECEIVING
-*              container = mo_stack_container ).
-
-*    mo_splitter_steps->get_container(
-*         EXPORTING
-*           row       = 1
-*           column    = 2
-*         RECEIVING
-*           container = mo_steps_container ).
-*
-*    mo_splitter_steps->get_container(
-*         EXPORTING
-*           row       = 1
-*           column    = 3
-*         RECEIVING
-*           container = mo_hist_container ).
-*
-*mo_steps_container->set_visible( abap_false ).
-*mo_steps_container->set_enable( abap_false ).
-*
-*mo_hist_container->set_visible( abap_false ).
-*mo_hist_container->set_enable( abap_false ).
-
-    CREATE OBJECT mo_splitter_code ##FM_SUBRC_OK
+    CREATE OBJECT mo_splitter_code
       EXPORTING
         parent  = mo_code_container
         rows    = 1
@@ -3452,7 +3425,7 @@ CLASS lcl_window IMPLEMENTATION.
 
     mo_splitter_code->set_column_width( EXPORTING id = 1 width = '60' ).
 
-    CREATE OBJECT mo_splitter_var ##FM_SUBRC_OK
+    CREATE OBJECT mo_splitter_var
       EXPORTING
         parent  = mo_variables_container
         rows    = 2
@@ -7066,10 +7039,60 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
   METHOD constructor.
 
-    super->constructor( ).
-    mo_debugger = io_debugger.
+    data lv_text type text100.
 
-    CASE iv_type.
+    super->constructor( ).
+
+    mo_debugger = io_debugger.
+    mv_type = iv_type.
+
+    CHECK lcl_appl=>is_mermaid_active = abap_true.
+
+     CASE mv_type.
+      WHEN 'DIAG'.
+        lv_text = 'Calls flow'.
+      WHEN 'SMART'.
+        lv_text = 'Calculations sequence'.
+    ENDCASE.
+
+    IF mo_box IS INITIAL.
+      mo_box = create( i_name = lv_text i_width = 1000 i_hight = 300 ).
+      SET HANDLER on_box_close FOR mo_box.
+
+      CREATE OBJECT mo_splitter
+        EXPORTING
+          parent  = mo_box
+          rows    = 2
+          columns = 1
+        EXCEPTIONS
+          OTHERS  = 1.
+
+      mo_splitter->get_container(
+        EXPORTING
+          row       = 2
+          column    = 1
+        RECEIVING
+          container = mo_mm_container ).
+
+      mo_splitter->get_container(
+        EXPORTING
+          row       = 1
+          column    = 1
+        RECEIVING
+          container = mo_mm_toolbar ).
+
+      mo_splitter->set_row_height( id = 1 height = '3' ).
+      mo_splitter->set_row_height( id = 2 height = '70' ).
+
+      mo_splitter->set_row_sash( id    = 1
+                                 type  = 0
+                                 value = 0 ).
+
+      CREATE OBJECT mo_toolbar EXPORTING parent = mo_mm_toolbar.
+      add_toolbar_buttons( ).
+      mo_toolbar->set_visible( 'X' ).
+    ENDIF.
+    CASE mv_type.
       WHEN 'DIAG'.
         steps_flow( ).
       WHEN 'SMART'.
@@ -7109,7 +7132,12 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
     CLEAR ls_step.
 
-    lv_mm_string = |graph LR\n |.
+    IF iv_direction IS INITIAL.
+      lv_mm_string = |graph TD\n |.
+    ELSE.
+      lv_mm_string = |graph { iv_direction }\n |.
+    ENDIF.
+
     LOOP AT lt_copy INTO DATA(ls_step2).
       IF ls_step IS INITIAL.
         ls_step = ls_step2.
@@ -7151,7 +7179,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
     DATA: ls_line       TYPE ts_line,
           lt_lines      TYPE STANDARD TABLE OF ts_line,
           ls_prev_stack TYPE ts_line,
-          "lv_prev_stack TYPE i,
           lv_opened     TYPE i.
 
     LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
@@ -7232,22 +7259,22 @@ CLASS lcl_mermaid IMPLEMENTATION.
           <watch>-program = ls_step-program.
           <watch>-line = ls_line-line = ls_step-line.
 
-          LOOP AT lt_lines ASSIGNING FIELD-SYMBOL(<line>) WHERE line = ls_line-line and event = ls_step-eventname and stack = ls_step-stacklevel .
-           <line>-del = abap_true.
+          LOOP AT lt_lines ASSIGNING FIELD-SYMBOL(<line>) WHERE line = ls_line-line AND event = ls_step-eventname AND stack = ls_step-stacklevel .
+            <line>-del = abap_true.
           ENDLOOP.
-          
-            ls_line-event = ls_step-eventname.
-            ls_line-stack = ls_step-stacklevel.
-            ls_line-include = ls_step-include.
-            INSERT ls_line INTO lt_lines INDEX 1.
-          
+
+          ls_line-event = ls_step-eventname.
+          ls_line-stack = ls_step-stacklevel.
+          ls_line-include = ls_step-include.
+          INSERT ls_line INTO lt_lines INDEX 1.
+
         ENDIF.
 
       ENDLOOP.
 
     ENDLOOP.
-    
-    delete lt_lines where del = abap_true.
+
+    DELETE lt_lines WHERE del = abap_true.
 
     "getting code texts and calls params
     LOOP AT lt_lines ASSIGNING <line>.
@@ -7276,7 +7303,11 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
     "creating mermaid code
     CHECK lt_lines IS NOT INITIAL.
-    lv_mm_string = |graph TD\n |.
+    IF iv_direction IS INITIAL.
+      lv_mm_string = |graph TD\n |.
+    ELSE.
+      lv_mm_string = |graph { iv_direction }\n |.
+    ENDIF.
 
     LOOP AT lt_lines INTO ls_line.
       lv_ind = sy-tabix.
@@ -7333,17 +7364,51 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD add_toolbar_buttons.
+
+    DATA: lt_button TYPE ttb_button,
+          lt_events TYPE cntl_simple_events,
+          ls_events LIKE LINE OF lt_events.
+
+    lt_button  = VALUE #(
+     ( function = 'TD' icon = CONV #( icon_view_expand_vertical ) quickinfo = 'Vertical' text = '' )
+     ( function = 'LR' icon = CONV #( icon_view_expand_horizontal ) quickinfo = 'Horizontal' text = '' )
+     ( butn_type = 3  )
+                    ).
+
+    mo_toolbar->add_button_group( lt_button ).
+
+*   Register events
+    ls_events-eventid = cl_gui_toolbar=>m_id_function_selected.
+    ls_events-appl_event = space.
+    APPEND ls_events TO lt_events.
+
+    mo_toolbar->set_registered_events( events = lt_events ).
+    SET HANDLER me->hnd_toolbar FOR mo_toolbar.
+
+  ENDMETHOD.
+
+  METHOD hnd_toolbar.
+
+    CASE mv_type.
+      WHEN 'DIAG'.
+        steps_flow( fcode ).
+      WHEN 'SMART'.
+        magic_search( fcode ).
+    ENDCASE.
+
+  ENDMETHOD.
+
   METHOD open_mermaid.
 
     CHECK lcl_appl=>is_mermaid_active = abap_true.
 
-    mo_box = create( i_name = 'Flow' i_width = 1000 i_hight = 300 ).
-    SET HANDLER on_box_close FOR mo_box.
-
     TRY.
-        DATA(diagram) = NEW zcl_wd_gui_mermaid_js_diagram( parent = mo_box ).
-        diagram->set_source_code_string( iv_mm_string ).
-        diagram->display( ).
+        IF mo_diagram IS INITIAL.
+          mo_diagram = NEW zcl_wd_gui_mermaid_js_diagram( parent = mo_mm_container ).
+        ENDIF.
+        mo_diagram->set_source_code_string( iv_mm_string ).
+        mo_diagram->display( ).
 
       CATCH zcx_wd_gui_mermaid_js_diagram INTO DATA(error).
         MESSAGE error TYPE 'E'.
