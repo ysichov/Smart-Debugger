@@ -7178,7 +7178,8 @@ CLASS lcl_mermaid IMPLEMENTATION.
     DATA: lv_add       TYPE xfeld,
           lv_mm_string TYPE string,
           lv_sub       TYPE string,
-          lv_form      TYPE string.
+          lv_form      TYPE string,
+          lv_direction TYPE string.
 
     TYPES: BEGIN OF ts_line,
              include TYPE string,
@@ -7310,20 +7311,28 @@ CLASS lcl_mermaid IMPLEMENTATION.
         REPLACE ALL OCCURRENCES OF '''' IN <line>-subname WITH ''.
       ENDLOOP.
     ENDLOOP.
-    IF lines( lt_lines ) > 0.
-      IF lt_lines[ lines( lt_lines ) ]-arrow IS NOT INITIAL.
-        CLEAR lt_lines[ lines( lt_lines ) ]-arrow .
+
+    "check subform execution steps existance
+    LOOP AT lt_lines ASSIGNING <line>.
+      READ TABLE lt_lines WITH KEY event = <line>-subname TRANSPORTING NO FIELDS.
+      IF sy-subrc <> 0.
+        CLEAR <line>-arrow.
       ENDIF.
-    ENDIF.
+    ENDLOOP.
 
     "creating mermaid code
     CHECK lt_lines IS NOT INITIAL.
     IF iv_direction IS INITIAL.
-      lv_mm_string = |graph TD\n |.
+      IF lines( lt_lines ) < 25.
+        lv_direction = 'LR'.
+      ELSE.
+        lv_direction = 'TD'.
+      ENDIF.
     ELSE.
-      lv_mm_string = |graph { iv_direction }\n |.
+      lv_direction = iv_direction.
     ENDIF.
 
+    lv_mm_string = |graph { lv_direction }\n |.
     LOOP AT lt_lines INTO ls_line.
       lv_ind = sy-tabix.
 
@@ -7362,7 +7371,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
         ADD 1 TO lv_opened.
         lv_mm_string = |{ lv_mm_string }")|.
         lv_sub = '|"' && ls_line-arrow && '"|'.
-        lv_mm_string = |{ lv_mm_string }-->{ lv_sub }{ lv_ind + 1 }\n subgraph S{ lv_ind }[{ ls_line-subname }]\n  direction TB\n|.
+        lv_mm_string = |{ lv_mm_string }-->{ lv_sub }{ lv_ind + 1 }\n subgraph S{ lv_ind }["{ ls_line-subname }"]\n  direction TB\n|.
       ELSE.
         lv_mm_string = |{ lv_mm_string }")\n|.
       ENDIF.
