@@ -6581,10 +6581,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
         lt_kw = lo_procedure->get_keyword( ).
 
-        IF lt_kw IS INITIAL.
-          CONTINUE.
-        ENDIF.
-
         ls_token-name = lt_kw.
 
         READ TABLE lo_scan->statements INDEX lo_procedure->statement_index INTO DATA(ls_statement).
@@ -6622,6 +6618,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
         ENDIF.
         CLEAR lv_new.
         WHILE 1 = 1.
+          IF lt_kw IS INITIAL.
+            EXIT.
+          ENDIF.
+
           CLEAR lv_change.
           token = lo_procedure->get_token( offset = sy-index ).
 
@@ -6643,14 +6643,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
             ENDIF.
 
           ENDIF.
-          "ENDIF.
-
 
           IF sy-index = 1 AND ls_token-name = token.
             CONTINUE.
           ENDIF.
-
-
 
           IF sy-index = 2 AND ( lt_kw = 'DATA' OR lt_kw = 'PARAMETERS' ).
             WRITE: 'var =', token.
