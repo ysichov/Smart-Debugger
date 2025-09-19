@@ -1,4 +1,3 @@
-REPORT test.
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -1097,12 +1096,23 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
            END OF ts_calls,
            tt_calls TYPE STANDARD TABLE OF ts_calls WITH NON-UNIQUE KEY event,
 
+           BEGIN OF ts_calls_line,
+             class     TYPE string,
+             eventtype TYPE string,
+             eventname TYPE string,
+             index     TYPE i,
+           END OF ts_calls_line,
+           tt_calls_line TYPE STANDARD TABLE OF ts_calls_line WITH NON-UNIQUE EMPTY KEY,
+
            BEGIN OF ts_kword,
-             line     TYPE i,
-             name     TYPE string,
-             from     TYPE i,
-             to       TYPE i,
-             tt_calls TYPE tt_calls,
+             index     TYPE i,
+             line      TYPE i,
+             name      TYPE string,
+             from      TYPE i,
+             to        TYPE i,
+             tt_calls  TYPE tt_calls,
+             to_evtype TYPE string,
+             to_evname TYPE string,
            END OF ts_kword,
 
            BEGIN OF ts_calculated,
@@ -1146,6 +1156,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              t_composed   TYPE tt_composed,
              t_params     TYPE tt_params,
              tt_tabs      TYPE tt_tabs,
+             tt_calls_line TYPE tt_calls_line,
            END OF ts_progs,
 
            BEGIN OF ts_locals,
@@ -6550,6 +6561,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
           lt_calculated TYPE lcl_window=>tt_calculated,
           lt_composed   TYPE lcl_window=>tt_composed,
           ls_call       TYPE lcl_window=>ts_calls,
+          ls_call_line  TYPE lcl_window=>ts_calls_line,
           ls_tabs       TYPE lcl_window=>ts_int_tabs,
           lt_tabs       TYPE lcl_window=>tt_tabs,
           lv_eventtype  TYPE string,
@@ -6558,7 +6570,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
           lv_par        TYPE char1,
           lv_type       TYPE char1,
           lv_class      TYPE xfeld,
+          lv_cl_name    TYPE string,
           lv_preferred  TYPE xfeld.
+
+    "CLEAR mv_step.
 
     READ TABLE io_debugger->mo_window->mt_source WITH KEY include = iv_program INTO DATA(ls_source).
     IF sy-subrc <> 0.
@@ -6595,7 +6610,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
         lt_kw = lo_procedure->get_keyword( ).
 
         ls_token-name = lt_kw.
-
+        ls_token-index = lo_procedure->statement_index.
         READ TABLE lo_scan->statements INDEX lo_procedure->statement_index INTO DATA(ls_statement).
         IF sy-subrc <> 0.
           EXIT.
@@ -6623,23 +6638,30 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
         IF lt_kw = 'ENDFORM' OR lt_kw = 'ENDMETHOD'.
           CLEAR: lv_eventtype, lv_eventname, ls_tabs.
+          IF ls_param-param IS INITIAL. "No params - save empty row if no params
+            READ TABLE ls_source-t_params WITH KEY event = ls_param-event name = ls_param-name TRANSPORTING NO FIELDS.
+            IF sy-subrc <> 0.
+              CLEAR ls_param-type.
+              APPEND ls_param TO ls_source-t_params.
+            ENDIF.
+          ENDIF.
         ENDIF.
 
         CLEAR lv_prev.
         IF lt_kw = 'ASSIGN' OR lt_kw = 'ADD' OR lt_kw = 'SUBTRACT' .
           DATA(lv_count) = 0.
         ENDIF.
-        CLEAR lv_new.
+        CLEAR: lv_new, ls_token-to_evname, ls_token-to_evtype .
+
+
         WHILE 1 = 1.
           IF lt_kw IS INITIAL.
             EXIT.
           ENDIF.
-
           CLEAR lv_change.
           token = lo_procedure->get_token( offset = sy-index ).
 
-          "IF sy-index <= 2.
-          IF token CS '(' AND ( NOT token CS ')' )."can be method call
+          IF ( token CS '(' AND ( NOT token CS ')' ) ) OR token CS '->' OR token CS '=>'."can be method call
             ls_call-name = token.
             ls_call-event = 'METHOD'.
             REPLACE ALL OCCURRENCES OF '(' IN ls_call-name WITH ''.
@@ -6654,7 +6676,11 @@ CLASS lcl_source_parser IMPLEMENTATION.
               SPLIT ls_call-name  AT '=>' INTO TABLE lt_split.
               ls_call-name = lt_split[ 2 ].
             ENDIF.
-
+            ls_token-to_evname = ls_call-name.
+            ls_token-to_evtype = ls_call-event = 'METHOD'.
+            IF lv_new = abap_true.
+              ls_call-name =  ls_token-to_evname = 'CONSTRUCTOR'.
+            ENDIF.
           ENDIF.
 
           IF sy-index = 1 AND ls_token-name = token.
@@ -6667,16 +6693,27 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
 
           IF sy-index = 2 AND lt_kw = 'PERFORM'.
-            ls_call-name = token.
-            ls_call-event = 'FORM'.
+            ls_token-to_evname = ls_call-name = token.
+            ls_token-to_evtype = ls_call-event = 'FORM'.
           ENDIF.
 
           IF sy-index = 2 AND lv_class = abap_true AND ls_param-class IS INITIAL.
-            ls_param-class = token.
+            ls_call_line-class = ls_param-class = token.
           ENDIF.
 
           IF sy-index = 2 AND lv_eventtype IS NOT INITIAL AND lv_eventname IS INITIAL.
             ls_tabs-eventname = lv_eventname = ls_param-name =  token.
+
+            MOVE-CORRESPONDING ls_tabs TO ls_call_line.
+            ls_call_line-index = lo_procedure->statement_index + 1.
+            "methods in definition should be overwrited by Implementation section
+            READ TABLE ls_source-tt_calls_line WITH KEY eventname = ls_call_line-eventname eventtype = ls_call_line-eventtype ASSIGNING FIELD-SYMBOL(<call_line>).
+            IF sy-subrc = 0.
+              <call_line> = ls_call_line.
+            ELSE.
+              APPEND ls_call_line TO ls_source-tt_calls_line.
+            ENDIF.
+
           ENDIF.
 
           IF token = ''.
@@ -6688,6 +6725,11 @@ CLASS lcl_source_parser IMPLEMENTATION.
                   APPEND  ls_composed TO lt_composed.
                 ENDIF.
               WHEN 'CLEAR' OR 'SORT' OR 'CONDENSE'."no logic
+              WHEN 'FORM'.
+                IF ls_param-name IS NOT INITIAL.
+                  APPEND ls_param TO ls_source-t_params.
+                  CLEAR ls_param.
+                ENDIF.
             ENDCASE.
             EXIT.
           ENDIF.
@@ -6695,7 +6737,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
           IF token = 'USING' OR token = 'IMPORTING'.
             ls_param-type = 'I'.
             CLEAR: lv_type, lv_par.
-            "CONTINUE.
           ELSEIF token = 'CHANGING' OR token = 'EXPORTING' OR token = 'RETURNING'.
 
             IF ls_param-param IS NOT INITIAL.
@@ -6705,7 +6746,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
             ls_param-type = 'E'.
             CLEAR: lv_type, lv_par.
-            "CONTINUE.
           ELSEIF token = 'OPTIONAL' OR token = 'PREFERRED'.
             CONTINUE.
           ELSEIF token = 'PARAMETER'.
@@ -6731,7 +6771,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
                 CLEAR: lv_par, ls_param-param.
               ENDIF.
 
-              IF lv_par IS INITIAL.
+              IF lv_par IS INITIAL AND sy-index > 3.
                 ls_param-param = token.
                 lv_par = abap_true.
                 CONTINUE.
@@ -6794,7 +6834,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
                     APPEND  ls_composed TO lt_composed.
                     IF ls_call IS NOT INITIAL.
                       ls_call-outer = lv_temp.
-                      APPEND ls_call TO ls_token-tt_calls.
+                      READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                      IF sy-subrc <> 0.
+                        APPEND ls_call TO ls_token-tt_calls.
+                      ENDIF.
                     ENDIF.
                   ENDIF.
                 ENDIF.
@@ -6811,7 +6854,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
                 IF NOT lv_temp  CA '()' .
                   IF NOT lv_temp  CO '0123456789. '.
                     ls_call-outer = lv_temp.
-                    APPEND ls_call TO ls_token-tt_calls.
+                    READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                    IF sy-subrc <> 0.
+                      APPEND ls_call TO ls_token-tt_calls.
+                    ENDIF.
                     lv_change = lv_temp.
                   ENDIF.
                 ENDIF.
@@ -6822,8 +6868,9 @@ CLASS lcl_source_parser IMPLEMENTATION.
                     lv_export.
 
               IF lv_prev = 'FUNCTION' AND lt_kw = 'CALL'.
-                ls_call-event = 'FUNCTION'.
-                ls_call-name = token.
+                ls_token-to_evtype =   ls_call-event = 'FUNCTION'.
+                ls_token-to_evname =  ls_call-name = token.
+                REPLACE ALL OCCURRENCES OF '''' IN  ls_token-to_evname WITH ''.
               ENDIF.
 
               IF token = 'EXPORTING' OR token = 'CHANGING' OR token = 'TABLES'.
@@ -6848,12 +6895,18 @@ CLASS lcl_source_parser IMPLEMENTATION.
                   IF NOT lv_temp  CO '0123456789. '.
                     IF lv_import = abap_true.
                       ls_call-outer = lv_temp.
-                      APPEND ls_call TO ls_token-tt_calls.
+                      READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                      IF sy-subrc <> 0.
+                        APPEND ls_call TO ls_token-tt_calls.
+                      ENDIF.
                       ls_calculated-calculated = lv_temp.
                       APPEND  ls_calculated TO lt_calculated.
                     ELSEIF lv_export = abap_true.
                       ls_call-outer = lv_temp.
-                      APPEND ls_call TO ls_token-tt_calls.
+                      READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                      IF sy-subrc <> 0.
+                        APPEND ls_call TO ls_token-tt_calls.
+                      ENDIF.
                       ls_composed-composing = lv_temp.
                       APPEND  ls_composed TO lt_composed.
                     ENDIF.
@@ -6922,7 +6975,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
               IF NOT lv_temp  CA '()' .
                 IF NOT lv_temp  CO '0123456789. '.
                   ls_call-outer = lv_temp.
-                  APPEND ls_call TO ls_token-tt_calls.
+                  READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                  IF sy-subrc <> 0.
+                    APPEND ls_call TO ls_token-tt_calls.
+                  ENDIF.
                   lv_change = lv_temp.
                 ENDIF.
               ENDIF.
@@ -6933,12 +6989,19 @@ CLASS lcl_source_parser IMPLEMENTATION.
                 IF NOT lv_temp  CO '0123456789. '.
                   IF lv_import = abap_true.
                     ls_call-outer = lv_temp.
-                    APPEND ls_call TO ls_token-tt_calls.
+                    READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                    IF sy-subrc <> 0.
+                      APPEND ls_call TO ls_token-tt_calls.
+                    ENDIF.
+
                     ls_calculated-calculated = lv_temp.
                     APPEND  ls_calculated TO lt_calculated.
                   ELSEIF lv_export = abap_true.
                     ls_call-outer = lv_temp.
-                    APPEND ls_call TO ls_token-tt_calls.
+                    READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                    IF sy-subrc <> 0.
+                      APPEND ls_call TO ls_token-tt_calls.
+                    ENDIF.
                     ls_composed-composing = lv_temp.
                     APPEND  ls_composed TO lt_composed.
                   ENDIF.
@@ -7016,6 +7079,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
       ENDDO.
 
       "Fill keyword links for perform
+
       LOOP AT lt_tokens ASSIGNING FIELD-SYMBOL(<s_token>) WHERE tt_calls IS NOT INITIAL.
 
         READ TABLE <s_token>-tt_calls INDEX 1 INTO ls_call.
@@ -7025,6 +7089,11 @@ CLASS lcl_source_parser IMPLEMENTATION.
           READ TABLE <s_token>-tt_calls INDEX lv_index ASSIGNING FIELD-SYMBOL(<call>).
           IF sy-subrc = 0.
             <call>-inner = ls_param-param.
+            IF ls_param-type = 'I'.
+              <call>-type = '>'.
+            ELSE.
+              <call>-type = '<'.
+            ENDIF.
           ENDIF.
         ENDLOOP.
 
@@ -7042,9 +7111,11 @@ CLASS lcl_source_parser IMPLEMENTATION.
       ls_source-t_composed = lt_composed.
       ls_source-tt_tabs = lt_tabs.
       APPEND ls_source TO io_debugger->mo_window->mt_source.
+
     ENDIF.
 
   ENDMETHOD.
+
 
 ENDCLASS.
 
