@@ -567,12 +567,23 @@ ENDCLASS.
 CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_script.
 
   PUBLIC SECTION.
+
+    TYPES: BEGIN OF ts_if,
+             if_ind      TYPE i,
+             end_ind     TYPE i,
+             before_else TYPE i,
+           END OF ts_if,
+           tt_if TYPE STANDARD TABLE OF ts_if WITH EMPTY KEY.
+
+
     DATA: mo_debugger     TYPE REF TO lcl_debugger_script,
           mo_mm_container TYPE REF TO cl_gui_container,
           mo_mm_toolbar   TYPE REF TO cl_gui_container,
           mo_toolbar      TYPE REF TO cl_gui_toolbar,
           mo_diagram      TYPE REF TO zcl_wd_gui_mermaid_js_diagram,
-          mv_type         TYPE string.
+          mv_type         TYPE string,
+          ms_if           TYPE ts_if,
+          mt_if           TYPE tt_if.
 
     METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script
                                    iv_type     TYPE string,
@@ -1095,18 +1106,30 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
 
            BEGIN OF ts_calls,
              event TYPE string,
+             type  TYPE string,
              name  TYPE string,
              outer TYPE string,
              inner TYPE string,
            END OF ts_calls,
            tt_calls TYPE STANDARD TABLE OF ts_calls WITH NON-UNIQUE KEY event,
 
+           BEGIN OF ts_calls_line,
+             class     TYPE string,
+             eventtype TYPE string,
+             eventname TYPE string,
+             index     TYPE i,
+           END OF ts_calls_line,
+           tt_calls_line TYPE STANDARD TABLE OF ts_calls_line WITH NON-UNIQUE EMPTY KEY,
+
            BEGIN OF ts_kword,
-             line     TYPE i,
-             name     TYPE string,
-             from     TYPE i,
-             to       TYPE i,
-             tt_calls TYPE tt_calls,
+             index     TYPE i,
+             line      TYPE i,
+             name      TYPE string,
+             from      TYPE i,
+             to        TYPE i,
+             tt_calls  TYPE tt_calls,
+             to_evtype TYPE string,
+             to_evname TYPE string,
            END OF ts_kword,
 
            BEGIN OF ts_calculated,
@@ -1142,14 +1165,15 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
            tt_tabs TYPE STANDARD TABLE OF ts_int_tabs WITH EMPTY KEY,
 
            BEGIN OF ts_progs,
-             include      TYPE program,
-             source       TYPE REF TO cl_ci_source_include,
-             scan         TYPE REF TO cl_ci_scan,
-             t_keywords   TYPE tt_kword,
-             t_calculated TYPE tt_calculated,
-             t_composed   TYPE tt_composed,
-             t_params     TYPE tt_params,
-             tt_tabs      TYPE tt_tabs,
+             include       TYPE program,
+             source        TYPE REF TO cl_ci_source_include,
+             scan          TYPE REF TO cl_ci_scan,
+             t_keywords    TYPE tt_kword,
+             t_calculated  TYPE tt_calculated,
+             t_composed    TYPE tt_composed,
+             t_params      TYPE tt_params,
+             tt_tabs       TYPE tt_tabs,
+             tt_calls_line TYPE tt_calls_line,
            END OF ts_progs,
 
            BEGIN OF ts_locals,
@@ -2131,7 +2155,24 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ADD 1 TO m_step.
           m_hist_step = m_step.
           GET TIME.
-          APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
+          "add missed ELSE/ENDIF/ENDCASE
+          READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO DATA(ls_source).
+          READ TABLE ls_source-t_keywords WITH KEY line = ms_stack-line INTO DATA(ls_key).
+          READ TABLE ls_source-t_keywords INDEX sy-tabix - 1 INTO ls_key.
+          READ TABLE mt_steps INDEX m_step - 1 INTO DATA(ls_step).
+          READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO DATA(ls_key_prev).
+
+          IF ls_key_prev-name <> 'DO' AND ls_key_prev-name <> 'LOOP' AND ls_key_prev-name <> 'WHILE'.
+            IF ls_key-name = 'ELSE' OR ls_key-name = 'ENDIF' OR ls_key-name = 'ENDCASE'.
+              APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
+              MOVE-CORRESPONDING ms_stack TO <step>.
+              <step>-line = ls_key-line.
+              <step>-step = m_step.
+              ADD 1 TO m_step.
+            ENDIF.
+          ENDIF.
+
+          APPEND INITIAL LINE TO mt_steps ASSIGNING <step>.
           MOVE-CORRESPONDING ms_stack TO <step>.
           <step>-time = sy-uzeit.
           <step>-step = m_step.
@@ -2178,7 +2219,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     IF mo_window->m_version IS INITIAL.
       DATA: lv_optimize TYPE xfeld.
-      READ TABLE mo_window->mt_source WITH KEY include = ms_stack_prev-include INTO DATA(ls_source).
+      READ TABLE mo_window->mt_source WITH KEY include = ms_stack_prev-include INTO ls_source.
       IF sy-subrc = 0.
         READ TABLE ls_source-t_keywords WITH KEY line = ms_stack_prev-line INTO DATA(ls_oper).
         IF mv_stack_changed IS INITIAL.
@@ -3949,11 +3990,11 @@ ENDCLASS.
 CLASS lcl_sel_opt DEFINITION.
 
   PUBLIC SECTION.
-    DATA: mo_viewer  TYPE REF TO lcl_table_viewer,
-          mo_sel_alv TYPE REF TO cl_gui_alv_grid,
-          mt_fcat    TYPE lvc_t_fcat,
-          mt_sel_tab TYPE TABLE OF lcl_types=>selection_display_s,
-          ms_layout  TYPE lvc_s_layo.
+    DATA: mo_debugger TYPE REF TO lcl_table_viewer,
+          mo_sel_alv  TYPE REF TO cl_gui_alv_grid,
+          mt_fcat     TYPE lvc_t_fcat,
+          mt_sel_tab  TYPE TABLE OF lcl_types=>selection_display_s,
+          ms_layout   TYPE lvc_s_layo.
 
     EVENTS: selection_done.
     METHODS:
@@ -4794,7 +4835,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
           it_filter = lt_filter.
       lcl_alv_common=>refresh( mo_sel->mo_sel_alv ).
       lcl_alv_common=>refresh( mo_alv ).
-      mo_sel->mo_viewer->handle_user_command( 'SHOW' ).
+      mo_sel->mo_debugger->handle_user_command( 'SHOW' ).
       LOOP AT mo_column_emitters INTO DATA(l_emit).
         l_emit-emitter->emit_col( l_emit-column ).
       ENDLOOP.
@@ -4807,7 +4848,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
     DATA: effect     TYPE i,
           handle_alv TYPE i.
 
-    mo_viewer = io_viewer.
+    mo_debugger = io_viewer.
     mo_sel_alv = NEW #( i_parent = io_container ).
     update_sel_tab( ).
     CREATE OBJECT lcl_appl=>c_dragdropalv.
@@ -4907,8 +4948,8 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       DATA(lt_copy) = mt_sel_tab.
     ENDIF.
     CLEAR mt_sel_tab[].
-    mo_viewer->mo_alv->get_frontend_fieldcatalog( IMPORTING et_fieldcatalog = mo_viewer->mt_alv_catalog ).
-    LOOP AT mo_viewer->mt_alv_catalog INTO DATA(l_catalog) WHERE domname NE 'MANDT'.
+    mo_debugger->mo_alv->get_frontend_fieldcatalog( IMPORTING et_fieldcatalog = mo_debugger->mt_alv_catalog ).
+    LOOP AT mo_debugger->mt_alv_catalog INTO DATA(l_catalog) WHERE domname NE 'MANDT'.
       DATA(lv_ind) = sy-tabix.
       APPEND INITIAL LINE TO mt_sel_tab ASSIGNING FIELD-SYMBOL(<sel_tab>).
       READ TABLE lt_copy INTO DATA(ls_copy) WITH KEY field_label = l_catalog-fieldname.
@@ -4927,7 +4968,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       <sel_tab>-domain =  l_catalog-domname.
       <sel_tab>-datatype = l_catalog-datatype.
       <sel_tab>-length = l_catalog-outputlen.
-      lcl_alv_common=>translate_field( EXPORTING i_lang = mo_viewer->m_lang CHANGING c_fld = l_catalog ).
+      lcl_alv_common=>translate_field( EXPORTING i_lang = mo_debugger->m_lang CHANGING c_fld = l_catalog ).
       <sel_tab>-name = l_catalog-scrtext_l.
     ENDLOOP.
 
@@ -4993,7 +5034,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       CALL FUNCTION 'DOCU_CALL'
         EXPORTING
           id                = 'DE'
-          langu             = mo_viewer->m_lang
+          langu             = mo_debugger->m_lang
           object            = l_sel-element
           typ               = 'E'
           displ             = abap_true
@@ -5143,7 +5184,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
 
       CALL FUNCTION 'F4IF_FIELD_VALUE_REQUEST'
         EXPORTING
-          tabname           = mo_viewer->m_tabname
+          tabname           = mo_debugger->m_tabname
           fieldname         = l_fname
           callback_program  = sy-repid
           callback_form     = 'CALLBACK_F4_SEL' "callback_method - doesn't work for local class
@@ -5205,7 +5246,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
           CLEAR: <tab>-low, <tab>-high,<tab>-sign, <tab>-opti, <tab>-range.
         ENDIF.
       WHEN 'MORE_ICON'. "edit ranges
-        l_tabfield-tablename = mo_viewer->m_tabname.
+        l_tabfield-tablename = mo_debugger->m_tabname.
         l_tabfield-fieldname = <tab>-field_label.
 
         CALL FUNCTION 'COMPLEX_SELECTIONS_DIALOG'
@@ -5244,7 +5285,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
     LOOP AT er_data_changed->mt_good_cells ASSIGNING FIELD-SYMBOL(<ls_cells>).
       READ TABLE mt_sel_tab INDEX <ls_cells>-row_id ASSIGNING FIELD-SYMBOL(<tab>).
       ASSIGN COMPONENT <ls_cells>-fieldname OF STRUCTURE <tab> TO <field>.
-      READ TABLE mo_viewer->mt_alv_catalog WITH KEY fieldname = <tab>-field_label INTO DATA(l_cat).
+      READ TABLE mo_debugger->mt_alv_catalog WITH KEY fieldname = <tab>-field_label INTO DATA(l_cat).
 
       IF <field> IS NOT INITIAL AND <ls_cells>-value IS INITIAL.
         READ TABLE <tab>-range INTO DATA(l_second) INDEX 2.
@@ -5370,24 +5411,24 @@ CLASS lcl_sel_opt IMPLEMENTATION.
 
     IF e_ucomm = 'SEL_OFF'. "Hide select-options alv
 
-      mo_viewer->m_visible = ''.
+      mo_debugger->m_visible = ''.
 
       lv_sel_width = 0.
-      CALL METHOD mo_viewer->mo_splitter->get_column_width
+      CALL METHOD mo_debugger->mo_splitter->get_column_width
         EXPORTING
           id                = 1
         IMPORTING
-          result            = mo_viewer->mo_sel_width
+          result            = mo_debugger->mo_sel_width
         EXCEPTIONS
           cntl_error        = 1
           cntl_system_error = 2
           OTHERS            = 3.
 
-      CALL METHOD mo_viewer->mo_splitter->set_column_width
+      CALL METHOD mo_debugger->mo_splitter->set_column_width
         EXPORTING
           id    = 1
           width = lv_sel_width.
-      mo_viewer->mo_alv->set_toolbar_interactive( ).
+      mo_debugger->mo_alv->set_toolbar_interactive( ).
       RETURN.
     ENDIF.
 
@@ -5411,7 +5452,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       RAISE EVENT selection_done.
     ENDIF.
 
-    lcl_alv_common=>refresh( mo_viewer->mo_alv ).
+    lcl_alv_common=>refresh( mo_debugger->mo_alv ).
     RAISE EVENT selection_done.
 
   ENDMETHOD.                           "handle_user_command
@@ -6554,6 +6595,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
           lt_calculated TYPE lcl_window=>tt_calculated,
           lt_composed   TYPE lcl_window=>tt_composed,
           ls_call       TYPE lcl_window=>ts_calls,
+          ls_call_line  TYPE lcl_window=>ts_calls_line,
           ls_tabs       TYPE lcl_window=>ts_int_tabs,
           lt_tabs       TYPE lcl_window=>tt_tabs,
           lv_eventtype  TYPE string,
@@ -6562,7 +6604,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
           lv_par        TYPE char1,
           lv_type       TYPE char1,
           lv_class      TYPE xfeld,
+          lv_cl_name    TYPE string,
           lv_preferred  TYPE xfeld.
+
+    "CLEAR mv_step.
 
     READ TABLE io_debugger->mo_window->mt_source WITH KEY include = iv_program INTO DATA(ls_source).
     IF sy-subrc <> 0.
@@ -6599,7 +6644,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
         lt_kw = lo_procedure->get_keyword( ).
 
         ls_token-name = lt_kw.
-
+        ls_token-index = lo_procedure->statement_index.
         READ TABLE lo_scan->statements INDEX lo_procedure->statement_index INTO DATA(ls_statement).
         IF sy-subrc <> 0.
           EXIT.
@@ -6627,23 +6672,30 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
         IF lt_kw = 'ENDFORM' OR lt_kw = 'ENDMETHOD'.
           CLEAR: lv_eventtype, lv_eventname, ls_tabs.
+          IF ls_param-param IS INITIAL. "No params - save empty row if no params
+            READ TABLE ls_source-t_params WITH KEY event = ls_param-event name = ls_param-name TRANSPORTING NO FIELDS.
+            IF sy-subrc <> 0.
+              CLEAR ls_param-type.
+              APPEND ls_param TO ls_source-t_params.
+            ENDIF.
+          ENDIF.
         ENDIF.
 
         CLEAR lv_prev.
         IF lt_kw = 'ASSIGN' OR lt_kw = 'ADD' OR lt_kw = 'SUBTRACT' .
           DATA(lv_count) = 0.
         ENDIF.
-        CLEAR lv_new.
+        CLEAR: lv_new, ls_token-to_evname, ls_token-to_evtype .
+
+
         WHILE 1 = 1.
           IF lt_kw IS INITIAL.
             EXIT.
           ENDIF.
-
           CLEAR lv_change.
           token = lo_procedure->get_token( offset = sy-index ).
 
-          "IF sy-index <= 2.
-          IF token CS '(' AND ( NOT token CS ')' )."can be method call
+          IF ( token CS '(' AND ( NOT token CS ')' ) ) OR token CS '->' OR token CS '=>'."can be method call
             ls_call-name = token.
             ls_call-event = 'METHOD'.
             REPLACE ALL OCCURRENCES OF '(' IN ls_call-name WITH ''.
@@ -6658,7 +6710,11 @@ CLASS lcl_source_parser IMPLEMENTATION.
               SPLIT ls_call-name  AT '=>' INTO TABLE lt_split.
               ls_call-name = lt_split[ 2 ].
             ENDIF.
-
+            ls_token-to_evname = ls_call-name.
+            ls_token-to_evtype = ls_call-event = 'METHOD'.
+            IF lv_new = abap_true.
+              ls_call-name =  ls_token-to_evname = 'CONSTRUCTOR'.
+            ENDIF.
           ENDIF.
 
           IF sy-index = 1 AND ls_token-name = token.
@@ -6671,16 +6727,27 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
 
           IF sy-index = 2 AND lt_kw = 'PERFORM'.
-            ls_call-name = token.
-            ls_call-event = 'FORM'.
+            ls_token-to_evname = ls_call-name = token.
+            ls_token-to_evtype = ls_call-event = 'FORM'.
           ENDIF.
 
           IF sy-index = 2 AND lv_class = abap_true AND ls_param-class IS INITIAL.
-            ls_param-class = token.
+            ls_call_line-class = ls_param-class = token.
           ENDIF.
 
           IF sy-index = 2 AND lv_eventtype IS NOT INITIAL AND lv_eventname IS INITIAL.
             ls_tabs-eventname = lv_eventname = ls_param-name =  token.
+
+            MOVE-CORRESPONDING ls_tabs TO ls_call_line.
+            ls_call_line-index = lo_procedure->statement_index + 1.
+            "methods in definition should be overwrited by Implementation section
+            READ TABLE ls_source-tt_calls_line WITH KEY eventname = ls_call_line-eventname eventtype = ls_call_line-eventtype ASSIGNING FIELD-SYMBOL(<call_line>).
+            IF sy-subrc = 0.
+              <call_line> = ls_call_line.
+            ELSE.
+              APPEND ls_call_line TO ls_source-tt_calls_line.
+            ENDIF.
+
           ENDIF.
 
           IF token = ''.
@@ -6692,6 +6759,11 @@ CLASS lcl_source_parser IMPLEMENTATION.
                   APPEND  ls_composed TO lt_composed.
                 ENDIF.
               WHEN 'CLEAR' OR 'SORT' OR 'CONDENSE'."no logic
+              WHEN 'FORM'.
+                IF ls_param-name IS NOT INITIAL.
+                  APPEND ls_param TO ls_source-t_params.
+                  CLEAR ls_param.
+                ENDIF.
             ENDCASE.
             EXIT.
           ENDIF.
@@ -6699,7 +6771,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
           IF token = 'USING' OR token = 'IMPORTING'.
             ls_param-type = 'I'.
             CLEAR: lv_type, lv_par.
-            "CONTINUE.
           ELSEIF token = 'CHANGING' OR token = 'EXPORTING' OR token = 'RETURNING'.
 
             IF ls_param-param IS NOT INITIAL.
@@ -6709,7 +6780,6 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
             ls_param-type = 'E'.
             CLEAR: lv_type, lv_par.
-            "CONTINUE.
           ELSEIF token = 'OPTIONAL' OR token = 'PREFERRED'.
             CONTINUE.
           ELSEIF token = 'PARAMETER'.
@@ -6735,7 +6805,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
                 CLEAR: lv_par, ls_param-param.
               ENDIF.
 
-              IF lv_par IS INITIAL.
+              IF lv_par IS INITIAL AND sy-index > 3.
                 ls_param-param = token.
                 lv_par = abap_true.
                 CONTINUE.
@@ -6798,7 +6868,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
                     APPEND  ls_composed TO lt_composed.
                     IF ls_call IS NOT INITIAL.
                       ls_call-outer = lv_temp.
-                      APPEND ls_call TO ls_token-tt_calls.
+                      READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                      IF sy-subrc <> 0.
+                        APPEND ls_call TO ls_token-tt_calls.
+                      ENDIF.
                     ENDIF.
                   ENDIF.
                 ENDIF.
@@ -6815,7 +6888,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
                 IF NOT lv_temp  CA '()' .
                   IF NOT lv_temp  CO '0123456789. '.
                     ls_call-outer = lv_temp.
-                    APPEND ls_call TO ls_token-tt_calls.
+                    READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                    IF sy-subrc <> 0.
+                      APPEND ls_call TO ls_token-tt_calls.
+                    ENDIF.
                     lv_change = lv_temp.
                   ENDIF.
                 ENDIF.
@@ -6826,8 +6902,9 @@ CLASS lcl_source_parser IMPLEMENTATION.
                     lv_export.
 
               IF lv_prev = 'FUNCTION' AND lt_kw = 'CALL'.
-                ls_call-event = 'FUNCTION'.
-                ls_call-name = token.
+                ls_token-to_evtype =   ls_call-event = 'FUNCTION'.
+                ls_token-to_evname =  ls_call-name = token.
+                REPLACE ALL OCCURRENCES OF '''' IN  ls_token-to_evname WITH ''.
               ENDIF.
 
               IF token = 'EXPORTING' OR token = 'CHANGING' OR token = 'TABLES'.
@@ -6852,12 +6929,18 @@ CLASS lcl_source_parser IMPLEMENTATION.
                   IF NOT lv_temp  CO '0123456789. '.
                     IF lv_import = abap_true.
                       ls_call-outer = lv_temp.
-                      APPEND ls_call TO ls_token-tt_calls.
+                      READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                      IF sy-subrc <> 0.
+                        APPEND ls_call TO ls_token-tt_calls.
+                      ENDIF.
                       ls_calculated-calculated = lv_temp.
                       APPEND  ls_calculated TO lt_calculated.
                     ELSEIF lv_export = abap_true.
                       ls_call-outer = lv_temp.
-                      APPEND ls_call TO ls_token-tt_calls.
+                      READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                      IF sy-subrc <> 0.
+                        APPEND ls_call TO ls_token-tt_calls.
+                      ENDIF.
                       ls_composed-composing = lv_temp.
                       APPEND  ls_composed TO lt_composed.
                     ENDIF.
@@ -6926,7 +7009,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
               IF NOT lv_temp  CA '()' .
                 IF NOT lv_temp  CO '0123456789. '.
                   ls_call-outer = lv_temp.
-                  APPEND ls_call TO ls_token-tt_calls.
+                  READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                  IF sy-subrc <> 0.
+                    APPEND ls_call TO ls_token-tt_calls.
+                  ENDIF.
                   lv_change = lv_temp.
                 ENDIF.
               ENDIF.
@@ -6937,12 +7023,19 @@ CLASS lcl_source_parser IMPLEMENTATION.
                 IF NOT lv_temp  CO '0123456789. '.
                   IF lv_import = abap_true.
                     ls_call-outer = lv_temp.
-                    APPEND ls_call TO ls_token-tt_calls.
+                    READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                    IF sy-subrc <> 0.
+                      APPEND ls_call TO ls_token-tt_calls.
+                    ENDIF.
+
                     ls_calculated-calculated = lv_temp.
                     APPEND  ls_calculated TO lt_calculated.
                   ELSEIF lv_export = abap_true.
                     ls_call-outer = lv_temp.
-                    APPEND ls_call TO ls_token-tt_calls.
+                    READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
+                    IF sy-subrc <> 0.
+                      APPEND ls_call TO ls_token-tt_calls.
+                    ENDIF.
                     ls_composed-composing = lv_temp.
                     APPEND  ls_composed TO lt_composed.
                   ENDIF.
@@ -7020,6 +7113,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
       ENDDO.
 
       "Fill keyword links for perform
+
       LOOP AT lt_tokens ASSIGNING FIELD-SYMBOL(<s_token>) WHERE tt_calls IS NOT INITIAL.
 
         READ TABLE <s_token>-tt_calls INDEX 1 INTO ls_call.
@@ -7029,6 +7123,11 @@ CLASS lcl_source_parser IMPLEMENTATION.
           READ TABLE <s_token>-tt_calls INDEX lv_index ASSIGNING FIELD-SYMBOL(<call>).
           IF sy-subrc = 0.
             <call>-inner = ls_param-param.
+            IF ls_param-type = 'I'.
+              <call>-type = '>'.
+            ELSE.
+              <call>-type = '<'.
+            ENDIF.
           ENDIF.
         ENDLOOP.
 
@@ -7046,9 +7145,11 @@ CLASS lcl_source_parser IMPLEMENTATION.
       ls_source-t_composed = lt_composed.
       ls_source-tt_tabs = lt_tabs.
       APPEND ls_source TO io_debugger->mo_window->mt_source.
+
     ENDIF.
 
   ENDMETHOD.
+
 
 ENDCLASS.
 
@@ -7188,28 +7289,41 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
   METHOD magic_search.
 
-    DATA: lv_add       TYPE xfeld,
-          lv_mm_string TYPE string,
-          lv_sub       TYPE string,
-          lv_form      TYPE string,
-          lv_direction TYPE string.
+    DATA: lv_add         TYPE xfeld,
+          lv_mm_string   TYPE string,
+          lv_sub         TYPE string,
+          lv_form        TYPE string,
+          lv_direction   TYPE string,
+          lv_box_s       TYPE string,
+          lv_box_e       TYPE string,
+          lv_ind2        TYPE i,
+          lv_start       TYPE i,
+          lv_end         TYPE i,
+          lv_bool        TYPE string,
+          lv_block_first TYPE i,
+          lv_els_before  TYPE i.
 
     TYPES: BEGIN OF ts_line,
-             include TYPE string,
-             line    TYPE i,
-             event   TYPE string,
-             stack   TYPE i,
-             code    TYPE string,
-             arrow   TYPE string,
-             subname TYPE string,
-             del     TYPE flag,
+             cond       TYPE string,
+             include    TYPE string,
+             line       TYPE i,
+             ind        TYPE i,
+             event      TYPE string,
+             stack      TYPE i,
+             code       TYPE string,
+             arrow      TYPE string,
+             subname    TYPE string,
+             del        TYPE flag,
+             els_before TYPE i,
+             els_after  TYPE i,
            END OF ts_line.
 
     DATA: ls_line       TYPE ts_line,
           lt_lines      TYPE STANDARD TABLE OF ts_line,
           ls_prev_stack TYPE ts_line,
           lv_opened     TYPE i.
-Clear mo_debugger->mo_window->mt_watch.
+
+    Clear mo_debugger->mo_window->mt_watch.
 
     LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO DATA(ls_source).
@@ -7217,14 +7331,44 @@ Clear mo_debugger->mo_window->mt_watch.
       LOOP AT ls_keyword-tt_calls INTO DATA(ls_call).
 
         READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-outer TRANSPORTING NO FIELDS.
-        IF sy-subrc = 0.
+        IF sy-subrc <> 0.
           APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
+          <selected>-name = ls_call-outer.
+        ENDIF.
+
+        READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-inner TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0.
+          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
           <selected>-name = ls_call-inner.
         ENDIF.
       ENDLOOP.
     ENDLOOP.
 
     DATA(lt_steps) = mo_debugger->mt_steps.
+
+    "deleting empty cycles.
+    DATA: lv_prev     LIKE LINE OF lt_steps,
+          lv_prev_key TYPE string.
+
+    READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO ls_source.
+
+    LOOP AT lt_steps ASSIGNING FIELD-SYMBOL(<step>).
+      DATA(lv_ind) = sy-tabix.
+      READ TABLE ls_source-t_keywords WITH KEY line = <step>-line INTO DATA(ls_key).
+      IF lv_prev IS NOT INITIAL.
+        IF ls_key-name = 'ENDDO' AND lv_prev_key = 'DO'.
+          <step>-first = 'D'."to delete
+          READ TABLE lt_steps INDEX lv_ind - 1 ASSIGNING FIELD-SYMBOL(<step_prev>).
+          <step_prev>-first = 'D'.
+        ENDIF.
+      ENDIF.
+      lv_prev = <step>.
+      lv_prev_key = ls_key-name.
+    ENDLOOP.
+
+    DELETE lt_steps WHERE first = 'D'.
+
+
     SORT lt_steps BY step DESCENDING.
 
     "collecting dependents variables
@@ -7235,22 +7379,24 @@ Clear mo_debugger->mo_window->mt_watch.
       LOOP AT ls_source-t_calculated INTO DATA(ls_calculated) WHERE line = ls_step-line.
         READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_calculated-calculated TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
-          LOOP AT ls_source-t_composed INTO DATA(ls_composed) WHERE line = ls_step-line.
-            READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_composed-composing TRANSPORTING NO FIELDS.
-            IF sy-subrc <> 0.
-              APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-              <selected>-name = ls_composed-composing.
-            ENDIF.
-          ENDLOOP.
-          "adding returning values
-          LOOP AT ls_source-t_params INTO DATA(lv_param).
-            READ TABLE mo_debugger->mt_selected_var WITH KEY name = lv_param-param TRANSPORTING NO FIELDS.
-            IF sy-subrc <> 0.
-              APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-              <selected>-name = lv_param-param.
-            ENDIF.
-          ENDLOOP.
+          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+          <selected>-name = ls_calculated-calculated.
         ENDIF.
+        LOOP AT ls_source-t_composed INTO DATA(ls_composed) WHERE line = ls_step-line.
+          READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_composed-composing TRANSPORTING NO FIELDS.
+          IF sy-subrc = 0.
+            APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+            <selected>-name = ls_composed-composing.
+          ENDIF.
+        ENDLOOP.
+        "adding returning values
+        LOOP AT ls_source-t_params INTO DATA(lv_param).
+          READ TABLE mo_debugger->mt_selected_var WITH KEY name = lv_param-param TRANSPORTING NO FIELDS.
+          IF sy-subrc <> 0.
+            APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+            <selected>-name = lv_param-param.
+          ENDIF.
+        ENDLOOP.
       ENDLOOP.
 
       READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO ls_keyword.
@@ -7264,6 +7410,8 @@ Clear mo_debugger->mo_window->mt_watch.
       ENDLOOP.
 
     ENDLOOP.
+    SORT mo_debugger->mt_selected_var.
+    DELETE ADJACENT DUPLICATES FROM mo_debugger->mt_selected_var.
 
     "collecting watchpoints
     CLEAR mo_debugger->mo_window->mt_coverage.
@@ -7271,6 +7419,23 @@ Clear mo_debugger->mo_window->mt_watch.
     LOOP AT  lt_steps INTO ls_step.
 
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO ls_source.
+      READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO ls_key.
+
+      CLEAR ls_line-cond.
+      IF ls_key-name = 'IF' OR ls_key-name = 'ELSE' OR ls_key-name = 'ENDIF' OR ls_key-name = 'ELSEIF' OR
+         ls_key-name = 'CASE' OR ls_key-name = 'WHEN' OR ls_key-name = 'ENDCASE' OR
+          ls_key-name = 'DO' OR ls_key-name = 'ENDDO'  OR ls_key-name = 'LOOP'  OR ls_key-name = 'ENDLOOP' OR ls_key-name = 'WHILE' OR ls_key-name = 'ENDWHILE'.
+        APPEND INITIAL LINE TO mo_debugger->mo_window->mt_watch ASSIGNING FIELD-SYMBOL(<watch>).
+
+        <watch>-program = ls_step-program.
+        <watch>-line = ls_line-line = ls_step-line.
+
+        INSERT ls_line INTO lt_lines INDEX 1 ASSIGNING FIELD-SYMBOL(<line>).
+        <line>-cond = ls_key-name.
+        <line>-event = ls_step-eventname.
+        <line>-stack = ls_step-stacklevel.
+        <line>-include = ls_step-include.
+      ENDIF.
 
       LOOP AT  ls_source-t_calculated INTO ls_calculated WHERE line = ls_step-line.
 
@@ -7285,71 +7450,186 @@ Clear mo_debugger->mo_window->mt_watch.
         READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_calculated-calculated TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
 
-          APPEND INITIAL LINE TO mo_debugger->mo_window->mt_watch ASSIGNING FIELD-SYMBOL(<watch>).
+          APPEND INITIAL LINE TO mo_debugger->mo_window->mt_watch ASSIGNING <watch>.
           <watch>-program = ls_step-program.
           <watch>-line = ls_line-line = ls_step-line.
 
-          LOOP AT lt_lines ASSIGNING FIELD-SYMBOL(<line>) WHERE line = ls_line-line AND event = ls_step-eventname AND stack = ls_step-stacklevel .
-            <line>-del = abap_true.
-          ENDLOOP.
+          "should be commented for Smart debugger
+*          LOOP AT lt_lines ASSIGNING <line> WHERE line = ls_line-line AND event = ls_step-eventname AND stack = ls_step-stacklevel .
+*            <line>-del = abap_true.
+*          ENDLOOP.
 
           ls_line-event = ls_step-eventname.
           ls_line-stack = ls_step-stacklevel.
           ls_line-include = ls_step-include.
           INSERT ls_line INTO lt_lines INDEX 1.
-
         ENDIF.
-
+       EXIT.
       ENDLOOP.
 
     ENDLOOP.
-   
+    
 
     DELETE lt_lines WHERE del = abap_true.
 
     "getting code texts and calls params
     LOOP AT lt_lines ASSIGNING <line>.
-      DATA(lv_ind) = sy-tabix.
+      lv_ind = sy-tabix.
 
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = <line>-include INTO ls_source.
       READ TABLE ls_source-t_keywords WITH KEY line = <line>-line INTO ls_keyword.
       LOOP AT ls_source-scan->tokens FROM ls_keyword-from TO ls_keyword-to INTO DATA(ls_token).
-        <line>-code = |{  <line>-code } { ls_token-str }|.
+        IF ls_token-str = 'USING' OR ls_token-str = 'EXPORTING' OR ls_token-str = 'IMPORTING' OR ls_token-str = 'CHANGING'.
+          EXIT.
+        ENDIF.
+        IF <line>-code IS INITIAL.
+          <line>-code = ls_token-str.
+        ELSE.
+          <line>-code = |{  <line>-code } { ls_token-str }|.
+        ENDIF.
       ENDLOOP.
 
       LOOP AT ls_keyword-tt_calls INTO ls_call.
         IF sy-tabix <> 1.
           <line>-arrow = |{ <line>-arrow }, |.
         ENDIF.
-        <line>-arrow  = |{ <line>-arrow  } { ls_call-outer } = { ls_call-inner }|.
+        <line>-arrow  = |{ <line>-arrow  } { ls_call-outer } { ls_call-type } { ls_call-inner }|.
         <line>-subname = ls_call-name.
         REPLACE ALL OCCURRENCES OF '''' IN <line>-subname WITH ''.
       ENDLOOP.
     ENDLOOP.
 
-    "check subform execution steps existance
-    LOOP AT lt_lines ASSIGNING <line>.
+    "check subform execution steps existance and if/case structures build
+
+    DATA: if_depth   TYPE i,
+          when_count TYPE i.
+    LOOP AT lt_lines ASSIGNING <line> WHERE code <> 'DO' AND code <> 'ENDDO' AND code <> 'WHILE' AND code <> 'ENDWHILE' AND code <> 'LOOP' AND code <> 'ENDLOOP' .
+      <line>-ind = sy-tabix.
+
+      FIELD-SYMBOLS: <if> TYPE ts_if.
+      IF <line>-cond = 'IF' OR  <line>-cond = 'CASE'.
+        ADD 1 TO if_depth.
+        CLEAR when_count.
+        APPEND INITIAL LINE TO mt_if  ASSIGNING <if>.
+        <if>-if_ind = <line>-ind.
+
+      ENDIF.
+
+      IF <line>-cond = 'ENDIF' OR <line>-cond = 'ENDCASE'.
+        <if>-end_ind = <line>-ind.
+        SUBTRACT 1 FROM if_depth.
+        READ TABLE mt_if INDEX if_depth ASSIGNING <if>.
+      ENDIF.
+
+      IF <line>-cond = 'WHEN'.
+        ADD 1 TO when_count.
+      ENDIF.
+
+      IF <line>-cond = 'ELSE' OR <line>-cond = 'ELSEIF'.
+
+        <line>-els_before = lv_els_before.
+        <line>-els_after = <line>-ind.
+        DATA(lv_counter) = <line>-ind + 1.
+        DO.
+          READ TABLE lt_lines INDEX lv_counter INTO ls_line.
+          IF sy-subrc <> 0.
+            CLEAR <line>-els_after.
+            EXIT.
+          ENDIF.
+
+          IF ls_line-cond = 'ELSE' OR ls_line-cond = 'ELSEIF'.
+            CLEAR <line>-els_after.
+            EXIT.
+          ELSEIF  ls_line-cond <> 'DO' AND ls_line-cond <> 'ENDDO' AND ls_line-cond <> 'WHILE' AND ls_line-cond <> 'ENDWHILE' AND ls_line-cond <> 'LOOP' AND ls_line-cond <> 'ENDLOOP'.
+            <line>-els_after = lv_counter.
+            EXIT.
+          ELSE.
+            ADD 1 TO lv_counter.
+
+          ENDIF.
+        ENDDO.
+        IF when_count = 1.
+          <if>-if_ind = lv_els_before.
+          CLEAR <line>-els_before.
+        ENDIF.
+      ENDIF.
+
+      IF <line>-cond = 'WHEN'.
+
+        <line>-els_before = lv_els_before.
+        <line>-els_after = <line>-ind.
+        lv_counter = <line>-ind + 1.
+        DO.
+          READ TABLE lt_lines INDEX lv_counter INTO ls_line.
+          IF sy-subrc <> 0.
+            CLEAR <line>-els_after.
+            EXIT.
+          ENDIF.
+
+          IF ls_line-cond = 'WHEN'.
+            CLEAR <line>-els_after.
+            EXIT.
+          ELSEIF  ls_line-cond <> 'DO' AND ls_line-cond <> 'ENDDO' AND ls_line-cond <> 'WHILE' AND ls_line-cond <> 'ENDWHILE' AND ls_line-cond <> 'LOOP' AND ls_line-cond <> 'ENDLOOP'.
+            <line>-els_after = lv_counter.
+            EXIT.
+          ELSE.
+            ADD 1 TO lv_counter.
+
+          ENDIF.
+        ENDDO.
+        IF when_count = 1.
+          <if>-if_ind = lv_els_before.
+          CLEAR <line>-els_before.
+        ENDIF.
+      ENDIF.
+
+      IF <line>-cond <> 'ELSE' AND <line>-cond <> 'ELSEIF' AND <line>-cond <> 'WHEN'.
+        lv_els_before = <line>-ind.
+      ELSE.
+        CLEAR   lv_els_before.
+      ENDIF.
+
       READ TABLE lt_lines WITH KEY event = <line>-subname TRANSPORTING NO FIELDS.
       IF sy-subrc <> 0.
         CLEAR <line>-arrow.
       ENDIF.
     ENDLOOP.
 
+    IF mt_if IS INITIAL AND ms_if-if_ind IS NOT INITIAL.
+      INSERT ms_if INTO mt_if INDEX 1.
+    ENDIF.
+
+    IF lines( lt_lines ) > 0.
+      IF lt_lines[ lines( lt_lines ) ]-arrow IS NOT INITIAL.
+        CLEAR lt_lines[ lines( lt_lines ) ]-arrow .
+      ENDIF.
+    ENDIF.
+
     "creating mermaid code
     CHECK lt_lines IS NOT INITIAL.
+
     IF iv_direction IS INITIAL.
-      IF lines( lt_lines ) < 25.
+      IF lines( lt_lines ) < 100.
         lv_direction = 'LR'.
       ELSE.
-        lv_direction = 'TD'.
+        lv_direction = 'TB'.
       ENDIF.
     ELSE.
       lv_direction = iv_direction.
     ENDIF.
 
     lv_mm_string = |graph { lv_direction }\n |.
-    LOOP AT lt_lines INTO ls_line.
+
+    LOOP AT lt_lines INTO ls_line WHERE cond <> 'ELSE' AND cond <> 'ELSEIF' AND  cond <> 'WHEN'.
       lv_ind = sy-tabix.
+
+      IF ls_line-cond IS INITIAL.
+        lv_box_s = '('.
+        lv_box_e = ')'.
+      ELSE.
+        lv_box_s = '{'.
+        lv_box_e = '}'.
+      ENDIF.
 
       IF ls_prev_stack IS INITIAL.
         ls_prev_stack = ls_line.
@@ -7371,33 +7651,112 @@ Clear mo_debugger->mo_window->mt_watch.
         ENDDO.
 
       ENDIF.
+      DATA: lv_name TYPE string.
+      IF    ls_line-cond = 'LOOP' OR ls_line-cond = 'DO' OR ls_line-cond = 'WHILE' OR ls_line-arrow IS NOT INITIAL .
+        IF ls_line-arrow IS NOT INITIAL.
+          lv_mm_string = |{ lv_mm_string }{ lv_ind }{ lv_box_s }"{ ls_line-code }"{ lv_box_e }\n|.
+          ls_prev_stack = ls_line.
 
-      IF lv_ind <> 1.
-        IF lv_sub IS INITIAL.
-          lv_mm_string = |{ lv_mm_string }{ lv_ind - 1 }-->|.
-        ELSE.
-          CLEAR lv_sub.
         ENDIF.
-      ENDIF.
 
-      lv_mm_string = |{ lv_mm_string }{ sy-tabix }(" { ls_line-code }|.
+        IF strlen( ls_line-code ) > 50.
+          lv_name = ls_line-code+0(50).
+        ELSE.
+          lv_name = ls_line-code.
+        ENDIF.
+        REPLACE ALL OCCURRENCES OF `PERFORM` IN lv_name WITH `FORM` IN CHARACTER MODE.
+        REPLACE ALL OCCURRENCES OF `CALL FUNCTION` IN lv_name WITH `FUNCTION` IN CHARACTER MODE.
+        REPLACE ALL OCCURRENCES OF `CALL METHOD` IN lv_name WITH `METHOD` IN CHARACTER MODE.
+        REPLACE ALL OCCURRENCES OF `-` IN lv_name WITH `~` IN CHARACTER MODE.
+        REPLACE ALL OCCURRENCES OF ` ` IN lv_name WITH `&nbsp;` IN CHARACTER MODE.
 
-      IF ls_line-arrow IS NOT INITIAL.
+        lv_mm_string = |{ lv_mm_string } subgraph S{ lv_ind }["{ lv_name }"]\n  direction { lv_direction }\n|.
         ADD 1 TO lv_opened.
-        lv_mm_string = |{ lv_mm_string }")|.
-        lv_sub = '|"' && ls_line-arrow && '"|'.
-        lv_mm_string = |{ lv_mm_string }-->{ lv_sub }{ lv_ind + 1 }\n subgraph S{ lv_ind }["{ ls_line-subname }"]\n  direction TB\n|.
-      ELSE.
-        lv_mm_string = |{ lv_mm_string }")\n|.
+        lv_start = lv_ind.
+        CONTINUE.
       ENDIF.
 
+      IF ls_line-cond = 'ENDLOOP' OR ls_line-cond = 'ENDDO' OR ls_line-cond = 'ENDWHILE'.
+        SUBTRACT 1 FROM lv_opened.
+        lv_mm_string = |{ lv_mm_string } end\n|.
+        CONTINUE.
+      ENDIF.
+
+      lv_mm_string = |{ lv_mm_string }{ lv_ind }{ lv_box_s }"{ ls_line-code }"{ lv_box_e }\n|.
       ls_prev_stack = ls_line.
+
     ENDLOOP.
 
     DO lv_opened TIMES.
       lv_mm_string = |{ lv_mm_string } end\n|.
       SUBTRACT 1 FROM lv_opened.
     ENDDO.
+
+
+    DATA: if_ind      TYPE i.
+    CLEAR ls_prev_stack.
+    LOOP AT lt_lines INTO ls_line WHERE cond <> 'LOOP' AND cond <> 'DO' AND cond <> 'WHILE' AND cond <> 'ENDLOOP' AND cond <> 'ENDDO' AND cond <> 'ENDWHILE'.
+
+      IF ls_line-cond = 'IF' OR ls_line-cond = 'CASE' .
+        ADD 1 TO if_ind.
+        READ TABLE mt_if INDEX if_ind INTO ms_if.
+      ENDIF.
+
+
+      IF ls_prev_stack IS INITIAL.
+        IF ls_line-cond = 'WHEN' OR ls_line-cond = 'ELSE' OR ls_line-cond = 'ELSEIF'.
+          ls_prev_stack = lt_lines[ <if>-if_ind ].
+        ELSE.
+          ls_prev_stack = ls_line.
+          CONTINUE.
+        ENDIF.
+
+      ENDIF.
+
+      IF ls_line-cond = 'ELSE' OR ls_line-cond = 'ELSEIF' OR ls_line-cond = 'WHEN'.
+        lv_bool = '|' && ls_line-code && '|'.
+        IF ls_line-els_after IS NOT INITIAL.
+          lv_mm_string = |{ lv_mm_string }{ ms_if-if_ind }-->{ lv_bool }{ ls_line-els_after }\n|.
+          DATA(lv_diff) = ms_if-end_ind - ls_line-els_after.
+          DATA(lv_last_els) = ls_line-els_after.
+          IF ls_line-cond <> 'WHEN' AND ls_line-cond <> 'ELSEIF'  AND  lv_diff > 1 AND ls_line-els_after <> ms_if-end_ind.
+            lv_mm_string = |{ lv_mm_string }{  ls_line-els_after }-->{ ms_if-end_ind }\n|.
+          ENDIF.
+        ELSE.
+          lv_mm_string = |{ lv_mm_string }{ ms_if-if_ind }-->{ lv_bool }{ ms_if-end_ind }\n|.
+        ENDIF.
+
+        IF ls_line-els_before IS NOT INITIAL AND ls_line-els_before <> ms_if-if_ind.
+          lv_mm_string = |{ lv_mm_string }{ ls_line-els_before }-->{ ms_if-end_ind }\n|.
+        ENDIF.
+
+        IF lt_lines[ ls_line-ind + 1 ]-cond <> 'ENDIF' AND lt_lines[ ls_line-ind + 1 ]-cond <> 'ENDCASE'.
+          CLEAR ls_prev_stack.
+        ENDIF.
+        CONTINUE.
+      ENDIF.
+
+      IF   ls_prev_stack-cond NE 'ELSE' AND ls_prev_stack-cond NE 'ELSEIF' AND ls_prev_stack-cond NE 'WHEN' AND NOT ( lv_last_els = ls_line-ind ).
+
+        lv_mm_string = |{ lv_mm_string }{ ls_prev_stack-ind }-->{ lv_sub }{ ls_line-ind }\n|.
+
+        IF ls_line-arrow IS NOT INITIAL.
+          lv_sub = '|"' && ls_line-arrow && '"|'.
+        ELSE.
+          CLEAR lv_sub.
+        ENDIF.
+
+      ENDIF.
+
+      ls_prev_stack = ls_line.
+
+      IF ls_line-cond = 'ENDIF' OR ls_line-cond = 'ENDCASE'.
+        DELETE mt_if INDEX if_ind.
+        SUBTRACT 1 FROM if_ind.
+        READ TABLE mt_if INDEX if_ind INTO ms_if.
+      ENDIF.
+
+    ENDLOOP.
 
     open_mermaid( lv_mm_string ).
 
