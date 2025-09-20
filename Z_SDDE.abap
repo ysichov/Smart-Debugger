@@ -7192,6 +7192,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
           lt_lines      TYPE STANDARD TABLE OF ts_line,
           ls_prev_stack TYPE ts_line,
           lv_opened     TYPE i.
+Clear mo_debugger->mo_window->mt_watch.
 
     LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO DATA(ls_source).
@@ -7258,7 +7259,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
         LOOP AT ls_source-t_composed INTO ls_composed WHERE line = ls_step-line.
           READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_composed-composing TRANSPORTING NO FIELDS.
-          IF sy-subrc <> 0.
+          IF sy-subrc = 0.
             APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
             <selected>-name = ls_composed-composing.
           ENDIF.
@@ -7285,6 +7286,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDLOOP.
 
     ENDLOOP.
+   
 
     DELETE lt_lines WHERE del = abap_true.
 
@@ -7433,8 +7435,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD open_mermaid.
-
-
   ENDMETHOD.
 
 ENDCLASS.
