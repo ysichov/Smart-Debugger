@@ -146,7 +146,8 @@ CLASS lcl_appl DEFINITION.
              program    TYPE tpda_program,
              include    TYPE tpda_include,
              time       LIKE sy-uzeit,
-           END OF t_step_counter.
+           END OF t_step_counter,
+           tt_steps TYPE STANDARD TABLE OF t_step_counter WITH EMPTY KEY.
 
     CLASS-DATA: m_option_icons     TYPE TABLE OF sign_option_icon_s,
                 mt_lang            TYPE TABLE OF t_lang,
@@ -566,13 +567,17 @@ CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_scr
           mo_diagram      TYPE REF TO zcl_wd_gui_mermaid_js_diagram,
           mv_type         TYPE string,
           ms_if           TYPE ts_if,
-          mt_if           TYPE tt_if.
+          mt_if           TYPE tt_if,
+          mv_step         TYPE i,
+          mt_steps        TYPE lcl_appl=>tt_steps.
 
     METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script
                                    iv_type     TYPE string,
 
       steps_flow IMPORTING iv_direction TYPE ui_func OPTIONAL,
       magic_search IMPORTING iv_direction TYPE ui_func OPTIONAL,
+      code_execution_scanner,
+      parse_call IMPORTING iv_program TYPE program iv_index TYPE i iv_stack TYPE i iv_event TYPE string,
       add_toolbar_buttons,
       hnd_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode,
       open_mermaid IMPORTING iv_mm_string TYPE string.
@@ -7306,9 +7311,17 @@ CLASS lcl_mermaid IMPLEMENTATION.
           ls_prev_stack TYPE ts_line,
           lv_opened     TYPE i.
 
-    Clear mo_debugger->mo_window->mt_watch.
+    CLEAR mo_debugger->mo_window->mt_watch.
 
-    LOOP AT mo_debugger->mt_steps INTO DATA(ls_step).
+    IF lines( mo_debugger->mt_steps ) > 1.
+      DATA(lt_steps) = mo_debugger->mt_steps.
+    ELSE.
+
+        code_execution_scanner( ).
+       lt_steps = mt_steps.
+    ENDIF.
+
+    LOOP AT lt_steps INTO DATA(ls_step).
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO DATA(ls_source).
       READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO DATA(ls_keyword).
       LOOP AT ls_keyword-tt_calls INTO DATA(ls_call).
@@ -7327,7 +7340,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDLOOP.
     ENDLOOP.
 
-    DATA(lt_steps) = mo_debugger->mt_steps.
+
 
     "deleting empty cycles.
     DATA: lv_prev     LIKE LINE OF lt_steps,
@@ -7447,11 +7460,10 @@ CLASS lcl_mermaid IMPLEMENTATION.
           ls_line-include = ls_step-include.
           INSERT ls_line INTO lt_lines INDEX 1.
         ENDIF.
-       EXIT.
+
       ENDLOOP.
 
     ENDLOOP.
-    
 
     DELETE lt_lines WHERE del = abap_true.
 
@@ -7744,6 +7756,127 @@ CLASS lcl_mermaid IMPLEMENTATION.
     open_mermaid( lv_mm_string ).
 
   ENDMETHOD.
+
+  METHOD parse_call.
+    DATA: lv_statement TYPE i,
+          lv_stack     TYPE i.
+
+    lv_stack = iv_stack + 1.
+    lv_statement = iv_index.
+    READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = iv_program INTO DATA(ls_source).
+    DO.
+      READ TABLE ls_source-t_keywords WITH KEY index =  lv_statement INTO DATA(ls_key).
+      IF ls_key-name = 'DATA'.
+        ADD 1 TO lv_statement.
+        CONTINUE.
+      ENDIF.
+      ADD 1 TO mv_step.
+      APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
+
+      <step>-step = mv_step.
+      <step>-line = ls_key-line.
+      <step>-eventname = iv_event.
+      <step>-eventtype = 'FORM'.
+      <step>-stacklevel = lv_stack.
+      <step>-program = iv_program.
+      <step>-include = iv_program.
+
+      IF ls_key-to_evname IS NOT INITIAL.
+        READ TABLE ls_source-tt_calls_line WITH KEY eventname = ls_key-to_evname eventtype = ls_key-to_evtype INTO DATA(ls_call_line).
+
+        parse_call( EXPORTING iv_index = ls_call_line-index
+                                                 iv_event = ls_call_line-eventname
+                                                 iv_program = iv_program
+                                                 iv_stack   = lv_stack
+                                                  ).
+
+      ENDIF.
+
+      IF ls_key-name = 'ENDFORM' OR ls_key-name = 'ENDMETHOD'.
+        RETURN.
+      ENDIF.
+
+      ADD 1 TO lv_statement.
+    ENDDO.
+  ENDMETHOD.
+
+
+  METHOD code_execution_scanner.
+    "code execution scanner
+    DATA: lv_max       TYPE i,
+          lv_step      TYPE i,
+          ls_call_line TYPE lcl_window=>ts_calls_line.
+
+    READ TABLE mo_debugger->mo_window->mt_source INDEX 1 INTO DATA(ls_source).
+
+    DATA: lt_str LIKE ls_source-scan->structures.
+
+    READ TABLE ls_source-scan->structures WITH KEY type = 'E' TRANSPORTING  NO FIELDS.
+    IF sy-subrc = 0.
+      lt_str = ls_source-scan->structures.
+      DELETE lt_str WHERE type <> 'E'.
+      SORT lt_str BY stmnt_type ASCENDING.
+    ELSE.
+      CLEAR lv_max.
+      LOOP AT ls_source-scan->structures INTO DATA(ls_str) WHERE type <> 'P' AND type <> 'C' .
+        IF lv_max < ls_str-stmnt_to.
+          lv_max = ls_str-stmnt_to.
+          APPEND ls_str TO lt_str.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+
+
+    DATA: lv_event     TYPE string,
+          lv_stack     TYPE i VALUE 1,
+          lv_statement TYPE i.
+
+    LOOP AT lt_str INTO ls_str.
+
+      READ TABLE ls_source-t_keywords WITH KEY index =  lv_statement INTO DATA(ls_key).
+
+      IF ls_str-type = 'E'.
+        lv_statement = ls_str-stmnt_from + 1.
+        lv_event = ls_key-name.
+      ELSE.
+        lv_statement = ls_str-stmnt_from.
+      ENDIF.
+
+      WHILE lv_statement <= ls_str-stmnt_to.
+        READ TABLE ls_source-t_keywords WITH KEY index =  lv_statement INTO ls_key.
+
+        IF ls_key-name = 'DATA' OR ls_key-name = 'CONSTANTS' OR sy-subrc <> 0.
+          ADD 1 TO lv_statement.
+          CONTINUE.
+        ENDIF.
+        ADD 1 TO lv_step.
+        APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
+
+        <step>-step = lv_step.
+        <step>-line = ls_key-line.
+        <step>-eventname = lv_event.
+        <step>-eventtype = 'EVENT'.
+        <step>-stacklevel = lv_stack.
+        <step>-program = ls_source-include.
+        <step>-include = ls_source-include.
+
+        IF ls_key-to_evname IS NOT INITIAL.
+          READ TABLE ls_source-tt_calls_line WITH KEY eventname = ls_key-to_evname eventtype = ls_key-to_evtype INTO ls_call_line.
+
+          parse_call( EXPORTING iv_index = ls_call_line-index
+                                           iv_event = ls_call_line-eventname
+                                           iv_program = ls_source-include
+                                           iv_stack   = lv_stack
+                                            ).
+        ENDIF.
+
+        ADD 1 TO lv_statement.
+      ENDWHILE.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
 
   METHOD add_toolbar_buttons.
 
