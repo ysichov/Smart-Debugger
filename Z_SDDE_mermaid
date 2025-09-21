@@ -2144,20 +2144,27 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           m_hist_step = m_step.
           GET TIME.
           "add missed ELSE/ENDIF/ENDCASE
-          READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO DATA(ls_source).
-          READ TABLE ls_source-t_keywords WITH KEY line = ms_stack-line INTO DATA(ls_key).
-          READ TABLE ls_source-t_keywords INDEX sy-tabix - 1 INTO ls_key.
+          IF m_step > 2.
           READ TABLE mt_steps INDEX m_step - 1 INTO DATA(ls_step).
-          READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO DATA(ls_key_prev).
 
-          IF ls_key_prev-name <> 'DO' AND ls_key_prev-name <> 'LOOP' AND ls_key_prev-name <> 'WHILE'.
-            IF ls_key-name = 'ELSE' OR ls_key-name = 'ENDIF' OR ls_key-name = 'ENDCASE'.
-              APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
-              MOVE-CORRESPONDING ms_stack TO <step>.
-              <step>-line = ls_key-line.
-              <step>-step = m_step.
-              ADD 1 TO m_step.
+          IF ms_Stack-line > ls_step-line.
+            READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO DATA(ls_source).
+            READ TABLE ls_source-t_keywords WITH KEY line = ms_stack-line INTO DATA(ls_key).
+            READ TABLE ls_source-t_keywords INDEX sy-tabix - 1 INTO ls_key.
+            READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO DATA(ls_key_prev).
+
+            IF ls_key_prev-name <> 'DO' AND ls_key_prev-name <> 'LOOP' AND ls_key_prev-name <> 'WHILE'.
+
+              IF ls_key-name = 'ELSE' OR ls_key-name = 'ENDIF' OR ls_key-name = 'ENDCASE'.
+              
+                APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
+                MOVE-CORRESPONDING ms_stack TO <step>.
+                <step>-line = ls_key-line.
+                <step>-step = m_step.
+                ADD 1 TO m_step.
+              ENDIF.
             ENDIF.
+          ENDIF.
           ENDIF.
 
           APPEND INITIAL LINE TO mt_steps ASSIGNING <step>.
@@ -7317,8 +7324,8 @@ CLASS lcl_mermaid IMPLEMENTATION.
       DATA(lt_steps) = mo_debugger->mt_steps.
     ELSE.
 
-        code_execution_scanner( ).
-       lt_steps = mt_steps.
+      code_execution_scanner( ).
+      lt_steps = mt_steps.
     ENDIF.
 
     LOOP AT lt_steps INTO DATA(ls_step).
@@ -7340,8 +7347,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDLOOP.
     ENDLOOP.
 
-
-
     "deleting empty cycles.
     DATA: lv_prev     LIKE LINE OF lt_steps,
           lv_prev_key TYPE string.
@@ -7352,7 +7357,8 @@ CLASS lcl_mermaid IMPLEMENTATION.
       DATA(lv_ind) = sy-tabix.
       READ TABLE ls_source-t_keywords WITH KEY line = <step>-line INTO DATA(ls_key).
       IF lv_prev IS NOT INITIAL.
-        IF ls_key-name = 'ENDDO' AND lv_prev_key = 'DO'.
+        IF ( ls_key-name = 'ENDDO' OR ls_key-name = 'ENDWHILE' OR ls_key-name = 'ENDLOOP' OR ls_key-name = 'ENDIF' )  AND
+           ( lv_prev_key = 'DO' OR lv_prev_key = 'LOOP'  OR lv_prev_key = 'WHILE'  OR lv_prev_key = 'IF' ).
           <step>-first = 'D'."to delete
           READ TABLE lt_steps INDEX lv_ind - 1 ASSIGNING FIELD-SYMBOL(<step_prev>).
           <step_prev>-first = 'D'.
