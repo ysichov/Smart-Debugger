@@ -7331,7 +7331,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
       code_execution_scanner( ).
       lt_steps = mt_steps.
     ENDIF.
-    BREAK-POINT.
+  
     LOOP AT lt_steps INTO DATA(ls_step).
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO DATA(ls_source).
       READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO DATA(ls_keyword).
@@ -7384,7 +7384,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
 
     SORT lt_steps BY step DESCENDING.
-    BREAK-POINT.
+   
     "collecting dependents variables
     LOOP AT lt_steps INTO ls_step.
 
