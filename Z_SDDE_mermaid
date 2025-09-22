@@ -2156,7 +2156,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
               IF ls_key_prev-name <> 'DO' AND ls_key_prev-name <> 'LOOP' AND ls_key_prev-name <> 'WHILE'.
 
                 IF ls_key-name = 'ELSE' OR ls_key-name = 'ENDIF' OR ls_key-name = 'ENDCASE'.
- 
+
                   APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
                   MOVE-CORRESPONDING ms_stack TO <step>.
                   <step>-line = ls_key-line.
@@ -7331,24 +7331,32 @@ CLASS lcl_mermaid IMPLEMENTATION.
       code_execution_scanner( ).
       lt_steps = mt_steps.
     ENDIF.
-
+    BREAK-POINT.
     LOOP AT lt_steps INTO DATA(ls_step).
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO DATA(ls_source).
       READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO DATA(ls_keyword).
-      LOOP AT ls_keyword-tt_calls INTO DATA(ls_call).
-
-        READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-outer TRANSPORTING NO FIELDS.
-        IF sy-subrc <> 0.
-          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
-          <selected>-name = ls_call-outer.
-        ENDIF.
-
-        READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-inner TRANSPORTING NO FIELDS.
+      LOOP AT mo_debugger->mt_selected_var INTO DATA(ls_selected).
+        READ TABLE ls_keyword-tt_calls WITH KEY outer = ls_selected-name TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
-          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-          <selected>-name = ls_call-inner.
+          LOOP AT ls_keyword-tt_calls INTO DATA(ls_call).
+
+            READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-outer TRANSPORTING NO FIELDS.
+            IF sy-subrc <> 0.
+              APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
+              <selected>-name = ls_call-outer.
+            ENDIF.
+
+            READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-inner TRANSPORTING NO FIELDS.
+            IF sy-subrc <> 0.
+              APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+              <selected>-name = ls_call-inner.
+            ENDIF.
+          ENDLOOP.
+
+          EXIT.
         ENDIF.
       ENDLOOP.
+
     ENDLOOP.
 
     "deleting empty cycles.
@@ -7376,7 +7384,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
 
     SORT lt_steps BY step DESCENDING.
-
+    BREAK-POINT.
     "collecting dependents variables
     LOOP AT lt_steps INTO ls_step.
 
@@ -7385,24 +7393,25 @@ CLASS lcl_mermaid IMPLEMENTATION.
       LOOP AT ls_source-t_calculated INTO DATA(ls_calculated) WHERE line = ls_step-line.
         READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_calculated-calculated TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
-          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-          <selected>-name = ls_calculated-calculated.
+*          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+*          <selected>-name = ls_calculated-calculated.
+
+          LOOP AT ls_source-t_composed INTO DATA(ls_composed) WHERE line = ls_step-line.
+            READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_composed-composing TRANSPORTING NO FIELDS.
+            IF sy-subrc = 0.
+              APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+              <selected>-name = ls_composed-composing.
+            ENDIF.
+          ENDLOOP.
         ENDIF.
-        LOOP AT ls_source-t_composed INTO DATA(ls_composed) WHERE line = ls_step-line.
-          READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_composed-composing TRANSPORTING NO FIELDS.
-          IF sy-subrc = 0.
-            APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-            <selected>-name = ls_composed-composing.
-          ENDIF.
-        ENDLOOP.
         "adding returning values
-        LOOP AT ls_source-t_params INTO DATA(lv_param).
-          READ TABLE mo_debugger->mt_selected_var WITH KEY name = lv_param-param TRANSPORTING NO FIELDS.
-          IF sy-subrc <> 0.
-            APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-            <selected>-name = lv_param-param.
-          ENDIF.
-        ENDLOOP.
+*        LOOP AT ls_source-t_params INTO DATA(lv_param).
+*          READ TABLE mo_debugger->mt_selected_var WITH KEY name = lv_param-param TRANSPORTING NO FIELDS.
+*          IF sy-subrc <> 0.
+*            APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+*            <selected>-name = lv_param-param.
+*          ENDIF.
+*        ENDLOOP.
       ENDLOOP.
 
       READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO ls_keyword.
@@ -7442,9 +7451,9 @@ CLASS lcl_mermaid IMPLEMENTATION.
         <line>-stack = ls_step-stacklevel.
         <line>-include = ls_step-include.
       ENDIF.
-      clear lv_ind.
+      CLEAR lv_ind.
       LOOP AT  ls_source-t_calculated INTO ls_calculated WHERE line = ls_step-line.
-        ADD 1 to lv_ind.
+        ADD 1 TO lv_ind.
         LOOP AT ls_source-t_composed INTO ls_composed WHERE line = ls_step-line.
           READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_composed-composing TRANSPORTING NO FIELDS.
           IF sy-subrc = 0.
@@ -7464,12 +7473,12 @@ CLASS lcl_mermaid IMPLEMENTATION.
 *          LOOP AT lt_lines ASSIGNING <line> WHERE line = ls_line-line AND event = ls_step-eventname AND stack = ls_step-stacklevel .
 *            <line>-del = abap_true.
 *          ENDLOOP.
-         IF lv_ind = 1.
-          ls_line-event = ls_step-eventname.
-          ls_line-stack = ls_step-stacklevel.
-          ls_line-include = ls_step-include.
-          INSERT ls_line INTO lt_lines INDEX 1.
-         ENDIF.
+          IF lv_ind = 1.
+            ls_line-event = ls_step-eventname.
+            ls_line-stack = ls_step-stacklevel.
+            ls_line-include = ls_step-include.
+            INSERT ls_line INTO lt_lines INDEX 1.
+          ENDIF.
         ENDIF.
 
       ENDLOOP.
