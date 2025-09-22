@@ -2156,7 +2156,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
               IF ls_key_prev-name <> 'DO' AND ls_key_prev-name <> 'LOOP' AND ls_key_prev-name <> 'WHILE'.
 
                 IF ls_key-name = 'ELSE' OR ls_key-name = 'ENDIF' OR ls_key-name = 'ENDCASE'.
-                  BREAK-POINT.
+ 
                   APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
                   MOVE-CORRESPONDING ms_stack TO <step>.
                   <step>-line = ls_key-line.
@@ -7273,7 +7273,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
         ls_ind-from = sy-tabix.
         READ TABLE lt_entities WITH KEY name = ls_step2-eventname TRANSPORTING NO FIELDS.
         ls_ind-to = sy-tabix.
-        READ TABLE lt_indexes WITH KEY from = ls_ind-from to = ls_ind-to TRANSPORTING NO FIELDS.BREAK-POINT.
+        READ TABLE lt_indexes WITH KEY from = ls_ind-from to = ls_ind-to TRANSPORTING NO FIELDS.
         IF sy-subrc <> 0.
           lv_mm_string = |{ lv_mm_string }{ ls_ind-from }({ ls_step-eventname }) --> { ls_ind-to }({ ls_step2-eventname })\n|.
           APPEND ls_ind TO lt_indexes.
