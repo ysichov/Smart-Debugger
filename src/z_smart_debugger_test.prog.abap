@@ -2162,26 +2162,26 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           GET TIME.
           "add missed ELSE/ENDIF/ENDCASE
           IF m_step > 2.
-          READ TABLE mt_steps INDEX m_step - 1 INTO DATA(ls_step).
+            READ TABLE mt_steps INDEX m_step - 1 INTO DATA(ls_step).
 
-          IF ms_Stack-line > ls_step-line.
-            READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO DATA(ls_source).
-            READ TABLE ls_source-t_keywords WITH KEY line = ms_stack-line INTO DATA(ls_key).
-            READ TABLE ls_source-t_keywords INDEX sy-tabix - 1 INTO ls_key.
-            READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO DATA(ls_key_prev).
+            IF ms_stack-line > ls_step-line.
+              READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO DATA(ls_source).
+              READ TABLE ls_source-t_keywords WITH KEY line = ms_stack-line INTO DATA(ls_key).
+              READ TABLE ls_source-t_keywords INDEX sy-tabix - 1 INTO ls_key.
+              READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO DATA(ls_key_prev).
 
-            IF ls_key_prev-name <> 'DO' AND ls_key_prev-name <> 'LOOP' AND ls_key_prev-name <> 'WHILE'.
+              IF ls_key_prev-name <> 'DO' AND ls_key_prev-name <> 'LOOP' AND ls_key_prev-name <> 'WHILE'.
 
-              IF ls_key-name = 'ELSE' OR ls_key-name = 'ENDIF' OR ls_key-name = 'ENDCASE'.
-              
-                APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
-                MOVE-CORRESPONDING ms_stack TO <step>.
-                <step>-line = ls_key-line.
-                <step>-step = m_step.
-                ADD 1 TO m_step.
+                IF ls_key-name = 'ELSE' OR ls_key-name = 'ENDIF' OR ls_key-name = 'ENDCASE'.
+ 
+                  APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
+                  MOVE-CORRESPONDING ms_stack TO <step>.
+                  <step>-line = ls_key-line.
+                  <step>-step = m_step.
+                  ADD 1 TO m_step.
+                ENDIF.
               ENDIF.
             ENDIF.
-          ENDIF.
           ENDIF.
 
           APPEND INITIAL LINE TO mt_steps ASSIGNING <step>.
@@ -7236,27 +7236,27 @@ CLASS lcl_mermaid IMPLEMENTATION.
     TYPES: BEGIN OF lty_entity,
              event TYPE string,
              name  TYPE string,
-           END OF lty_entity.
+           END OF lty_entity,
+           BEGIN OF t_ind,
+             from TYPE i,
+             to   TYPE i,
+           END OF t_ind  .
 
     DATA: lv_mm_string TYPE string,
           lv_name      TYPE string,
           lt_entities  TYPE TABLE OF lty_entity,
           ls_entity    TYPE lty_entity,
-          lv_ind1      TYPE i,
-          lv_ind2      TYPE i,
+*          lv_ind1      TYPE i,
+*          lv_ind2      TYPE i,
           lt_parts     TYPE TABLE OF string,
-          ls_step      LIKE LINE OF mo_debugger->mt_steps.
+          ls_step      LIKE LINE OF mo_debugger->mt_steps,
+          ls_ind       TYPE t_ind,
+          lt_indexes   TYPE TABLE OF t_ind.
+
 
     DATA(lt_copy) = mo_debugger->mt_steps.
+
     LOOP AT lt_copy ASSIGNING FIELD-SYMBOL(<copy>).
-      CLEAR <copy>-time.
-    ENDLOOP.
-
-    SORT lt_copy BY line.
-    DELETE ADJACENT DUPLICATES FROM lt_copy.
-    SORT lt_copy BY step.
-
-    LOOP AT lt_copy ASSIGNING <copy>.
       IF <copy>-eventtype = 'METHOD'.
         SPLIT <copy>-program AT '=' INTO TABLE lt_parts.
         <copy>-eventname = ls_entity-name = |"{ lt_parts[ 1 ] }->{ <copy>-eventname }"|.
@@ -7287,10 +7287,14 @@ CLASS lcl_mermaid IMPLEMENTATION.
       IF ls_step2-stacklevel > ls_step-stacklevel.
 
         READ TABLE lt_entities WITH KEY name = ls_step-eventname TRANSPORTING NO FIELDS.
-        lv_ind1 = sy-tabix.
+        ls_ind-from = sy-tabix.
         READ TABLE lt_entities WITH KEY name = ls_step2-eventname TRANSPORTING NO FIELDS.
-        lv_ind2 = sy-tabix.
-        lv_mm_string = |{ lv_mm_string }{ lv_ind1 }({ ls_step-eventname }) --> { lv_ind2 }({ ls_step2-eventname })\n|.
+        ls_ind-to = sy-tabix.
+        READ TABLE lt_indexes WITH KEY from = ls_ind-from to = ls_ind-to TRANSPORTING NO FIELDS.
+        IF sy-subrc <> 0.
+          lv_mm_string = |{ lv_mm_string }{ ls_ind-from }({ ls_step-eventname }) --> { ls_ind-to }({ ls_step2-eventname })\n|.
+          APPEND ls_ind TO lt_indexes.
+        ENDIF.
       ENDIF.
       ls_step = ls_step2.
     ENDLOOP.
@@ -7455,9 +7459,9 @@ CLASS lcl_mermaid IMPLEMENTATION.
         <line>-stack = ls_step-stacklevel.
         <line>-include = ls_step-include.
       ENDIF.
-
+      clear lv_ind.
       LOOP AT  ls_source-t_calculated INTO ls_calculated WHERE line = ls_step-line.
-
+        ADD 1 to lv_ind.
         LOOP AT ls_source-t_composed INTO ls_composed WHERE line = ls_step-line.
           READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_composed-composing TRANSPORTING NO FIELDS.
           IF sy-subrc = 0.
@@ -7477,11 +7481,12 @@ CLASS lcl_mermaid IMPLEMENTATION.
 *          LOOP AT lt_lines ASSIGNING <line> WHERE line = ls_line-line AND event = ls_step-eventname AND stack = ls_step-stacklevel .
 *            <line>-del = abap_true.
 *          ENDLOOP.
-
+         IF lv_ind = 1.
           ls_line-event = ls_step-eventname.
           ls_line-stack = ls_step-stacklevel.
           ls_line-include = ls_step-include.
           INSERT ls_line INTO lt_lines INDEX 1.
+         ENDIF.
         ENDIF.
 
       ENDLOOP.
@@ -7639,6 +7644,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
     lv_mm_string = |graph { lv_direction }\n |.
 
     LOOP AT lt_lines INTO ls_line WHERE cond <> 'ELSE' AND cond <> 'ELSEIF' AND  cond <> 'WHEN'.
+
       lv_ind = sy-tabix.
 
       IF ls_line-cond IS INITIAL.
