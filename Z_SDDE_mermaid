@@ -1099,7 +1099,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              outer TYPE string,
              inner TYPE string,
            END OF ts_calls,
-           tt_calls TYPE STANDARD TABLE OF ts_calls WITH NON-UNIQUE KEY event,
+           tt_calls TYPE STANDARD TABLE OF ts_calls WITH NON-UNIQUE KEY outer,
 
            BEGIN OF ts_calls_line,
              class     TYPE string,
@@ -7331,32 +7331,24 @@ CLASS lcl_mermaid IMPLEMENTATION.
       code_execution_scanner( ).
       lt_steps = mt_steps.
     ENDIF.
-  
+
     LOOP AT lt_steps INTO DATA(ls_step).
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO DATA(ls_source).
       READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO DATA(ls_keyword).
-      LOOP AT mo_debugger->mt_selected_var INTO DATA(ls_selected).
-        READ TABLE ls_keyword-tt_calls WITH KEY outer = ls_selected-name TRANSPORTING NO FIELDS.
+      LOOP AT ls_keyword-tt_calls INTO DATA(ls_call).
+
+        READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-outer TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
-          LOOP AT ls_keyword-tt_calls INTO DATA(ls_call).
+          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
+          <selected>-name = ls_call-inner.
+        ENDIF.
 
-            READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-outer TRANSPORTING NO FIELDS.
-            IF sy-subrc <> 0.
-              APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
-              <selected>-name = ls_call-outer.
-            ENDIF.
-
-            READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-inner TRANSPORTING NO FIELDS.
-            IF sy-subrc <> 0.
-              APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-              <selected>-name = ls_call-inner.
-            ENDIF.
-          ENDLOOP.
-
-          EXIT.
+        READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-inner TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0.
+          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+          <selected>-name = ls_call-outer.
         ENDIF.
       ENDLOOP.
-
     ENDLOOP.
 
     "deleting empty cycles.
@@ -7384,7 +7376,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
 
     SORT lt_steps BY step DESCENDING.
-   
+
     "collecting dependents variables
     LOOP AT lt_steps INTO ls_step.
 
@@ -7504,14 +7496,26 @@ CLASS lcl_mermaid IMPLEMENTATION.
         ENDIF.
       ENDLOOP.
 
-      LOOP AT ls_keyword-tt_calls INTO ls_call.
-        IF sy-tabix <> 1.
-          <line>-arrow = |{ <line>-arrow }, |.
-        ENDIF.
-        <line>-arrow  = |{ <line>-arrow  } { ls_call-outer } { ls_call-type } { ls_call-inner }|.
-        <line>-subname = ls_call-name.
-        REPLACE ALL OCCURRENCES OF '''' IN <line>-subname WITH ''.
-      ENDLOOP.
+
+
+      IF ls_keyword-to_evname IS NOT INITIAL.
+        SORT ls_keyword-tt_calls BY outer.
+        DELETE ADJACENT DUPLICATES FROM ls_keyword-tt_calls.
+        LOOP AT ls_keyword-tt_calls INTO ls_call.
+          IF sy-tabix <> 1.
+            <line>-arrow = |{ <line>-arrow }, |.
+          ENDIF.
+          <line>-arrow  = |{ <line>-arrow  } { ls_call-outer } { ls_call-type } { ls_call-inner }|.
+          <line>-subname = ls_call-name.
+          REPLACE ALL OCCURRENCES OF '''' IN <line>-subname WITH ''.
+          REPLACE ALL OCCURRENCES OF '"' IN  <line>-code WITH ''.
+        ENDLOOP.
+      ENDIF.
+      REPLACE ALL OCCURRENCES OF '''' IN <line>-subname WITH ''.
+      REPLACE ALL OCCURRENCES OF '(' IN <line>-arrow WITH ''.
+      REPLACE ALL OCCURRENCES OF ')' IN <line>-arrow WITH ''.
+      REPLACE ALL OCCURRENCES OF '(' IN <line>-subname WITH ''.
+      REPLACE ALL OCCURRENCES OF ')' IN <line>-subname WITH ''.
     ENDLOOP.
 
     "check subform execution steps existance and if/case structures build
@@ -7533,7 +7537,9 @@ CLASS lcl_mermaid IMPLEMENTATION.
       IF <line>-cond = 'ENDIF' OR <line>-cond = 'ENDCASE'.
         <if>-end_ind = <line>-ind.
         SUBTRACT 1 FROM if_depth.
-        READ TABLE mt_if INDEX if_depth ASSIGNING <if>.
+        LOOP AT mt_if  ASSIGNING <if> WHERE end_ind = 0.
+        ENDLOOP.
+        "READ TABLE mt_if INDEX if_depth ASSIGNING <if>.
       ENDIF.
 
       IF <line>-cond = 'WHEN'.
@@ -7563,9 +7569,9 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
           ENDIF.
         ENDDO.
-        IF when_count = 1.
-          <if>-if_ind = lv_els_before.
-          CLEAR <line>-els_before.
+        IF when_count = 1. "to refactor
+*          <if>-if_ind = lv_els_before.
+*          CLEAR <line>-els_before.
         ENDIF.
       ENDIF.
 
