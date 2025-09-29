@@ -3692,6 +3692,11 @@ CLASS lcl_window IMPLEMENTATION.
         wrong_parameters     = 3
         OTHERS               = 4.
 
+  "blue arrow - current line
+    APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
+    <line> = iv_line.
+    mo_code_viewer->set_marker( EXPORTING marker_number = 7 marker_lines = lt_lines ).
+
     CLEAR lt_lines.
 
     LOOP AT lt_points INTO ls_point. "WHERE inclnamesrc = m_prg-include.
@@ -3704,24 +3709,20 @@ CLASS lcl_window IMPLEMENTATION.
     ENDLOOP.
     mo_code_viewer->set_marker( EXPORTING marker_number = 4 marker_lines = lt_lines ).
 
-*    "watchpoints or coverage
-*    CLEAR lt_lines.
-*    LOOP AT mt_watch INTO DATA(ls_watch).
-*      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
-*      <line> = ls_watch-line.
-*    ENDLOOP.
-*
-*    "coverage
-*    LOOP AT mt_coverage INTO DATA(ls_coverage).
-*      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
-*      <line> = ls_coverage-line.
-*    ENDLOOP.
-
+    "watchpoints or coverage
     CLEAR lt_lines.
-    "blue arrow - current line
-    APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
-    <line> = iv_line.
-    mo_code_viewer->set_marker( EXPORTING marker_number = 7 marker_lines = lt_lines ).
+    LOOP AT mt_watch INTO DATA(ls_watch).
+      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
+      <line> = ls_watch-line.
+    ENDLOOP.
+
+    "coverage
+    LOOP AT mt_coverage INTO DATA(ls_coverage).
+      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
+      <line> = ls_coverage-line.
+    ENDLOOP.
+
+    mo_code_viewer->set_marker( EXPORTING marker_number = 2 marker_lines = lt_lines ).
 
     IF iv_line IS NOT INITIAL.
       mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
@@ -8089,8 +8090,6 @@ data: lv_yes type xfeld.
   ENDMETHOD.
 
   METHOD open_mermaid.
-
-
   ENDMETHOD.
 
 ENDCLASS.
