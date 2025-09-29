@@ -371,9 +371,9 @@ CLASS lcl_event_handler DEFINITION.
   PUBLIC SECTION.
     DATA: mo_debugger TYPE REF TO lcl_debugger_script.
     METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script,
-      on_double_click
-        FOR EVENT double_click OF cl_salv_events_table
-        IMPORTING row column.
+      on_double_click FOR EVENT double_click OF cl_salv_events_table IMPORTING row column,
+      on_editor_double_click  FOR EVENT dblclick OF cl_gui_abapedit IMPORTING sender,
+      on_editor_border_click  FOR EVENT border_click OF cl_gui_abapedit IMPORTING line cntrl_pressed_set shift_pressed_set.   .
 ENDCLASS.
 
 
@@ -1099,7 +1099,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              outer TYPE string,
              inner TYPE string,
            END OF ts_calls,
-           tt_calls TYPE STANDARD TABLE OF ts_calls WITH NON-UNIQUE KEY event,
+           tt_calls TYPE STANDARD TABLE OF ts_calls WITH NON-UNIQUE KEY outer,
 
            BEGIN OF ts_calls_line,
              class     TYPE string,
@@ -1184,7 +1184,16 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
              program TYPE string,
              line    TYPE i,
            END OF ts_watch,
-           tt_watch TYPE STANDARD  TABLE OF ts_watch WITH EMPTY KEY.
+           tt_watch TYPE STANDARD  TABLE OF ts_watch WITH EMPTY KEY,
+
+           BEGIN OF ts_bpoint,
+             program TYPE string,
+             include TYPE string,
+             line    TYPE i,
+             type    TYPE char1,
+             del     TYPE char1,
+           END OF ts_bpoint,
+           tt_bpoints TYPE STANDARD TABLE OF ts_bpoint WITH EMPTY KEY.
 
     TYPES tt_table TYPE STANDARD TABLE OF ts_table
           WITH NON-UNIQUE DEFAULT KEY.
@@ -1198,6 +1207,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
           m_prg                  TYPE tpda_scr_prg_info,
           m_debug_button         LIKE sy-ucomm,
           m_show_step            TYPE xfeld,
+          mt_bpoints             TYPE tt_bpoints,
           mo_debugger            TYPE REF TO lcl_debugger_script,
           mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
           mo_splitter_var        TYPE REF TO cl_gui_splitter_container,
@@ -1234,7 +1244,7 @@ CLASS lcl_window DEFINITION INHERITING FROM lcl_popup .
       set_program IMPORTING iv_program TYPE program,
       show_coverage.
 
-    METHODS set_program_line IMPORTING iv_line LIKE sy-index.
+    METHODS set_program_line IMPORTING iv_line LIKE sy-index OPTIONAL.
     METHODS create_code_viewer.
     METHODS show_stack.
 
@@ -3358,6 +3368,56 @@ CLASS lcl_event_handler IMPLEMENTATION.
     mo_debugger->show_step( ).
 
   ENDMETHOD.
+
+  METHOD on_editor_double_click.
+    sender->get_selection_pos( IMPORTING from_line = DATA(fr_line) from_pos = DATA(fr_pos) to_line = DATA(to_line) to_pos = DATA(to_pos) ).
+
+  ENDMETHOD.
+
+  METHOD on_editor_border_click.
+
+    DATA: lv_type    TYPE char1.
+
+    IF cntrl_pressed_set IS INITIAL.
+      lv_type = 'S'.
+    ELSE.
+      lv_type = 'E'.
+    ENDIF.
+
+    LOOP AT mo_debugger->mo_window->mt_bpoints ASSIGNING FIELD-SYMBOL(<point>) WHERE line = line.
+      lv_type = <point>-type.
+
+      CALL FUNCTION 'RS_DELETE_BREAKPOINT'
+        EXPORTING
+          index        = line
+          mainprog     = mo_debugger->mo_window->m_prg-program
+          program      = mo_debugger->mo_window->m_prg-include
+          bp_type      = lv_type
+        EXCEPTIONS
+          not_executed = 1
+          OTHERS       = 2.
+
+      IF sy-subrc = 0.
+        <point>-del = abap_true.
+      ENDIF.
+    ENDLOOP.
+
+    IF sy-subrc <> 0. "create
+      CALL FUNCTION 'RS_SET_BREAKPOINT'
+        EXPORTING
+          index        = line
+          program      = mo_debugger->mo_window->m_prg-include
+          mainprogram  = mo_debugger->mo_window->m_prg-program
+          bp_type      = lv_type
+        EXCEPTIONS
+          not_executed = 1
+          OTHERS       = 2.
+
+    ENDIF.
+    DELETE mo_debugger->mo_window->mt_bpoints WHERE del IS NOT INITIAL.
+    mo_debugger->mo_window->set_program_line( ).
+  ENDMETHOD.
+
 ENDCLASS.
 
 
@@ -3594,38 +3654,88 @@ CLASS lcl_window IMPLEMENTATION.
     TYPES: lntab TYPE STANDARD TABLE OF i.
     DATA lt_lines TYPE lntab.
 
+    mo_code_viewer->remove_all_marker( 2 ).
+    mo_code_viewer->remove_all_marker( 4 ).
+
+*    "session breakpoints
+    CALL METHOD cl_abap_debugger=>read_breakpoints
+      EXPORTING
+        main_program         = mo_debugger->mo_window->m_prg-include
+      IMPORTING
+        breakpoints_complete = DATA(lt_points)
+      EXCEPTIONS
+        c_call_error         = 1
+        generate             = 2
+        wrong_parameters     = 3
+        OTHERS               = 4.
+
+    LOOP AT lt_points INTO DATA(ls_point). "WHERE inclnamesrc = m_prg-include.
+      APPEND INITIAL LINE TO lt_lines ASSIGNING FIELD-SYMBOL(<line>).
+      <line> = ls_point-line.
+
+      APPEND INITIAL LINE TO mt_bpoints ASSIGNING FIELD-SYMBOL(<point>).
+      MOVE-CORRESPONDING ls_point TO <point>.
+      <point>-type = 'S'.
+    ENDLOOP.
+    mo_code_viewer->set_marker( EXPORTING marker_number = 2 marker_lines = lt_lines ).
+
+*    "exernal breakpoints
+    CALL METHOD cl_abap_debugger=>read_breakpoints
+      EXPORTING
+        main_program         = mo_debugger->mo_window->m_prg-include
+        flag_other_session   = abap_true
+      IMPORTING
+        breakpoints_complete = lt_points
+      EXCEPTIONS
+        c_call_error         = 1
+        generate             = 2
+        wrong_parameters     = 3
+        OTHERS               = 4.
+
+    CLEAR lt_lines.
+
+    LOOP AT lt_points INTO ls_point. "WHERE inclnamesrc = m_prg-include.
+      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
+      <line> = ls_point-line.
+
+      APPEND INITIAL LINE TO mt_bpoints ASSIGNING <point>.
+      MOVE-CORRESPONDING ls_point TO <point>.
+      <point>-type = 'E'.
+    ENDLOOP.
+    mo_code_viewer->set_marker( EXPORTING marker_number = 4 marker_lines = lt_lines ).
+
+*    "watchpoints or coverage
+*    CLEAR lt_lines.
+*    LOOP AT mt_watch INTO DATA(ls_watch).
+*      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
+*      <line> = ls_watch-line.
+*    ENDLOOP.
+*
+*    "coverage
+*    LOOP AT mt_coverage INTO DATA(ls_coverage).
+*      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
+*      <line> = ls_coverage-line.
+*    ENDLOOP.
+
+    CLEAR lt_lines.
     "blue arrow - current line
-    APPEND INITIAL LINE TO lt_lines ASSIGNING FIELD-SYMBOL(<line>).
+    APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
     <line> = iv_line.
     mo_code_viewer->set_marker( EXPORTING marker_number = 7 marker_lines = lt_lines ).
 
-    "breakpoints
-    LOOP AT mt_breaks INTO DATA(ls_break) WHERE inclnamesrc = m_prg-include.
-      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
-      <line> = ls_break-linesrc.
-    ENDLOOP.
-    mo_code_viewer->set_marker( EXPORTING marker_number = 9 marker_lines = lt_lines ).
+    IF iv_line IS NOT INITIAL.
+      mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
+    ENDIF.
 
-    "watchpoints or coverage
-    CLEAR lt_lines.
-    LOOP AT mt_watch INTO DATA(ls_watch).
-      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
-      <line> = ls_watch-line.
-    ENDLOOP.
-
-    "coverage
-    LOOP AT mt_coverage INTO DATA(ls_coverage).
-      APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
-      <line> = ls_coverage-line.
-    ENDLOOP.
-
-    mo_code_viewer->set_marker( EXPORTING marker_number = 2 marker_lines = lt_lines ).
-
-    mo_code_viewer->select_lines( EXPORTING from_line = iv_line to_line = iv_line ).
+    mo_code_viewer->clear_line_markers( 'S' ).
+    mo_code_viewer->draw( ).
 
   ENDMETHOD.
 
   METHOD create_code_viewer.
+
+    DATA: lt_events TYPE cntl_simple_events,
+          ls_event  TYPE cntl_simple_event.
 
     CHECK mo_code_viewer IS INITIAL.
 
@@ -3641,6 +3751,18 @@ CLASS lcl_window IMPLEMENTATION.
         dp_error_general = 2
         dp_error_send    = 3
         OTHERS           = 4 ).
+
+    DATA(lo_handler) = NEW lcl_event_handler( mo_debugger ).
+    ls_event-eventid    = cl_gui_textedit=>event_double_click.
+    APPEND ls_event TO lt_events.
+
+    mo_code_viewer->set_registered_events( lt_events ).
+    mo_code_viewer->register_event_border_click( ).
+    mo_code_viewer->register_event_break_changed( ).
+
+    SET HANDLER lo_handler->on_editor_double_click FOR mo_code_viewer.
+    SET HANDLER lo_handler->on_editor_border_click FOR mo_code_viewer.
+
 
     mo_code_viewer->set_statusbar_mode( statusbar_mode = cl_gui_abapedit=>true ).
     mo_code_viewer->create_document( ).
@@ -7331,32 +7453,38 @@ CLASS lcl_mermaid IMPLEMENTATION.
       code_execution_scanner( ).
       lt_steps = mt_steps.
     ENDIF.
-  
+
+data: lv_yes type xfeld.
     LOOP AT lt_steps INTO DATA(ls_step).
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO DATA(ls_source).
       READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO DATA(ls_keyword).
-      LOOP AT mo_debugger->mt_selected_var INTO DATA(ls_selected).
-        READ TABLE ls_keyword-tt_calls WITH KEY outer = ls_selected-name TRANSPORTING NO FIELDS.
+      LOOP AT ls_keyword-tt_calls INTO DATA(ls_call).
+
+        READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-outer TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
-          LOOP AT ls_keyword-tt_calls INTO DATA(ls_call).
+          lv_yes = abap_true.
+        ENDIF.
 
-            READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-outer TRANSPORTING NO FIELDS.
-            IF sy-subrc <> 0.
-              APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
-              <selected>-name = ls_call-outer.
-            ENDIF.
-
-            READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-inner TRANSPORTING NO FIELDS.
-            IF sy-subrc <> 0.
-              APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-              <selected>-name = ls_call-inner.
-            ENDIF.
-          ENDLOOP.
-
-          EXIT.
+        READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-inner TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0.
+          lv_yes = abap_true.
         ENDIF.
       ENDLOOP.
+      IF lv_yes = abap_true.
+      LOOP AT ls_keyword-tt_calls INTO ls_call.
+           READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-outer TRANSPORTING NO FIELDS.
+        IF sy-subrc <> 0.
+          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
+          <selected>-name = ls_call-outer.
+        ENDIF.
 
+        READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-inner TRANSPORTING NO FIELDS.
+        IF sy-subrc <> 0.
+          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+          <selected>-name = ls_call-inner.
+        ENDIF.
+      ENDLOOP.
+      ENDIF.
     ENDLOOP.
 
     "deleting empty cycles.
@@ -7382,9 +7510,8 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
     DELETE lt_steps WHERE first = 'D'.
 
-
     SORT lt_steps BY step DESCENDING.
-   
+
     "collecting dependents variables
     LOOP AT lt_steps INTO ls_step.
 
@@ -7398,7 +7525,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
           LOOP AT ls_source-t_composed INTO DATA(ls_composed) WHERE line = ls_step-line.
             READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_composed-composing TRANSPORTING NO FIELDS.
-            IF sy-subrc = 0.
+            IF sy-subrc <> 0.
               APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
               <selected>-name = ls_composed-composing.
             ENDIF.
@@ -7504,14 +7631,26 @@ CLASS lcl_mermaid IMPLEMENTATION.
         ENDIF.
       ENDLOOP.
 
-      LOOP AT ls_keyword-tt_calls INTO ls_call.
-        IF sy-tabix <> 1.
-          <line>-arrow = |{ <line>-arrow }, |.
-        ENDIF.
-        <line>-arrow  = |{ <line>-arrow  } { ls_call-outer } { ls_call-type } { ls_call-inner }|.
-        <line>-subname = ls_call-name.
-        REPLACE ALL OCCURRENCES OF '''' IN <line>-subname WITH ''.
-      ENDLOOP.
+
+
+      IF ls_keyword-to_evname IS NOT INITIAL.
+        SORT ls_keyword-tt_calls BY outer.
+        DELETE ADJACENT DUPLICATES FROM ls_keyword-tt_calls.
+        LOOP AT ls_keyword-tt_calls INTO ls_call.
+          IF sy-tabix <> 1.
+            <line>-arrow = |{ <line>-arrow }, |.
+          ENDIF.
+          <line>-arrow  = |{ <line>-arrow  } { ls_call-outer } { ls_call-type } { ls_call-inner }|.
+          <line>-subname = ls_call-name.
+          REPLACE ALL OCCURRENCES OF '''' IN <line>-subname WITH ''.
+          REPLACE ALL OCCURRENCES OF '"' IN  <line>-code WITH ''.
+        ENDLOOP.
+      ENDIF.
+      REPLACE ALL OCCURRENCES OF '''' IN <line>-subname WITH ''.
+      REPLACE ALL OCCURRENCES OF '(' IN <line>-arrow WITH ''.
+      REPLACE ALL OCCURRENCES OF ')' IN <line>-arrow WITH ''.
+      REPLACE ALL OCCURRENCES OF '(' IN <line>-subname WITH ''.
+      REPLACE ALL OCCURRENCES OF ')' IN <line>-subname WITH ''.
     ENDLOOP.
 
     "check subform execution steps existance and if/case structures build
@@ -7533,7 +7672,9 @@ CLASS lcl_mermaid IMPLEMENTATION.
       IF <line>-cond = 'ENDIF' OR <line>-cond = 'ENDCASE'.
         <if>-end_ind = <line>-ind.
         SUBTRACT 1 FROM if_depth.
-        READ TABLE mt_if INDEX if_depth ASSIGNING <if>.
+        LOOP AT mt_if  ASSIGNING <if> WHERE end_ind = 0.
+        ENDLOOP.
+        "READ TABLE mt_if INDEX if_depth ASSIGNING <if>.
       ENDIF.
 
       IF <line>-cond = 'WHEN'.
@@ -7563,9 +7704,9 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
           ENDIF.
         ENDDO.
-        IF when_count = 1.
-          <if>-if_ind = lv_els_before.
-          CLEAR <line>-els_before.
+        IF when_count = 1. "to refactor
+*          <if>-if_ind = lv_els_before.
+*          CLEAR <line>-els_before.
         ENDIF.
       ENDIF.
 
