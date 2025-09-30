@@ -86,3 +86,5 @@ Button "Coverage" - will show code coverage on all stacks levels
 
 <img width="1752" height="894" alt="image" src="https://github.com/user-attachments/assets/2490c4f5-f24e-47e5-adcd-ea5558b62372" />
 
+Iterators example - http://zevolving.com/2012/01/iterator-design-pattern-to-access-linked-list/
+<img width="1743" height="881" alt="image" src="https://github.com/user-attachments/assets/02a0666b-25bd-4904-ad2b-b648d0f08daf" />
