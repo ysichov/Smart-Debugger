@@ -618,6 +618,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
              typename TYPE abap_abstypename,
              fullname TYPE string,
              path     TYPE string,
+             instance TYPE string,
            END OF ts_table.
 
     TYPES tt_table TYPE STANDARD TABLE OF ts_table
@@ -3709,7 +3710,7 @@ CLASS lcl_window IMPLEMENTATION.
         wrong_parameters     = 3
         OTHERS               = 4.
 
-  "blue arrow - current line
+    "blue arrow - current line
     APPEND INITIAL LINE TO lt_lines ASSIGNING <line>.
     <line> = iv_line.
     mo_code_viewer->set_marker( EXPORTING marker_number = 7 marker_lines = lt_lines ).
@@ -5691,6 +5692,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lo_columns->set_optimize( abap_true ).
 
     lo_columns->get_column( 'VALUE' )->set_short_text( 'Value' ).
+    lo_columns->get_column( 'INSTANCE' )->set_short_text( 'Instance' ).
     lo_columns->get_column( 'FULLNAME' )->set_visible( abap_false ).
     lo_columns->get_column( 'PATH' )->set_visible( abap_false ).
     lo_columns->get_column( 'TYPENAME' )->set_short_text( 'Type' ).
@@ -6136,12 +6138,22 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       l_rel = iv_rel.
     ENDIF.
 
-
     lv_icon = icon_oo_object.
     lv_text = is_var-short.
     ls_tree-fullname = is_var-name.
     ls_tree-path = is_var-path.
 
+    DATA(lv_string) = is_var-instance.
+    DATA: lt_split TYPE TABLE OF string.
+
+    IF is_var-instance IS NOT INITIAL.
+      lv_string = is_var-instance.
+      REPLACE ALL OCCURRENCES OF REGEX '[*{}]' IN lv_string WITH ''.
+      REPLACE ALL OCCURRENCES OF '\CLASS' IN lv_string WITH ''.
+      REPLACE ALL OCCURRENCES OF '\PROGRAM' IN lv_string WITH ''.
+      SPLIT lv_string AT '=' INTO TABLE lt_split.
+      ls_tree-instance = |{ lt_split[ lines( lt_split ) ] }({ lt_split[ 1 ] })|.
+    ENDIF.
     "own new method
     IF is_var-cl_leaf IS NOT INITIAL.
 
@@ -7472,7 +7484,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
       lt_steps = mt_steps.
     ENDIF.
 
-data: lv_yes type xfeld.
+    DATA: lv_yes TYPE xfeld.
     LOOP AT lt_steps INTO DATA(ls_step).
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO DATA(ls_source).
       READ TABLE ls_source-t_keywords WITH KEY line = ls_step-line INTO DATA(ls_keyword).
@@ -7489,19 +7501,19 @@ data: lv_yes type xfeld.
         ENDIF.
       ENDLOOP.
       IF lv_yes = abap_true.
-      LOOP AT ls_keyword-tt_calls INTO ls_call.
-           READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-outer TRANSPORTING NO FIELDS.
-        IF sy-subrc <> 0.
-          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
-          <selected>-name = ls_call-outer.
-        ENDIF.
+        LOOP AT ls_keyword-tt_calls INTO ls_call.
+          READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-outer TRANSPORTING NO FIELDS.
+          IF sy-subrc <> 0.
+            APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
+            <selected>-name = ls_call-outer.
+          ENDIF.
 
-        READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-inner TRANSPORTING NO FIELDS.
-        IF sy-subrc <> 0.
-          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-          <selected>-name = ls_call-inner.
-        ENDIF.
-      ENDLOOP.
+          READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_call-inner TRANSPORTING NO FIELDS.
+          IF sy-subrc <> 0.
+            APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+            <selected>-name = ls_call-inner.
+          ENDIF.
+        ENDLOOP.
       ENDIF.
     ENDLOOP.
 
