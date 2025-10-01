@@ -2342,7 +2342,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                   ENDIF.
                 ENDIF.
               ENDLOOP.
-
               "get_form_parameters( i_prg = mo_window->m_prg i_form = ms_stack-eventname ).
             ENDIF.
 
@@ -2544,38 +2543,60 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     LOOP AT it_var ASSIGNING FIELD-SYMBOL(<var>) WHERE done = abap_false.
 
       CASE <var>-leaf.
-        WHEN 'LOCAL'.
-          mo_tree_local->m_leaf =  'LOCAL'.
-          IF mo_tree_local->m_locals_key IS INITIAL.
-            mo_tree_local->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
-          ELSE.
 
-            mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
+        WHEN 'LOCAL'.
+          IF mo_tree_local->m_locals IS NOT INITIAL.
+            mo_tree_local->m_leaf =  'LOCAL'.
+            IF mo_tree_local->m_locals_key IS INITIAL.
+              mo_tree_local->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
+            ELSE.
+              mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
+            ENDIF.
+          ELSE.
+            CONTINUE.
           ENDIF.
+
         WHEN 'GLOBAL'.
-          mo_tree_local->m_leaf =  'GLOBAL'.
-          IF mo_tree_local->m_globals_key IS INITIAL.
-            mo_tree_local->add_node( iv_name = 'Globals' iv_icon = CONV #( icon_life_events ) ).
+          IF mo_tree_local->m_globals IS NOT INITIAL.
+            mo_tree_local->m_leaf =  'GLOBAL'.
+            IF mo_tree_local->m_globals_key IS INITIAL.
+              mo_tree_local->add_node( iv_name = 'Globals' iv_icon = CONV #( icon_life_events ) ).
+            ELSE.
+              mo_tree_local->main_node_key = mo_tree_local->m_globals_key.
+            ENDIF.
           ELSE.
-            mo_tree_local->main_node_key = mo_tree_local->m_globals_key.
+            CONTINUE.
           ENDIF.
+
         WHEN 'LDB'.
-          mo_tree_local->m_leaf =  'LDB'.
-          IF mo_tree_local->m_ldb_key IS INITIAL.
-            mo_tree_local->add_node( iv_name = 'LDB' iv_icon = CONV #( icon_life_events ) ).
+          IF mo_tree_local->m_ldb IS NOT INITIAL.
+            mo_tree_local->m_leaf =  'LDB'.
+            IF mo_tree_local->m_ldb_key IS INITIAL.
+              mo_tree_local->add_node( iv_name = 'LDB' iv_icon = CONV #( icon_life_events ) ).
+            ELSE.
+              mo_tree_local->main_node_key = mo_tree_local->m_ldb_key.
+            ENDIF.
           ELSE.
-            mo_tree_local->main_node_key = mo_tree_local->m_ldb_key.
+            CONTINUE.
           ENDIF.
 
         WHEN 'SYST'.
-          mo_tree_local->m_leaf =  'SYST'.
-          IF mo_tree_local->m_syst_key IS INITIAL.
-            mo_tree_local->add_node( iv_name = 'System variables' iv_icon = CONV #( icon_life_events ) ).
+          IF mo_tree_local->m_syst IS NOT INITIAL.
+            mo_tree_local->m_leaf =  'SYST'.
+            IF mo_tree_local->m_syst_key IS INITIAL.
+              mo_tree_local->add_node( iv_name = 'System variables' iv_icon = CONV #( icon_life_events ) ).
+            ENDIF.
+          ELSE.
+            CONTINUE.
           ENDIF.
         WHEN 'CLASS'.
-          mo_tree_local->m_leaf =  'CLASS'.
-          IF mo_tree_local->m_class_key IS INITIAL.
-            mo_tree_local->add_node( iv_name = 'Class-data global variables' iv_icon = CONV #( icon_life_events ) ).
+          IF mo_tree_local->m_class_data IS NOT INITIAL.
+            mo_tree_local->m_leaf =  'CLASS'.
+            IF mo_tree_local->m_class_key IS INITIAL.
+              mo_tree_local->add_node( iv_name = 'Class-data global variables' iv_icon = CONV #( icon_life_events ) ).
+            ENDIF.
+          ELSE.
+            CONTINUE.
           ENDIF.
       ENDCASE.
 
@@ -6450,21 +6471,33 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
       WHEN 'LOCALS'."Show/hide locals variables
         m_locals = m_locals BIT-XOR c_mask.
+        m_refresh = abap_true.
       WHEN 'GLOBALS'."Show/hide global variables
         m_globals = m_globals BIT-XOR c_mask.
+        m_refresh = abap_true.
       WHEN 'SYST'."Show/hide sy structure
         m_syst = m_syst BIT-XOR c_mask.
+        m_refresh = abap_true.
       WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
         m_class_data = m_class_data BIT-XOR c_mask.
+
       WHEN 'LDB'."Show/hide LDB variables (globals)
         m_ldb = m_ldb BIT-XOR c_mask.
     ENDCASE.
 
-    mo_debugger->m_update = abap_true.
-
+    m_refresh = abap_true.
     mo_debugger->mo_tree_local->clear( ).
     mo_debugger->mo_tree_exp->clear( ).
     mo_debugger->mo_tree_imp->clear( ).
+
+    "mo_debugger->run_script_hist( mo_debugger->m_hist_step ).
+    "mo_debugger->mo_tree_local->display( ).
+
+    "RETURN.
+
+    mo_debugger->m_update = abap_true.
+
+    mo_debugger->mo_tree_local->display( ).
 
     CLEAR mo_debugger->mo_window->m_debug_button.
     IF mo_debugger->m_hist_step = mo_debugger->m_step.
