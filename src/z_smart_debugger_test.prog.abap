@@ -2359,7 +2359,6 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                   ENDIF.
                 ENDIF.
               ENDLOOP.
-
               "get_form_parameters( i_prg = mo_window->m_prg i_form = ms_stack-eventname ).
             ENDIF.
 
@@ -2418,6 +2417,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           lr_names = VALUE #( BASE lr_names ( sign = 'I' option = 'EQ' low = lv_temp ) ).
         ENDLOOP.
 
+        DELETE lr_names WHERE low = 'CORRESPONDING'. "to refactor
         IF sy-subrc = 0.
           DELETE lt_globals WHERE name NOT IN lr_names.
           DELETE lt_locals WHERE name NOT IN lr_names.
@@ -2560,38 +2560,60 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     LOOP AT it_var ASSIGNING FIELD-SYMBOL(<var>) WHERE done = abap_false.
 
       CASE <var>-leaf.
-        WHEN 'LOCAL'.
-          mo_tree_local->m_leaf =  'LOCAL'.
-          IF mo_tree_local->m_locals_key IS INITIAL.
-            mo_tree_local->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
-          ELSE.
 
-            mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
+        WHEN 'LOCAL'.
+          IF mo_tree_local->m_locals IS NOT INITIAL.
+            mo_tree_local->m_leaf =  'LOCAL'.
+            IF mo_tree_local->m_locals_key IS INITIAL.
+              mo_tree_local->add_node( iv_name = 'Locals' iv_icon = CONV #( icon_life_events ) ).
+            ELSE.
+              mo_tree_local->main_node_key = mo_tree_local->m_locals_key.
+            ENDIF.
+          ELSE.
+            CONTINUE.
           ENDIF.
+
         WHEN 'GLOBAL'.
-          mo_tree_local->m_leaf =  'GLOBAL'.
-          IF mo_tree_local->m_globals_key IS INITIAL.
-            mo_tree_local->add_node( iv_name = 'Globals' iv_icon = CONV #( icon_life_events ) ).
+          IF mo_tree_local->m_globals IS NOT INITIAL.
+            mo_tree_local->m_leaf =  'GLOBAL'.
+            IF mo_tree_local->m_globals_key IS INITIAL.
+              mo_tree_local->add_node( iv_name = 'Globals' iv_icon = CONV #( icon_life_events ) ).
+            ELSE.
+              mo_tree_local->main_node_key = mo_tree_local->m_globals_key.
+            ENDIF.
           ELSE.
-            mo_tree_local->main_node_key = mo_tree_local->m_globals_key.
+            CONTINUE.
           ENDIF.
+
         WHEN 'LDB'.
-          mo_tree_local->m_leaf =  'LDB'.
-          IF mo_tree_local->m_ldb_key IS INITIAL.
-            mo_tree_local->add_node( iv_name = 'LDB' iv_icon = CONV #( icon_life_events ) ).
+          IF mo_tree_local->m_ldb IS NOT INITIAL.
+            mo_tree_local->m_leaf =  'LDB'.
+            IF mo_tree_local->m_ldb_key IS INITIAL.
+              mo_tree_local->add_node( iv_name = 'LDB' iv_icon = CONV #( icon_life_events ) ).
+            ELSE.
+              mo_tree_local->main_node_key = mo_tree_local->m_ldb_key.
+            ENDIF.
           ELSE.
-            mo_tree_local->main_node_key = mo_tree_local->m_ldb_key.
+            CONTINUE.
           ENDIF.
 
         WHEN 'SYST'.
-          mo_tree_local->m_leaf =  'SYST'.
-          IF mo_tree_local->m_syst_key IS INITIAL.
-            mo_tree_local->add_node( iv_name = 'System variables' iv_icon = CONV #( icon_life_events ) ).
+          IF mo_tree_local->m_syst IS NOT INITIAL.
+            mo_tree_local->m_leaf =  'SYST'.
+            IF mo_tree_local->m_syst_key IS INITIAL.
+              mo_tree_local->add_node( iv_name = 'System variables' iv_icon = CONV #( icon_life_events ) ).
+            ENDIF.
+          ELSE.
+            CONTINUE.
           ENDIF.
         WHEN 'CLASS'.
-          mo_tree_local->m_leaf =  'CLASS'.
-          IF mo_tree_local->m_class_key IS INITIAL.
-            mo_tree_local->add_node( iv_name = 'Class-data global variables' iv_icon = CONV #( icon_life_events ) ).
+          IF mo_tree_local->m_class_data IS NOT INITIAL.
+            mo_tree_local->m_leaf =  'CLASS'.
+            IF mo_tree_local->m_class_key IS INITIAL.
+              mo_tree_local->add_node( iv_name = 'Class-data global variables' iv_icon = CONV #( icon_life_events ) ).
+            ENDIF.
+          ELSE.
+            CONTINUE.
           ENDIF.
       ENDCASE.
 
@@ -5845,8 +5867,12 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     lo_struct_descr ?= io_type_descr.
     ls_tree-ref =  ir_up.
     IF is_var-instance NE '{A:initial}'.
-      ls_tree-typename = lo_struct_descr->absolute_name.
-      REPLACE FIRST OCCURRENCE OF '\TYPE=' IN ls_tree-typename+0(6) WITH ''.
+      "ls_tree-typename = lo_struct_descr->absolute_name.
+      "REPLACE FIRST OCCURRENCE OF '\TYPE=' IN ls_tree-typename+0(6) WITH ''.
+      DATA: lt_split TYPE TABLE OF string.
+      SPLIT lo_struct_descr->absolute_name AT '\TYPE=' INTO TABLE lt_split.
+      ls_tree-typename = lt_split[ lines( lt_split ) ].
+
       IF ls_tree-typename+0(1) = '%'.
         ls_tree-typename = |{ lo_struct_descr->type_kind }({ lo_struct_descr->length / 2 })|.
       ENDIF.
@@ -5885,7 +5911,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     IF  ( iv_struc_name IS SUPPLIED AND iv_struc_name IS NOT INITIAL ) OR iv_struc_name IS NOT SUPPLIED.
       IF lv_text IS NOT INITIAL.
 
-
         DATA(lt_nodes) = tree->get_nodes( )->get_all_nodes( ).
         LOOP AT lt_nodes INTO DATA(ls_nodes).
           DATA(lr_row) = ls_nodes-node->get_data_row( ).
@@ -5919,7 +5944,6 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
             ENDIF.
           ENDIF.
-          "RETURN.
         ENDIF.
       ENDIF.
 
@@ -5944,8 +5968,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       <vars>-short = is_var-short.
       <vars>-ref  = ir_up.
       <vars>-cl_leaf = is_var-cl_leaf.
-      <vars>-type = lo_struct_descr->absolute_name.
       <vars>-path = is_var-path.
+      <vars>-type = lo_struct_descr->absolute_name.
+
     ENDIF.
 
     IF l_rel = if_salv_c_node_relation=>next_sibling AND l_node IS NOT INITIAL.
@@ -6223,7 +6248,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = mo_debugger->ms_stack-include INTO DATA(ls_source).
       READ TABLE ls_source-tt_tabs WITH KEY name = is_var-short INTO DATA(ls_tab).
       IF sy-subrc <> 0.
-        ls_tree-typename = replace( val = lo_table_descr->absolute_name sub = '\TYPE=' with = '' ).
+        DATA: lt_split TYPE TABLE OF string.
+        SPLIT lo_table_descr->absolute_name AT '\TYPE=' INTO TABLE lt_split.
+        ls_tree-typename = lt_split[ lines( lt_split ) ].
       ELSE.
         ls_tree-typename = ls_tab-type.
       ENDIF.
@@ -6461,21 +6488,33 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
       WHEN 'LOCALS'."Show/hide locals variables
         m_locals = m_locals BIT-XOR c_mask.
+        m_refresh = abap_true.
       WHEN 'GLOBALS'."Show/hide global variables
         m_globals = m_globals BIT-XOR c_mask.
+        m_refresh = abap_true.
       WHEN 'SYST'."Show/hide sy structure
         m_syst = m_syst BIT-XOR c_mask.
+        m_refresh = abap_true.
       WHEN 'CLASS_DATA'."Show/hide CLASS-DATA variables (globals)
         m_class_data = m_class_data BIT-XOR c_mask.
+
       WHEN 'LDB'."Show/hide LDB variables (globals)
         m_ldb = m_ldb BIT-XOR c_mask.
     ENDCASE.
 
-    mo_debugger->m_update = abap_true.
-
+    m_refresh = abap_true.
     mo_debugger->mo_tree_local->clear( ).
     mo_debugger->mo_tree_exp->clear( ).
     mo_debugger->mo_tree_imp->clear( ).
+
+    "mo_debugger->run_script_hist( mo_debugger->m_hist_step ).
+    "mo_debugger->mo_tree_local->display( ).
+
+    "RETURN.
+
+    mo_debugger->m_update = abap_true.
+
+    mo_debugger->mo_tree_local->display( ).
 
     CLEAR mo_debugger->mo_window->m_debug_button.
     IF mo_debugger->m_hist_step = mo_debugger->m_step.
@@ -7704,7 +7743,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
         SUBTRACT 1 FROM if_depth.
         LOOP AT mt_if  ASSIGNING <if> WHERE end_ind = 0.
         ENDLOOP.
-        "READ TABLE mt_if INDEX if_depth ASSIGNING <if>.
       ENDIF.
 
       IF <line>-cond = 'WHEN'.
@@ -7846,14 +7884,16 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
         ENDIF.
 
-        IF strlen( ls_line-code ) > 50.
-          lv_name = ls_line-code+0(50).
-        ELSE.
-          lv_name = ls_line-code.
-        ENDIF.
+        "IF strlen( ls_line-code ) > 50.
+        "lv_name = ls_line-code+0(50).
+        "ELSE.
+        lv_name = ls_line-code.
+        "ENDIF.
         REPLACE ALL OCCURRENCES OF `PERFORM` IN lv_name WITH `FORM` IN CHARACTER MODE.
         REPLACE ALL OCCURRENCES OF `CALL FUNCTION` IN lv_name WITH `FUNCTION` IN CHARACTER MODE.
         REPLACE ALL OCCURRENCES OF `CALL METHOD` IN lv_name WITH `METHOD` IN CHARACTER MODE.
+        REPLACE ALL OCCURRENCES OF `<` IN lv_name WITH `` IN CHARACTER MODE.
+        REPLACE ALL OCCURRENCES OF '>' IN lv_name WITH `` IN CHARACTER MODE.
         REPLACE ALL OCCURRENCES OF `-` IN lv_name WITH `~` IN CHARACTER MODE.
         REPLACE ALL OCCURRENCES OF ` ` IN lv_name WITH `&nbsp;` IN CHARACTER MODE.
 
@@ -7879,8 +7919,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
       SUBTRACT 1 FROM lv_opened.
     ENDDO.
 
-
-    DATA: if_ind      TYPE i.
+    DATA: if_ind TYPE i.
     CLEAR ls_prev_stack.
     LOOP AT lt_lines INTO ls_line WHERE cond <> 'LOOP' AND cond <> 'DO' AND cond <> 'WHILE' AND cond <> 'ENDLOOP' AND cond <> 'ENDDO' AND cond <> 'ENDWHILE'.
 
@@ -7895,6 +7934,13 @@ CLASS lcl_mermaid IMPLEMENTATION.
           ls_prev_stack = lt_lines[ <if>-if_ind ].
         ELSE.
           ls_prev_stack = ls_line.
+
+          IF ls_line-arrow IS NOT INITIAL.
+            lv_sub = '|"' && ls_line-arrow && '"|'.
+          ELSE.
+            CLEAR lv_sub.
+          ENDIF.
+
           CONTINUE.
         ENDIF.
 
@@ -7946,7 +7992,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
     ENDLOOP.
 
     open_mermaid( lv_mm_string ).
-
   ENDMETHOD.
 
   METHOD parse_call.
