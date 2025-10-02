@@ -129,6 +129,11 @@ CLASS lcl_appl DEFINITION.
              alv_viewer TYPE REF TO lcl_table_viewer,
            END OF t_obj,
 
+           BEGIN OF t_popup,
+             parent TYPE REF TO cl_gui_dialogbox_container,
+             child  TYPE REF TO cl_gui_dialogbox_container,
+           END OF t_popup,
+
            BEGIN OF t_classes_types,
              name TYPE string,
              full TYPE string,
@@ -169,6 +174,7 @@ CLASS lcl_appl DEFINITION.
     CLASS-DATA: m_option_icons     TYPE TABLE OF sign_option_icon_s,
                 mt_lang            TYPE TABLE OF t_lang,
                 mt_obj             TYPE TABLE OF t_obj, "main object table
+                mt_popups          TYPE TABLE OF t_popup, "dependents popups
                 m_ctrl_box_handler TYPE REF TO lcl_box_handler,
                 c_dragdropalv      TYPE REF TO cl_dragdrop,
                 is_mermaid_active  TYPE xfeld.
@@ -244,6 +250,14 @@ CLASS lcl_popup IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD on_box_close.
+    LOOP AT lcl_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>) WHERE parent = sender .
+      <popup>-child->free( ).
+      CLEAR <popup>-child.
+    ENDLOOP.
+    IF sy-subrc <> 0.
+      DELETE  lcl_appl=>mt_popups WHERE child = sender.
+    ENDIF.
+    DELETE lcl_appl=>mt_popups WHERE child IS INITIAL.
     sender->free( ).
   ENDMETHOD.
 
@@ -937,7 +951,8 @@ CLASS lcl_ai DEFINITION INHERITING FROM lcl_popup.
           mv_prompt               TYPE string,
           mv_answer               TYPE string.
 
-    METHODS:  constructor IMPORTING io_source TYPE REF TO cl_ci_source_include,
+    METHODS: constructor IMPORTING io_source TYPE REF TO cl_ci_source_include
+              io_parent  type ref to cl_gui_dialogbox_container,
       add_ai_toolbar_buttons,
       hnd_ai_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode.
 
@@ -956,6 +971,13 @@ CLASS lcl_ai IMPLEMENTATION.
         columns = 1
       EXCEPTIONS
         OTHERS  = 1.
+
+    "save new popup ref
+      APPEND INITIAL LINE TO lcl_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>).
+      <popup>-parent = io_parent.
+      <popup>-child = mo_ai_box.
+
+      SET HANDLER on_box_close FOR mo_ai_box.
 
     mo_ai_splitter->get_container(
          EXPORTING
@@ -3511,6 +3533,7 @@ CLASS lcl_window IMPLEMENTATION.
     m_hist_depth = 9.
 
     mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.9' i_width = 1400 i_hight = 400 ).
+    SET HANDLER on_box_close FOR mo_box.
     CREATE OBJECT mo_splitter
       EXPORTING
         parent  = mo_box
@@ -3898,7 +3921,7 @@ CLASS lcl_window IMPLEMENTATION.
       WHEN 'AI'.
 
         READ TABLE mo_debugger->mo_window->mt_source INDEX 1 INTO DATA(ls_source).
-        NEW lcl_ai( ls_source-source ).
+        NEW lcl_ai( io_source = ls_source-source io_parent =  mo_debugger->mo_window->mo_box ).
 
       WHEN 'ENGINE'.
         m_version = m_version BIT-XOR c_mask.
@@ -4568,6 +4591,12 @@ CLASS lcl_table_viewer IMPLEMENTATION.
   METHOD create_popup.
 
     mo_box = create( i_width = 800 i_hight = 150 ).
+     "save new popup ref
+      APPEND INITIAL LINE TO lcl_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>).
+      <popup>-parent = mo_window->mo_box.
+      <popup>-child = mo_box.
+
+      SET HANDLER on_box_close FOR mo_box.
 
     CREATE OBJECT mo_splitter
       EXPORTING
@@ -7361,6 +7390,11 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
     IF mo_box IS INITIAL.
       mo_box = create( i_name = lv_text i_width = 1000 i_hight = 300 ).
+      "save new popup ref
+      APPEND INITIAL LINE TO lcl_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>).
+      <popup>-parent = mo_debugger->mo_window->mo_box.
+      <popup>-child = mo_box.
+
       SET HANDLER on_box_close FOR mo_box.
 
       CREATE OBJECT mo_splitter
