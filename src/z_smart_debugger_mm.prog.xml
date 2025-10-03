@@ -3,16 +3,17 @@
  <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
   <asx:values>
    <PROGDIR>
-    <NAME>Z_SMART_DEBUGGER_TEMP</NAME>
-    <SUBC>I</SUBC>
+    <NAME>Z_SMART_DEBUGGER_MM</NAME>
+    <SUBC>1</SUBC>
     <RLOAD>E</RLOAD>
+    <FIXPT>X</FIXPT>
     <UCCHECK>X</UCCHECK>
    </PROGDIR>
    <TPOOL>
     <item>
      <ID>R</ID>
-     <ENTRY>Include Z_SMART_DEBUGGER_TEMP</ENTRY>
-     <LENGTH>29</LENGTH>
+     <ENTRY>Smart debugger with mermaid</ENTRY>
+     <LENGTH>27</LENGTH>
     </item>
    </TPOOL>
   </asx:values>
