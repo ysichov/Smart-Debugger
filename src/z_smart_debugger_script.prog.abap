@@ -843,23 +843,16 @@ CLASS lcl_ai_api IMPLEMENTATION.
 
     CALL METHOD cl_http_client=>create_by_destination
       EXPORTING
-        destination                = 'Z_LM' "SM59 local config
+        destination              = 'Z_LM' "SM59 local config
       IMPORTING
-        client                     = lo_http_client
+        client                   = lo_http_client
       EXCEPTIONS
-        argument_not_found         = 1
-        destination_not_found      = 2
-        destination_no_authority   = 3
-        plugin_not_active          = 4
-        internal_error             = 5
-        oa2c_set_token_error       = 6
-        oa2c_missing_authorization = 7
-        oa2c_invalid_config        = 8
-        oa2c_invalid_parameters    = 9
-        oa2c_invalid_scope         = 10
-        oa2c_invalid_grant         = 11
-        oa2c_secstore_adm          = 12
-        OTHERS                     = 13.
+        argument_not_found       = 1
+        destination_not_found    = 2
+        destination_no_authority = 3
+        plugin_not_active        = 4
+        internal_error           = 5
+        OTHERS                   = 13.
     IF sy-subrc <> 0.
 *     Implement suitable error handling here
     ENDIF.
@@ -5913,9 +5906,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         DATA(lt_nodes) = tree->get_nodes( )->get_all_nodes( ).
         LOOP AT lt_nodes INTO DATA(ls_nodes).
           DATA(lr_row) = ls_nodes-node->get_data_row( ).
-          DATA ls_row TYPE ts_table.
-          ls_row = lr_row->*.
-          IF ls_row-fullname = is_var-name.
+          FIELD-SYMBOLS <ls_row> TYPE ts_table.
+          ASSIGN lr_row->* TO <ls_row>.
+          IF <ls_row>-fullname = is_var-name.
             DATA(l_node) = ls_nodes-node.
             EXIT.
           ENDIF.
@@ -6056,9 +6049,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     LOOP AT lt_nodes INTO DATA(ls_nodes).
       DATA(lv_name) = ls_nodes-node->get_text( ).
       DATA(lr_row) = ls_nodes-node->get_data_row( ).
-      DATA ls_row TYPE ts_table.
-      ls_row = lr_row->*.
-      IF ls_row-fullname = is_var-name.
+      FIELD-SYMBOLS <ls_row> TYPE ts_table.
+      ASSIGN lr_row->* TO <ls_row>.
+      IF <ls_row>-fullname = is_var-name.
         DATA(l_node) = ls_nodes-node.
         EXIT.
       ENDIF.
@@ -6270,9 +6263,9 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
     DATA(lt_nodes) = tree->get_nodes( )->get_all_nodes( ).
     LOOP AT lt_nodes INTO DATA(ls_nodes).
       DATA(lr_row) = ls_nodes-node->get_data_row( ).
-      DATA ls_row TYPE ts_table.
-      ls_row = lr_row->*.
-      IF ls_row-fullname = is_var-name.
+      FIELD-SYMBOLS <ls_row> TYPE ts_table.
+      ASSIGN lr_row->* TO <ls_row>.
+      IF <ls_row>-fullname = is_var-name.
         DATA(l_node) = ls_nodes-node.
         EXIT.
       ENDIF.
@@ -8168,20 +8161,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD open_mermaid.
-
-    CHECK lcl_appl=>is_mermaid_active = abap_true.
-
-    TRY.
-        IF mo_diagram IS INITIAL.
-          mo_diagram = NEW zcl_wd_gui_mermaid_js_diagram( parent = mo_mm_container ).
-        ENDIF.
-        mo_diagram->set_source_code_string( iv_mm_string ).
-        mo_diagram->display( ).
-
-      CATCH zcx_wd_gui_mermaid_js_diagram INTO DATA(error).
-        MESSAGE error TYPE 'E'.
-    ENDTRY.
-
   ENDMETHOD.
 
 ENDCLASS.
