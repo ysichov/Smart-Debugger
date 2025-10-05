@@ -35,7 +35,7 @@ CLASS lcl_appl DEFINITION.
   PUBLIC SECTION.
 
     TYPES:
-      BEGIN OF selection_display_s,
+      BEGIN OF selection_display,
         ind         TYPE i,
         field_label TYPE lvc_fname,
         int_type(1),
@@ -57,7 +57,7 @@ CLASS lcl_appl DEFINITION.
         receiver    TYPE REF TO lcl_data_receiver,
         color       TYPE lvc_t_scol,
         style       TYPE lvc_t_styl,
-      END OF selection_display_s,
+      END OF selection_display,
       BEGIN OF t_sel_row,
         sign        TYPE tvarv_sign,
         opti        TYPE tvarv_opti,
@@ -99,7 +99,7 @@ CLASS lcl_appl DEFINITION.
              done          TYPE xfeld,
            END OF var_table,
 
-           t_var_table TYPE STANDARD TABLE OF var_table WITH NON-UNIQUE DEFAULT KEY,
+           variables TYPE STANDARD TABLE OF var_table WITH NON-UNIQUE DEFAULT KEY,
 
            BEGIN OF var_table_temp,
              step          TYPE i,
@@ -190,7 +190,7 @@ CLASS lcl_appl DEFINITION.
                 c_dragdropalv     TYPE REF TO cl_dragdrop,
                 is_mermaid_active TYPE xfeld.
 
-    CLASS-DATA: mt_sel TYPE TABLE OF selection_display_s.
+    CLASS-DATA: mt_sel TYPE TABLE OF selection_display.
 
 
     CLASS-METHODS:
@@ -474,14 +474,14 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
       run_script_hist IMPORTING iv_step TYPE i OPTIONAL
                       EXPORTING es_stop TYPE xfeld
                       ,
-      show_variables CHANGING it_var TYPE lcl_appl=>t_var_table RETURNING VALUE(rv_stop) TYPE xfeld,
+      show_variables CHANGING it_var TYPE lcl_appl=>variables RETURNING VALUE(rv_stop) TYPE xfeld,
       set_selected_vars,
       save_hist IMPORTING
                   iv_name        TYPE clike
                   iv_fullname    TYPE string
                   iv_type        TYPE string
                   iv_cl_leaf     TYPE int4
-                  iv_parent_name TYPE string
+                  iv_parent_calculated TYPE string
                   ir_up          TYPE any OPTIONAL
                   i_instance     TYPE string OPTIONAL,
 
@@ -516,7 +516,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                                          iv_type       TYPE string
                                          i_shortname   TYPE string OPTIONAL
                                          iv_value      TYPE string OPTIONAL
-                                         i_parent_name TYPE string OPTIONAL
+                                         i_parent_calculated TYPE string OPTIONAL
                                          i_cl_leaf     TYPE int4 OPTIONAL
                                          i_instance    TYPE string OPTIONAL,
 
@@ -551,7 +551,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
         iv_fullname    TYPE string OPTIONAL
         iv_type        TYPE string
         ir_up          TYPE REF TO data OPTIONAL
-        iv_parent_name TYPE string OPTIONAL
+        iv_parent_calculated TYPE string OPTIONAL
         iv_struc_name  TYPE string OPTIONAL
         i_instance     TYPE string OPTIONAL
         i_cl_leaf      TYPE int4
@@ -565,7 +565,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                 iv_type        TYPE string
                 i_cl_leaf      TYPE int4
                 ir_up          TYPE  REF TO data OPTIONAL
-                iv_parent_name TYPE string OPTIONAL
+                iv_parent_calculated TYPE string OPTIONAL
                 iv_struc_name  TYPE string OPTIONAL
                 i_instance     TYPE string OPTIONAL
                 i_suffix       TYPE string OPTIONAL.
@@ -577,7 +577,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
         iv_type        TYPE string
         iv_value       TYPE any OPTIONAL
         ir_up          TYPE  REF TO data OPTIONAL
-        iv_parent_name TYPE string OPTIONAL
+        iv_parent_calculated TYPE string OPTIONAL
         i_cl_leaf      TYPE int4
         i_instance     TYPE string OPTIONAL.
 
@@ -694,7 +694,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                 iv_rel            TYPE salv_de_node_relation
                 is_var            TYPE lcl_appl=>var_table
                 ir_up             TYPE REF TO data OPTIONAL
-                iv_parent_name    TYPE string OPTIONAL
+                iv_parent_calculated    TYPE string OPTIONAL
                 iv_struc_name     TYPE string OPTIONAL
       RETURNING VALUE(e_root_key) TYPE salv_de_node_key.
 
@@ -705,7 +705,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                 iv_rel            TYPE salv_de_node_relation
                 is_var            TYPE lcl_appl=>var_table
                 ir_up             TYPE REF TO data OPTIONAL
-                iv_parent_name    TYPE string OPTIONAL
+                iv_parent_calculated    TYPE string OPTIONAL
                 iv_struc_name     TYPE string OPTIONAL
       RETURNING VALUE(e_root_key) TYPE salv_de_node_key.
 
@@ -716,7 +716,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                 iv_rel            TYPE salv_de_node_relation
                 is_var            TYPE lcl_appl=>var_table
                 iv_value          TYPE any OPTIONAL
-                iv_parent_name    TYPE string OPTIONAL
+                iv_parent_calculated    TYPE string OPTIONAL
       RETURNING VALUE(e_root_key) TYPE salv_de_node_key.
 
     METHODS traverse_obj
@@ -726,7 +726,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                 is_var            TYPE lcl_appl=>var_table
                 iv_value          TYPE any OPTIONAL
                 ir_up             TYPE REF TO data OPTIONAL
-                iv_parent_name    TYPE string OPTIONAL
+                iv_parent_calculated    TYPE string OPTIONAL
       RETURNING VALUE(e_root_key) TYPE salv_de_node_key.
 
     METHODS traverse_table
@@ -736,7 +736,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
                 iv_rel            TYPE salv_de_node_relation
                 is_var            TYPE lcl_appl=>var_table
                 ir_up             TYPE REF TO data OPTIONAL
-                iv_parent_name    TYPE string OPTIONAL
+                iv_parent_calculated    TYPE string OPTIONAL
       RETURNING VALUE(e_root_key) TYPE salv_de_node_key.
 
   PRIVATE SECTION.
@@ -1157,19 +1157,19 @@ CLASS lcl_ace_window DEFINITION INHERITING FROM lcl_popup .
              to_evname TYPE string,
            END OF ts_kword,
 
-           BEGIN OF ts_calculated,
+           BEGIN OF calculated_var ,
              line       TYPE i,
-             calculated TYPE string,
-           END OF ts_calculated,
+             name TYPE string,
+           END OF calculated_var ,
 
-           BEGIN OF ts_composing,
+           BEGIN OF composed_vars,
              line      TYPE i,
-             composing TYPE string,
-           END OF ts_composing,
+             name TYPE string,
+           END OF composed_vars,
 
            tt_kword      TYPE STANDARD TABLE OF ts_kword WITH EMPTY KEY,
-           tt_calculated TYPE STANDARD TABLE OF ts_calculated WITH EMPTY KEY,
-           tt_composed   TYPE STANDARD TABLE OF ts_composing WITH EMPTY KEY,
+           tt_calculated TYPE STANDARD TABLE OF calculated_var  WITH EMPTY KEY,
+           tt_composed   TYPE STANDARD TABLE OF composed_vars WITH EMPTY KEY,
 
            BEGIN OF ts_params,
              class     TYPE string,
@@ -1704,7 +1704,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                           iv_name        = l_name
                           iv_fullname    = i_name
                           iv_type        = iv_type
-                          iv_parent_name = i_parent_name
+                          iv_parent_calculated = i_parent_calculated
                           i_instance     = i_instance
                           i_cl_leaf      = i_cl_leaf
                           ir_up          = r_header ).
@@ -1721,7 +1721,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                     iv_fullname    = l_full_name
                     iv_type        = iv_type
                     i_instance     = i_instance
-                    iv_parent_name = i_parent_name
+                    iv_parent_calculated = i_parent_calculated
                     i_cl_leaf      = i_cl_leaf
                     ir_up          = lr_struc ).
 
@@ -1739,8 +1739,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
              <ls_symobjref>-instancename <> '{A:initial}'.
 
             TRY." Try to get info about the referenced object
-                DATA(ls_ref_info) = cl_tpda_script_data_descr=>get_quick_info(
-                  CONV #( <ls_symobjref>-instancename ) ).
+                DATA(ls_ref_info) = cl_tpda_script_data_descr=>get_quick_info( <ls_symobjref>-instancename  ).
 
                 " Handle string references specially
                 IF ls_ref_info-typid = 'g'. "string
@@ -1753,16 +1752,16 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                             iv_name        = l_name
                             iv_type        = iv_type
                             iv_fullname    = i_name
-                            iv_parent_name = i_parent_name
+                            iv_parent_calculated = i_parent_calculated
                             i_instance     = i_instance
                             i_cl_leaf      = i_cl_leaf
                             ir_up          = m_variable ).
                 ELSE.
                   " Handle other reference types as before
-                  transfer_variable( EXPORTING i_name = CONV #( <ls_symobjref>-instancename )
+                  transfer_variable( EXPORTING i_name =  <ls_symobjref>-instancename
                                                iv_type = iv_type
                                                i_shortname = i_name
-                                               i_parent_name = i_parent_name
+                                               i_parent_calculated = i_parent_calculated
                                                i_cl_leaf = i_cl_leaf
                                                i_instance = <ls_symobjref>-instancename ).
                 ENDIF.
@@ -1776,7 +1775,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                           iv_name        = l_name
                           iv_type        = iv_type
                           iv_fullname    = i_name
-                          iv_parent_name = i_parent_name
+                          iv_parent_calculated = i_parent_calculated
                           i_instance     = i_instance
                           i_cl_leaf      = i_cl_leaf
                           ir_up          = m_variable ).
@@ -1790,7 +1789,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
           save_hist( EXPORTING iv_fullname    = i_name
                                iv_name        = i_shortname
-                               iv_parent_name = i_parent_name
+                               iv_parent_calculated = i_parent_calculated
                                iv_type        = iv_type
                                iv_cl_leaf     = i_cl_leaf
                                i_instance     = <symobjref>-instancename ).
@@ -1798,7 +1797,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           create_reference( EXPORTING i_name      = l_name
                                       i_type      = iv_type
                                       i_shortname = l_name
-                                      i_parent    = i_parent_name
+                                      i_parent    = i_parent_calculated
                                       i_quick     = m_quick ).
 
         ELSEIF m_quick-typid = 'v' OR m_quick-typid = 'u'."deep structure or structure
@@ -1821,7 +1820,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                       iv_name        = l_name
                       iv_fullname    = i_name
                       iv_type        = iv_type
-                      iv_parent_name = i_parent_name
+                      iv_parent_calculated = i_parent_calculated
                       i_instance     = i_instance
                       i_cl_leaf      = i_cl_leaf
                       ir_up          = lr_struc ).
@@ -1841,7 +1840,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                     iv_name        = l_name
                     iv_type        = iv_type
                     iv_fullname    = i_name
-                    iv_parent_name = i_parent_name
+                    iv_parent_calculated = i_parent_calculated
                     i_instance     = i_instance
                     i_cl_leaf      = i_cl_leaf
                     ir_up          = m_variable ).
@@ -1853,7 +1852,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                     iv_name        = l_name
                     iv_fullname    = i_name
                     iv_type        = iv_type
-                    iv_parent_name = i_parent_name
+                    iv_parent_calculated = i_parent_calculated
                     ir_up          = lr_struc
                     i_cl_leaf      = i_cl_leaf
                     i_instance     = i_instance ).
@@ -1943,7 +1942,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                                          iv_type       = i_type
                                          i_instance    = <ls_symobjref>-instancename
                                          i_cl_leaf     = <ls_attribute>-acckind
-                                         i_parent_name = lv_parent ).
+                                         i_parent_calculated = lv_parent ).
 
             READ TABLE mt_state WITH KEY path = |{ lv_parent  }-{ <ls_attribute>-name }| ASSIGNING FIELD-SYMBOL(<state>).
             IF sy-subrc = 0.
@@ -2052,7 +2051,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         m_refresh = abap_true.
       ENDIF.
 
-      mo_window->set_program( CONV #( ls_steps-include ) ).
+      mo_window->set_program( ls_steps-include ).
       mo_window->set_program_line( ls_steps-line ).
 
       IF ( mo_window->m_debug_button = 'F6BEG' OR mo_window->m_debug_button = 'F6END' ) AND m_target_stack =  ls_steps-stacklevel.
@@ -2436,7 +2435,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       IF lv_optimize = abap_true AND m_update IS INITIAL.
 
         LOOP AT ls_source-t_calculated INTO DATA(ls_param) WHERE line = ms_stack_prev-line.
-          lv_temp = ls_param-calculated.
+          lv_temp = ls_param-name.
           lr_names = VALUE #( BASE lr_names ( sign = 'I' option = 'EQ' low = lv_temp ) ).
         ENDLOOP.
 
@@ -2694,14 +2693,14 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           iv_rel         = l_rel
           is_var         = <var>
           ir_up          = <var>-ref
-          iv_parent_name = CONV #( <var>-name ) ).
+          iv_parent_calculated = CONV #( <var>-name ) ).
       ELSE.
         lo_tree->traverse_obj(
           iv_parent_key  = lv_key
           iv_rel         = l_rel
           is_var         = <var>
           ir_up          = <var>-ref
-          iv_parent_name = CONV #( <var>-name ) ).
+          iv_parent_calculated = CONV #( <var>-name ) ).
       ENDIF.
 
     ENDLOOP.
@@ -2947,7 +2946,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     show_variables( CHANGING it_var = mt_state ).
     set_selected_vars( ).
-    mo_window->set_program( CONV #( mo_window->m_prg-include ) ).
+    mo_window->set_program( mo_window->m_prg-include ).
     mo_window->set_program_line( mo_window->m_prg-line ).
     mo_window->show_stack( ).
     mo_tree_imp->display( ).
@@ -2999,7 +2998,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
         save_hist( EXPORTING iv_fullname    = CONV #( ls_prog-name )
                              iv_name        = CONV #( ls_prog-name )
-                             iv_parent_name = ''
+                             iv_parent_calculated = ''
                              iv_type        = 'CLASS'
                              iv_cl_leaf     = 0
                              i_instance     = CONV #( ls_prog-name ) ).
@@ -3008,7 +3007,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         LOOP AT refc->attributes INTO DATA(ls_atr).
           transfer_variable( EXPORTING i_name =  CONV #( |{ ls_prog-name }=>{ ls_atr-name }| )
                              i_shortname = CONV #( ls_atr-name )
-                             i_parent_name = CONV #( ls_prog-name )
+                             i_parent_calculated = CONV #( ls_prog-name )
                               iv_type = 'CLASS' ).
         ENDLOOP.
       ENDLOOP.
@@ -3038,7 +3037,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     IF i_instance IS INITIAL.
       lv_full_name = iv_fullname.
     ELSE.
-      IF iv_parent_name IS INITIAL.
+      IF iv_parent_calculated IS INITIAL.
         IF iv_name IS NOT INITIAL.
           lv_full_name = iv_name.
         ELSE.
@@ -3048,7 +3047,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         IF iv_fullname+0(3) = '{O:'.
           lv_full_name = iv_fullname.
         ELSE.
-          lv_full_name =  |{ iv_parent_name }-{ iv_name }|.
+          lv_full_name =  |{ iv_parent_calculated }-{ iv_name }|.
         ENDIF.
       ENDIF.
     ENDIF.
@@ -3082,20 +3081,20 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
       <state>-leaf = iv_type.
       <state>-is_appear = abap_true.
-      <state>-parent = iv_parent_name.
+      <state>-parent = iv_parent_calculated.
       <state>-instance = i_instance.
 
-      IF iv_parent_name IS NOT INITIAL.
+      IF iv_parent_calculated IS NOT INITIAL.
         IF iv_name IS NOT INITIAL.
-          <state>-path =  |{ iv_parent_name }-{ iv_name }|.
+          <state>-path =  |{ iv_parent_calculated }-{ iv_name }|.
         ELSE.
-          <state>-path =  |{ iv_parent_name }-{ iv_fullname }|.
+          <state>-path =  |{ iv_parent_calculated }-{ iv_fullname }|.
         ENDIF.
       ELSE.
         IF i_instance IS INITIAL.
           <state>-path = iv_fullname.
         ELSE.
-          IF iv_parent_name IS INITIAL.
+          IF iv_parent_calculated IS INITIAL.
             IF iv_name IS NOT INITIAL.
               <state>-path = iv_name.
             ELSE.
@@ -3104,9 +3103,9 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ELSE.
 
             IF iv_name IS NOT INITIAL.
-              <state>-path =  |{ iv_parent_name }-{ iv_name }|.
+              <state>-path =  |{ iv_parent_calculated }-{ iv_name }|.
             ELSE.
-              <state>-path =  |{ iv_parent_name }-{ iv_fullname }|.
+              <state>-path =  |{ iv_parent_calculated }-{ iv_fullname }|.
             ENDIF.
           ENDIF.
         ENDIF.
@@ -3254,7 +3253,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                            iv_fullname    = iv_fullname
                            iv_type        = iv_type
                            ir_up          = ir_up
-                           iv_parent_name = iv_parent_name
+                           iv_parent_calculated = iv_parent_calculated
                            i_instance     = i_instance
                            i_cl_leaf      = i_cl_leaf
                            iv_struc_name  = iv_struc_name
@@ -3267,7 +3266,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                            ir_up          = ir_up
                            i_instance     = i_instance
                            i_cl_leaf      = i_cl_leaf
-                           iv_parent_name = iv_parent_name ).
+                           iv_parent_calculated = iv_parent_calculated ).
         ENDIF.
 
       WHEN c_kind-elem.
@@ -3277,7 +3276,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                        ir_up          = ir_up
                        i_instance     = i_instance
                        i_cl_leaf      = i_cl_leaf
-                       iv_parent_name = iv_parent_name ).
+                       iv_parent_calculated = iv_parent_calculated ).
 
       WHEN c_kind-table.
         traverse_elem( iv_name        = iv_name
@@ -3286,7 +3285,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                        ir_up          = ir_up
                        i_instance     = i_instance
                        i_cl_leaf      = i_cl_leaf
-                       iv_parent_name = iv_parent_name ).
+                       iv_parent_calculated = iv_parent_calculated ).
     ENDCASE.
 
   ENDMETHOD.
@@ -3307,7 +3306,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                              iv_fullname    = iv_fullname
                              iv_name        = iv_name
                              iv_type        = iv_type
-                             iv_parent_name = iv_parent_name
+                             iv_parent_calculated = iv_parent_calculated
                              iv_cl_leaf     = i_cl_leaf
                              i_instance     = i_instance ).
 
@@ -3357,7 +3356,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
         save_hist( EXPORTING iv_fullname    = lv_string
                              iv_name        = ls_component-name
-                             iv_parent_name = iv_fullname
+                             iv_parent_calculated = iv_fullname
                              iv_type        = iv_type
                              iv_cl_leaf     = i_cl_leaf
                              i_instance     = <symobjref>-instancename ).
@@ -3370,20 +3369,20 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         m_variable = lr_variable.
       ELSE.
         IF iv_name IS NOT INITIAL.
-          IF iv_parent_name IS NOT INITIAL.
-            lv_parent = |{ iv_parent_name }-{ iv_name }|.
+          IF iv_parent_calculated IS NOT INITIAL.
+            lv_parent = |{ iv_parent_calculated }-{ iv_name }|.
           ELSE.
             lv_parent = iv_name.
           ENDIF.
         ELSE.
-          lv_parent = iv_parent_name.
+          lv_parent = iv_parent_calculated.
         ENDIF.
         traverse( io_type_descr  = ls_component-type
                   iv_name        = ls_component-name
                   iv_fullname    = lv_string
                   iv_type        = iv_type
                   ir_up          = lr_new_struc
-                  iv_parent_name = lv_parent
+                  iv_parent_calculated = lv_parent
                   iv_struc_name  = ls_component-name
                   i_cl_leaf      = i_cl_leaf
                   i_instance     = i_instance
@@ -3398,7 +3397,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     save_hist( EXPORTING ir_up          = ir_up
                          iv_fullname    = iv_fullname
                          iv_name        = iv_name
-                         iv_parent_name = iv_parent_name
+                         iv_parent_calculated = iv_parent_calculated
                          iv_type        = iv_type
                          iv_cl_leaf     = i_cl_leaf
                          i_instance     = i_instance ).
@@ -4025,7 +4024,7 @@ CLASS lcl_ace_window IMPLEMENTATION.
 
             IF lv_stop = abap_true.
               READ TABLE  mo_debugger->mt_steps INTO DATA(ls_step) INDEX mo_debugger->m_hist_step.
-              set_program( CONV #( ls_step-include ) ).
+              set_program( ls_step-include ).
               set_program_line( ls_step-line ).
               mo_debugger->mo_tree_imp->display( ).
               mo_debugger->mo_tree_local->display( ).
@@ -4125,7 +4124,7 @@ CLASS lcl_sel_opt DEFINITION.
     DATA: mo_debugger TYPE REF TO lcl_table_viewer,
           mo_sel_alv  TYPE REF TO cl_gui_alv_grid,
           mt_fcat     TYPE lvc_t_fcat,
-          mt_sel_tab  TYPE TABLE OF lcl_appl=>selection_display_s,
+          mt_sel_tab  TYPE TABLE OF lcl_appl=>selection_display,
           ms_layout   TYPE lvc_s_layo.
 
     EVENTS: selection_done.
@@ -4134,7 +4133,7 @@ CLASS lcl_sel_opt DEFINITION.
       raise_selection_done,
       update_sel_tab,
       set_value IMPORTING  i_field TYPE any i_low TYPE any OPTIONAL i_high TYPE any OPTIONAL i_clear TYPE xfeld DEFAULT abap_true ,
-      update_sel_row CHANGING c_sel_row TYPE lcl_appl=>selection_display_s.
+      update_sel_row CHANGING c_sel_row TYPE lcl_appl=>selection_display.
 
   PRIVATE SECTION.
     METHODS:
@@ -5799,7 +5798,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                                         iv_rel         = iv_rel
                                         is_var         = is_var
                                         ir_up          = ir_up
-                                        iv_parent_name = iv_parent_name
+                                        iv_parent_calculated = iv_parent_calculated
                                         iv_struc_name  = iv_struc_name ).
         ELSE.
           e_root_key = traverse_struct( io_type_descr  = io_type_descr
@@ -5807,7 +5806,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                                         iv_rel         = iv_rel
                                         is_var         = is_var
                                         ir_up          = ir_up
-                                        iv_parent_name = iv_parent_name ).
+                                        iv_parent_calculated = iv_parent_calculated ).
         ENDIF.
 
       WHEN c_kind-table.
@@ -5816,13 +5815,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                                      iv_rel         = iv_rel
                                      is_var         = is_var
                                      ir_up          = ir_up
-                                     iv_parent_name = iv_parent_name ).
+                                     iv_parent_calculated = iv_parent_calculated ).
       WHEN c_kind-elem.
         e_root_key = traverse_elem( io_type_descr  = io_type_descr
                                     iv_parent_key  = iv_parent_key
                                     iv_rel         = iv_rel
                                     is_var         = is_var
-                                    iv_parent_name = iv_parent_name ).
+                                    iv_parent_calculated = iv_parent_calculated ).
 
     ENDCASE.
 
@@ -6297,7 +6296,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       l_key = iv_parent_key.
     ENDIF.
 
-    READ TABLE mt_vars WITH KEY name = iv_parent_name TRANSPORTING NO FIELDS.
+    READ TABLE mt_vars WITH KEY name = iv_parent_calculated TRANSPORTING NO FIELDS.
     IF sy-subrc NE 0.
 
       ls_tree-fullname = is_var-name.
@@ -6751,10 +6750,10 @@ CLASS lcl_source_parser IMPLEMENTATION.
           lo_statement  TYPE REF TO if_ci_kzn_statement_iterator,
           lo_procedure  TYPE REF TO if_ci_kzn_statement_iterator,
           ls_token      TYPE lcl_ace_window=>ts_kword,
-          ls_calculated TYPE lcl_ace_window=>ts_calculated,
-          ls_composed   TYPE lcl_ace_window=>ts_composing,
+          calculated_var TYPE lcl_ace_window=>calculated_var ,
+          composed_var   TYPE lcl_ace_window=>composed_vars,
           lt_tokens     TYPE lcl_ace_window=>tt_kword,
-          lt_calculated TYPE lcl_ace_window=>tt_calculated,
+          calculated_vars TYPE  lcl_ace_window=>tt_calculated,
           lt_composed   TYPE lcl_ace_window=>tt_composed,
           ls_call       TYPE lcl_ace_window=>ts_calls,
           ls_call_line  TYPE lcl_ace_window=>ts_calls_line,
@@ -6813,7 +6812,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
         ENDIF.
 
         READ TABLE lo_scan->tokens INDEX ls_statement-from INTO DATA(l_token).
-        ls_token-line = ls_calculated-line = ls_composed-line = l_token-row.
+        ls_token-line = calculated_var-line = composed_var-line = l_token-row.
 
         DATA lv_new TYPE xfeld.
 
@@ -6917,8 +6916,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
             CASE lt_kw.
               WHEN 'COMPUTE'.
                 IF  NOT lv_prev CO '0123456789.+-/* '.
-                  ls_composed-composing = lv_prev.
-                  APPEND  ls_composed TO lt_composed.
+                  composed_var-name = lv_prev.
+                  APPEND  composed_var TO lt_composed.
                 ENDIF.
               WHEN 'CLEAR' OR 'SORT' OR 'CONDENSE'."no logic
               WHEN 'FORM'.
@@ -7026,8 +7025,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
               IF ( lv_prev = '=' OR lv_prev CA '+-/*' ) AND lv_temp <> 'NEW'.
                 IF NOT lv_temp  CA '()' .
                   IF NOT lv_temp  CO '0123456789. '.
-                    ls_composed-composing = lv_temp.
-                    APPEND  ls_composed TO lt_composed.
+                    composed_var-name = lv_temp.
+                    APPEND  composed_var TO lt_composed.
                     IF ls_call IS NOT INITIAL.
                       ls_call-outer = lv_temp.
                       READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
@@ -7095,16 +7094,16 @@ CLASS lcl_source_parser IMPLEMENTATION.
                       IF sy-subrc <> 0.
                         APPEND ls_call TO ls_token-tt_calls.
                       ENDIF.
-                      ls_calculated-calculated = lv_temp.
-                      APPEND  ls_calculated TO lt_calculated.
+                      calculated_var-name = lv_temp.
+                      APPEND  calculated_var TO calculated_vars.
                     ELSEIF lv_export = abap_true.
                       ls_call-outer = lv_temp.
                       READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
                       IF sy-subrc <> 0.
                         APPEND ls_call TO ls_token-tt_calls.
                       ENDIF.
-                      ls_composed-composing = lv_temp.
-                      APPEND  ls_composed TO lt_composed.
+                      composed_var-name = lv_temp.
+                      APPEND  composed_var TO lt_composed.
                     ENDIF.
                   ENDIF.
                 ENDIF.
@@ -7130,8 +7129,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
               ADD 1 TO lv_count.
               IF lv_count = 1.
                 IF  NOT lv_temp CO '0123456789.() '.
-                  ls_composed-composing = lv_temp.
-                  APPEND  ls_composed TO lt_composed.
+                  composed_var-name = lv_temp.
+                  APPEND  composed_var TO lt_composed.
                 ENDIF.
               ENDIF.
               IF lv_count = 3.
@@ -7190,16 +7189,16 @@ CLASS lcl_source_parser IMPLEMENTATION.
                       APPEND ls_call TO ls_token-tt_calls.
                     ENDIF.
 
-                    ls_calculated-calculated = lv_temp.
-                    APPEND  ls_calculated TO lt_calculated.
+                    calculated_var-name = lv_temp.
+                    APPEND  calculated_var TO calculated_vars.
                   ELSEIF lv_export = abap_true.
                     ls_call-outer = lv_temp.
                     READ TABLE ls_token-tt_calls WITH KEY event = ls_call-event name = ls_call-name outer = ls_call-outer TRANSPORTING  NO FIELDS.
                     IF sy-subrc <> 0.
                       APPEND ls_call TO ls_token-tt_calls.
                     ENDIF.
-                    ls_composed-composing = lv_temp.
-                    APPEND  ls_composed TO lt_composed.
+                    composed_var-name = lv_temp.
+                    APPEND  composed_var TO lt_composed.
                   ENDIF.
                 ENDIF.
               ENDIF.
@@ -7227,8 +7226,8 @@ CLASS lcl_source_parser IMPLEMENTATION.
           ENDIF.
 
           IF lv_change IS NOT INITIAL.
-            ls_calculated-calculated = lv_change.
-            APPEND ls_calculated TO lt_calculated.
+            calculated_var-name = lv_change.
+            APPEND calculated_var TO calculated_vars.
 
             IF lv_change+0(1) = '<'.
 
@@ -7303,7 +7302,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
 
       ls_source-scan = lo_scan.
       ls_source-t_keywords = lt_tokens.
-      ls_source-t_calculated = lt_calculated.
+      ls_source-t_calculated = calculated_vars.
       ls_source-t_composed = lt_composed.
       ls_source-tt_tabs = lt_tabs.
       APPEND ls_source TO io_debugger->mo_window->mt_source.
@@ -7567,17 +7566,17 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = ls_step-include INTO ls_source.
 
-      LOOP AT ls_source-t_calculated INTO DATA(ls_calculated) WHERE line = ls_step-line.
-        READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_calculated-calculated TRANSPORTING NO FIELDS.
+      LOOP AT ls_source-t_calculated INTO DATA(calculated_var) WHERE line = ls_step-line.
+        READ TABLE mo_debugger->mt_selected_var WITH KEY name = calculated_var-name TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
 *          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-*          <selected>-name = ls_calculated-calculated.
+*          <selected>-name = calculated_var-name.
 
-          LOOP AT ls_source-t_composed INTO DATA(ls_composed) WHERE line = ls_step-line.
-            READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_composed-composing TRANSPORTING NO FIELDS.
+          LOOP AT ls_source-t_composed INTO DATA(composed_var) WHERE line = ls_step-line.
+            READ TABLE mo_debugger->mt_selected_var WITH KEY name = composed_var-name TRANSPORTING NO FIELDS.
             IF sy-subrc <> 0.
               APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-              <selected>-name = ls_composed-composing.
+              <selected>-name = composed_var-name.
             ENDIF.
           ENDLOOP.
         ENDIF.
@@ -7629,17 +7628,17 @@ CLASS lcl_mermaid IMPLEMENTATION.
         <line>-include = ls_step-include.
       ENDIF.
       CLEAR lv_ind.
-      LOOP AT  ls_source-t_calculated INTO ls_calculated WHERE line = ls_step-line.
+      LOOP AT  ls_source-t_calculated INTO calculated_var WHERE line = ls_step-line.
         ADD 1 TO lv_ind.
-        LOOP AT ls_source-t_composed INTO ls_composed WHERE line = ls_step-line.
-          READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_composed-composing TRANSPORTING NO FIELDS.
+        LOOP AT ls_source-t_composed INTO composed_var WHERE line = ls_step-line.
+          READ TABLE mo_debugger->mt_selected_var WITH KEY name = composed_var-name TRANSPORTING NO FIELDS.
           IF sy-subrc = 0.
             APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-            <selected>-name = ls_composed-composing.
+            <selected>-name = composed_var-name.
           ENDIF.
         ENDLOOP.
 
-        READ TABLE mo_debugger->mt_selected_var WITH KEY name = ls_calculated-calculated TRANSPORTING NO FIELDS.
+        READ TABLE mo_debugger->mt_selected_var WITH KEY name = calculated_var-name TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
 
           APPEND INITIAL LINE TO mo_debugger->mo_window->mt_watch ASSIGNING <watch>.
