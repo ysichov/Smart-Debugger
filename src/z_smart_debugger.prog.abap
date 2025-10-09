@@ -474,7 +474,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
       run_script_hist IMPORTING i_step  TYPE i OPTIONAL
                       EXPORTING es_stop TYPE xfeld
                       ,
-      show_variables CHANGING it_var TYPE lcl_appl=>variables returning value(stop) TYPE xfeld,
+      show_variables CHANGING it_var TYPE lcl_appl=>variables RETURNING VALUE(stop) TYPE xfeld,
       set_selected_vars,
       save_hist IMPORTING
                   i_name              TYPE clike
@@ -485,13 +485,13 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
                   ir_up               TYPE any OPTIONAL
                   i_instance          TYPE string OPTIONAL,
 
-      f5 returning value(stop) TYPE xfeld,
-      f6 returning value(stop) TYPE xfeld,
-      f7 returning value(stop) TYPE xfeld,
-      f8 returning value(stop) TYPE xfeld,
+      f5 RETURNING VALUE(stop) TYPE xfeld,
+      f6 RETURNING VALUE(stop) TYPE xfeld,
+      f7 RETURNING VALUE(stop) TYPE xfeld,
+      f8 RETURNING VALUE(stop) TYPE xfeld,
       make_step,
       hndl_script_buttons IMPORTING i_stack_changed TYPE xfeld
-                          returning value(stop)   TYPE xfeld,
+                          RETURNING VALUE(stop)     TYPE xfeld,
       get_obj_index IMPORTING i_name TYPE any RETURNING VALUE(e_index) TYPE string,
       create_reference         IMPORTING i_name            TYPE string
                                          i_type            TYPE string
@@ -599,7 +599,7 @@ CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_scr
           mo_mm_container TYPE REF TO cl_gui_container,
           mo_mm_toolbar   TYPE REF TO cl_gui_container,
           mo_toolbar      TYPE REF TO cl_gui_toolbar,
-          mo_diagram      TYPE REF TO zcl_wd_gui_mermaid_js_diagram,
+          mo_diagram      TYPE REF TO object,
           mv_type         TYPE string,
           ms_if           TYPE ts_if,
           mt_if           TYPE tt_if,
@@ -761,7 +761,7 @@ CLASS lcl_ai_api DEFINITION.
 
   PUBLIC SECTION.
 
-    METHODS  call_openai  IMPORTING i_prompt TYPE string returning value(answer) TYPE string.
+    METHODS  call_openai  IMPORTING i_prompt TYPE string RETURNING VALUE(answer) TYPE string.
   PRIVATE SECTION.
     DATA: mv_api_key TYPE string.
 
@@ -777,9 +777,9 @@ CLASS lcl_ai_api DEFINITION.
           e_response TYPE string,
       output
         IMPORTING
-                  i_prompt        TYPE string
-                  i_content       TYPE string
-        returning value(answer) TYPE string.
+                  i_prompt      TYPE string
+                  i_content     TYPE string
+        RETURNING VALUE(answer) TYPE string.
 
 ENDCLASS.
 
@@ -1065,7 +1065,7 @@ CLASS lcl_ai IMPLEMENTATION.
 
     DATA: button TYPE ttb_button,
           events TYPE cntl_simple_events,
-          event    LIKE LINE OF events.
+          event  LIKE LINE OF events.
 
     button  = VALUE #(
      ( function = 'AI' icon = CONV #( icon_manikin_unknown_gender ) quickinfo = 'Ask AI' text = 'Ask AI' ) ).
@@ -1398,7 +1398,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     DATA: o_new_type    TYPE REF TO cl_abap_structdescr,
           comp_descr    TYPE abap_componentdescr,
-          components TYPE abap_component_tab,
+          components    TYPE abap_component_tab,
           lr_symbsimple TYPE REF TO tpda_sys_symbsimple,
           o_struc_descr TYPE REF TO cl_tpda_script_structdescr,
           comp_full     TYPE  tpda_scr_struct_comp_it,
@@ -1890,10 +1890,10 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD create_reference.
 
-    DATA: obj           LIKE LINE OF mt_obj,
-          lr_struc      TYPE REF TO data,
-          o_object      TYPE REF TO cl_tpda_script_objectdescr,
-          o_descr       TYPE REF TO cl_tpda_script_data_descr,
+    DATA: obj        LIKE LINE OF mt_obj,
+          lr_struc   TYPE REF TO data,
+          o_object   TYPE REF TO cl_tpda_script_objectdescr,
+          o_descr    TYPE REF TO cl_tpda_script_data_descr,
           attributes TYPE tpda_script_object_attribut_it.
 
     FIELD-SYMBOLS: <symobjref> TYPE tpda_sys_symbobjref.
@@ -1957,7 +1957,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD create_struc2.
 
     DATA: o_struc_descr TYPE REF TO cl_tpda_script_structdescr,
-          components TYPE abap_component_tab,
+          components    TYPE abap_component_tab,
           comp_full     TYPE  tpda_scr_struct_comp_it,
           comp_descr    TYPE abap_componentdescr,
           comp_it       TYPE tpda_script_struc_componentsit,
@@ -2323,7 +2323,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
               <loc>-name = 'ME'.
             ENDIF.
             IF ms_stack-eventtype = 'FUNCTION'.
-              DATA: fname                 TYPE rs38l_fnam,
+              DATA: fname              TYPE rs38l_fnam,
                     exception_list     TYPE TABLE OF  rsexc,
                     export_parameter   TYPE TABLE OF  rsexp,
                     import_parameter   TYPE TABLE OF  rsimp,
@@ -2960,7 +2960,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
   METHOD read_class_globals.
 
     DATA: compo_tmp TYPE TABLE OF scompo,
-          class        TYPE seu_name.
+          class     TYPE seu_name.
 
     mo_tree_local->m_leaf = 'Class-data global variables'.
     IF mo_tree_local->m_class_data IS NOT INITIAL.
@@ -3291,7 +3291,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD traverse_struct.
 
-    DATA: component    TYPE abap_component_tab,
+    DATA: component       TYPE abap_component_tab,
           comp_descronent LIKE LINE OF component,
           o_struct_descr  TYPE REF TO cl_abap_structdescr,
           string          TYPE string,
@@ -3542,7 +3542,7 @@ CLASS lcl_ace_window IMPLEMENTATION.
 
     DATA: button TYPE ttb_button,
           events TYPE cntl_simple_events,
-          event    LIKE LINE OF events.
+          event  LIKE LINE OF events.
 
     button  = VALUE #(
      "( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization switch' text = 'Visualization OFF' )
@@ -3681,7 +3681,7 @@ CLASS lcl_ace_window IMPLEMENTATION.
   METHOD create_code_viewer.
 
     DATA: events TYPE cntl_simple_events,
-          event     TYPE cntl_simple_event.
+          event  TYPE cntl_simple_event.
 
     CHECK mo_code_viewer IS INITIAL.
 
@@ -4377,12 +4377,12 @@ CLASS lcl_table_viewer IMPLEMENTATION.
 
   METHOD constructor.
 
-    DATA: comp_descr      TYPE abap_componentdescr,
+    DATA: comp_descr   TYPE abap_componentdescr,
           comp_notab   TYPE abap_component_tab,
           comp_tab2str TYPE abap_component_tab,
           comp_str     TYPE abap_component_tab,
-          s               TYPE string,
-          data            TYPE REF TO data.
+          s            TYPE string,
+          data         TYPE REF TO data.
 
     DATA: notab   TYPE REF TO data,
           tab2str TYPE REF TO data.
@@ -4548,7 +4548,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
 
     DATA: layout TYPE lvc_s_layo,
           effect TYPE i,
-          f4s  TYPE lvc_t_f4.
+          f4s    TYPE lvc_t_f4.
 
     FIELD-SYMBOLS: <table>   TYPE table.
 
@@ -4941,7 +4941,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
 
   METHOD refresh_table.
 
-    DATA: row       TYPE lcl_appl=>t_sel_row,
+    DATA: row    TYPE lcl_appl=>t_sel_row,
           filter TYPE lvc_t_filt.
 
     CLEAR filter.
@@ -5252,7 +5252,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
   METHOD on_f4.
 
     DATA: return_tab TYPE STANDARD TABLE OF ddshretval,
-          objects   TYPE TABLE OF objec,
+          objects    TYPE TABLE OF objec,
           objec      TYPE objec,
           otype      TYPE otype,
           plvar      TYPE plvar,
@@ -5502,7 +5502,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
 
   METHOD handle_context_menu_request.
 
-    DATA: func    TYPE ui_func,
+    DATA: func  TYPE ui_func,
           funcs TYPE ui_functions.
 
     DATA(index) = lcl_alv_common=>get_selected( mo_sel_alv ).
@@ -5828,7 +5828,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
 
   METHOD traverse_struct.
 
-    DATA: component   TYPE abap_component_tab,
+    DATA: component      TYPE abap_component_tab,
           o_struct_descr TYPE REF TO cl_abap_structdescr,
           tree           TYPE ts_table,
           text           TYPE lvc_value,
@@ -6744,7 +6744,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
     DATA: lr_scan         TYPE REF TO cl_ci_scan,
           prev            TYPE string,
           change          TYPE string,
-          split        TYPE TABLE OF string,
+          split           TYPE TABLE OF string,
           o_scan          TYPE REF TO cl_ci_scan,
           o_statement     TYPE REF TO if_ci_kzn_statement_iterator,
           o_procedure     TYPE REF TO if_ci_kzn_statement_iterator,
@@ -6753,7 +6753,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
           composed_var    TYPE lcl_ace_window=>composed_vars,
           tokens          TYPE lcl_ace_window=>tt_kword,
           calculated_vars TYPE  lcl_ace_window=>tt_calculated,
-          composed     TYPE lcl_ace_window=>tt_composed,
+          composed        TYPE lcl_ace_window=>tt_composed,
           call            TYPE lcl_ace_window=>ts_calls,
           call_line       TYPE lcl_ace_window=>ts_calls_line,
           int_table       TYPE lcl_ace_window=>ts_int_tabs,
@@ -7013,7 +7013,7 @@ CLASS lcl_source_parser IMPLEMENTATION.
             WHEN 'DATA' OR 'PARAMETERS'.
               IF (  prev = 'OF' ) AND temp <> 'TABLE' AND temp <> 'OF'.
                 int_table-type = temp.
-                APPEND int_Table TO int_tables.
+                APPEND int_table TO int_tables.
               ENDIF.
 
             WHEN 'COMPUTE'.
@@ -7395,16 +7395,16 @@ CLASS lcl_mermaid IMPLEMENTATION.
              to   TYPE i,
            END OF t_ind  .
 
-    DATA: mm_string   TYPE string,
-          name        TYPE string,
-          entities TYPE TABLE OF lty_entity,
-          entity      TYPE lty_entity,
+    DATA: mm_string TYPE string,
+          name      TYPE string,
+          entities  TYPE TABLE OF lty_entity,
+          entity    TYPE lty_entity,
 *          ind1      TYPE i,
 *          ind2      TYPE i,
-          parts    TYPE TABLE OF string,
-          step        LIKE LINE OF mo_debugger->mt_steps,
-          ind         TYPE t_ind,
-          indexes  TYPE TABLE OF t_ind.
+          parts     TYPE TABLE OF string,
+          step      LIKE LINE OF mo_debugger->mt_steps,
+          ind       TYPE t_ind,
+          indexes   TYPE TABLE OF t_ind.
 
 
     DATA(copy) = mo_debugger->mt_steps.
@@ -7488,7 +7488,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
            END OF ts_line.
 
     DATA: line      TYPE ts_line,
-          lines  TYPE STANDARD TABLE OF ts_line,
+          lines     TYPE STANDARD TABLE OF ts_line,
           pre_stack TYPE ts_line,
           opened    TYPE i.
 
@@ -8098,7 +8098,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
     DATA: button TYPE ttb_button,
           events TYPE cntl_simple_events,
-          event    LIKE LINE OF events.
+          event  LIKE LINE OF events.
 
     button  = VALUE #(
      ( function = 'TD' icon = CONV #( icon_view_expand_vertical ) quickinfo = 'Vertical' text = '' )
@@ -8125,7 +8125,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
     IF fcode = 'TEXT'.
       DATA: mm_string TYPE string,
             ref       TYPE REF TO data.
-      mm_string = mo_diagram->get_source_code_string( ).
+      mm_string = mo_diagram->('GET_SOURCE_CODE_STRING').
       GET REFERENCE OF mm_string INTO ref.
       NEW lcl_text_viewer( ref ).
 
@@ -8148,12 +8148,12 @@ CLASS lcl_mermaid IMPLEMENTATION.
 
     TRY.
         IF mo_diagram IS INITIAL.
-          mo_diagram = NEW zcl_wd_gui_mermaid_js_diagram( parent = mo_mm_container ).
+          CREATE OBJECT mo_diagram TYPE ('ZCL_WD_GUI_MERMAID_JS_DIAGRAM') EXPORTING parent = mo_mm_container.
         ENDIF.
-        mo_diagram->set_source_code_string( i_mm_string ).
-        mo_diagram->display( ).
+        CALL METHOD mo_diagram->('SET_SOURCE_CODE_STRING') EXPORTING source_code = i_mm_string.
+        CALL METHOD mo_diagram->('DISPLAY').
 
-      CATCH zcx_wd_gui_mermaid_js_diagram INTO DATA(error).
+      CATCH cx_root INTO DATA(error).
         MESSAGE error TYPE 'E'.
     ENDTRY.
 
