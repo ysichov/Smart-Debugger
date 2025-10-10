@@ -1,4 +1,19 @@
 *<SCRIPT:PERSISTENT>
+REPORT  SMART_DEBUGGER_SCRIPT.
+
+*<SCRIPT:HEADER>
+*<SCRIPTNAME>Z_SMART_DEBUGGER_SCRIPT</SCRIPTNAME>
+*<SCRIPT_CLASS>LCL_DEBUGGER_SCRIPT</SCRIPT_CLASS>
+*<SINGLE_RUN>X</SINGLE_RUN>
+
+*</SCRIPT:HEADER>
+
+*<SCRIPT:PRESETTINGS>
+
+*</SCRIPT:PRESETTINGS>
+
+*<SCRIPT:SCRIPT_CLASS>
+*<SCRIPT:PERSISTENT>
 
 *<SCRIPT:HEADER>
 *<SCRIPTNAME>Z_SMART_DEBUGGER_TEST</SCRIPTNAME>
@@ -14,7 +29,7 @@
 
 *<SCRIPT:SCRIPT_CLASS>
 
-REPORT text.
+"REPORT text.
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -8176,7 +8191,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
   ENDMETHOD.
 
 ENDCLASS.
-
 *</SCRIPT:SCRIPT_CLASS>
 
 *</SCRIPT:PERSISTENT>
