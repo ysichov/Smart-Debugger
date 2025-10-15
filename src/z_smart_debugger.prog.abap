@@ -8156,7 +8156,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
     IF fcode = 'TEXT'.
       DATA: mm_string TYPE string,
             ref       TYPE REF TO data.
-      mm_string = mo_diagram->('GET_SOURCE_CODE_STRING').
+      call METHOD mo_diagram->('GET_SOURCE_CODE_STRING') RECEIVING result = mm_string.
       GET REFERENCE OF mm_string INTO ref.
       NEW lcl_text_viewer( ref ).
 
