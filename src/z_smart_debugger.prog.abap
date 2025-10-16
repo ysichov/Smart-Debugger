@@ -29,7 +29,7 @@
 
 *<SCRIPT:SCRIPT_CLASS>
 
-"REPORT text.
+"REPORT smart_debugger_Script.
 *  & Smart  Debugger (Project ARIADNA - Advanced Reverse Ingeneering Abap Debugger with New Analytycs )
 *  & Multi-windows program for viewing all objects and data structures in debug
 *  &---------------------------------------------------------------------*
@@ -7528,38 +7528,39 @@ CLASS lcl_mermaid IMPLEMENTATION.
     IF lines( mo_debugger->mt_steps ) > 1.
       DATA(steps) = mo_debugger->mt_steps.
     ELSE.
-
       code_execution_scanner( ).
       steps = mt_steps.
     ENDIF.
 
     DATA: yes TYPE xfeld.
+    DATA(selected_var) = mo_debugger->mt_selected_var.
+
     LOOP AT steps INTO DATA(step).
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = step-include INTO DATA(source).
       READ TABLE source-t_keytokens WITH KEY line = step-line INTO DATA(keyword).
       LOOP AT keyword-tt_calls INTO DATA(call).
 
-        READ TABLE mo_debugger->mt_selected_var WITH KEY name = call-outer TRANSPORTING NO FIELDS.
-        IF sy-subrc = 0.
+        READ TABLE selected_var WITH KEY name = call-outer TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0 OR mo_debugger->mt_selected_var IS INITIAL.
           yes = abap_true.
         ENDIF.
 
-        READ TABLE mo_debugger->mt_selected_var WITH KEY name = call-inner TRANSPORTING NO FIELDS.
-        IF sy-subrc = 0.
+        READ TABLE selected_var WITH KEY name = call-inner TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0 OR mo_debugger->mt_selected_var IS INITIAL.
           yes = abap_true.
         ENDIF.
       ENDLOOP.
       IF yes = abap_true.
         LOOP AT keyword-tt_calls INTO call.
-          READ TABLE mo_debugger->mt_selected_var WITH KEY name = call-outer TRANSPORTING NO FIELDS.
+          READ TABLE selected_var WITH KEY name = call-outer TRANSPORTING NO FIELDS.
           IF sy-subrc <> 0.
-            APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING FIELD-SYMBOL(<selected>).
+            APPEND INITIAL LINE TO  selected_var ASSIGNING FIELD-SYMBOL(<selected>).
             <selected>-name = call-outer.
           ENDIF.
 
-          READ TABLE mo_debugger->mt_selected_var WITH KEY name = call-inner TRANSPORTING NO FIELDS.
+          READ TABLE selected_var WITH KEY name = call-inner TRANSPORTING NO FIELDS.
           IF sy-subrc <> 0.
-            APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+            APPEND INITIAL LINE TO  selected_var ASSIGNING <selected>.
             <selected>-name = call-inner.
           ENDIF.
         ENDLOOP.
@@ -7597,15 +7598,13 @@ CLASS lcl_mermaid IMPLEMENTATION.
       READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = step-include INTO source.
 
       LOOP AT source-t_calculated INTO DATA(calculated_var) WHERE line = step-line.
-        READ TABLE mo_debugger->mt_selected_var WITH KEY name = calculated_var-name TRANSPORTING NO FIELDS.
+        READ TABLE selected_var WITH KEY name = calculated_var-name TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
-*          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-*          <selected>-name = calculated_var-name.
 
           LOOP AT source-t_composed INTO DATA(composed_var) WHERE line = step-line.
-            READ TABLE mo_debugger->mt_selected_var WITH KEY name = composed_var-name TRANSPORTING NO FIELDS.
+            READ TABLE selected_var WITH KEY name = composed_var-name TRANSPORTING NO FIELDS.
             IF sy-subrc <> 0.
-              APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+              APPEND INITIAL LINE TO  selected_var ASSIGNING <selected>.
               <selected>-name = composed_var-name.
             ENDIF.
           ENDLOOP.
@@ -7623,16 +7622,16 @@ CLASS lcl_mermaid IMPLEMENTATION.
       READ TABLE source-t_keytokens WITH KEY line = step-line INTO keyword.
       LOOP AT keyword-tt_calls INTO call.
 
-        READ TABLE mo_debugger->mt_selected_var WITH KEY name = call-outer TRANSPORTING NO FIELDS.
+        READ TABLE selected_var WITH KEY name = call-outer TRANSPORTING NO FIELDS.
         IF sy-subrc = 0.
-          APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+          APPEND INITIAL LINE TO  selected_var ASSIGNING <selected>.
           <selected>-name = call-inner.
         ENDIF.
       ENDLOOP.
 
     ENDLOOP.
-    SORT mo_debugger->mt_selected_var.
-    DELETE ADJACENT DUPLICATES FROM mo_debugger->mt_selected_var.
+    SORT selected_var.
+    DELETE ADJACENT DUPLICATES FROM selected_var.
 
     "collecting watchpoints
     CLEAR mo_debugger->mo_window->mt_coverage.
@@ -7661,15 +7660,15 @@ CLASS lcl_mermaid IMPLEMENTATION.
       LOOP AT  source-t_calculated INTO calculated_var WHERE line = step-line.
         ADD 1 TO ind.
         LOOP AT source-t_composed INTO composed_var WHERE line = step-line.
-          READ TABLE mo_debugger->mt_selected_var WITH KEY name = composed_var-name TRANSPORTING NO FIELDS.
+          READ TABLE selected_var WITH KEY name = composed_var-name TRANSPORTING NO FIELDS.
           IF sy-subrc = 0.
-            APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
+            APPEND INITIAL LINE TO  selected_var ASSIGNING <selected>.
             <selected>-name = composed_var-name.
           ENDIF.
         ENDLOOP.
 
-        READ TABLE mo_debugger->mt_selected_var WITH KEY name = calculated_var-name TRANSPORTING NO FIELDS.
-        IF sy-subrc = 0.
+        READ TABLE selected_var WITH KEY name = calculated_var-name TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0 OR mo_debugger->mt_selected_var IS INITIAL.
 
           APPEND INITIAL LINE TO mo_debugger->mo_window->mt_watch ASSIGNING <watch>.
           <watch>-program = step-program.
@@ -7709,8 +7708,6 @@ CLASS lcl_mermaid IMPLEMENTATION.
           <line>-code = |{  <line>-code } { token-str }|.
         ENDIF.
       ENDLOOP.
-
-
 
       IF keyword-to_evname IS NOT INITIAL.
         SORT keyword-tt_calls BY outer.
@@ -8073,11 +8070,10 @@ CLASS lcl_mermaid IMPLEMENTATION.
       ENDLOOP.
     ENDIF.
 
-
     DATA: event     TYPE string,
           stack     TYPE i VALUE 1,
           statement TYPE i.
-
+    CLEAR mv_step.
     LOOP AT structure INTO str.
 
       READ TABLE source-t_keytokens WITH KEY index =  statement INTO DATA(key).
@@ -8096,10 +8092,10 @@ CLASS lcl_mermaid IMPLEMENTATION.
           ADD 1 TO statement.
           CONTINUE.
         ENDIF.
-        ADD 1 TO step.
+        ADD 1 TO mv_step.
         APPEND INITIAL LINE TO mt_steps ASSIGNING FIELD-SYMBOL(<step>).
 
-        <step>-step = step.
+        <step>-step = mv_step.
         <step>-line = key-line.
         <step>-eventname = event.
         <step>-eventtype = 'EVENT'.
@@ -8156,7 +8152,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
     IF fcode = 'TEXT'.
       DATA: mm_string TYPE string,
             ref       TYPE REF TO data.
-      call METHOD mo_diagram->('GET_SOURCE_CODE_STRING') RECEIVING result = mm_string.
+      CALL METHOD mo_diagram->('GET_SOURCE_CODE_STRING') RECEIVING result = mm_string.
       GET REFERENCE OF mm_string INTO ref.
       NEW lcl_text_viewer( ref ).
 
