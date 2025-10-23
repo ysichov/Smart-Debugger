@@ -1,5 +1,5 @@
 *<SCRIPT:PERSISTENT>
-"REPORT  SMART_DEBUGGER_SCRIPT.
+REPORT  Z_SMART_DEBUGGER_SCRIPT.
 
 *<SCRIPT:HEADER>
 *<SCRIPTNAME>Z_SMART_DEBUGGER_SCRIPT</SCRIPTNAME>
@@ -204,8 +204,8 @@ CLASS lcl_appl DEFINITION.
              step       TYPE i,
              stacklevel TYPE tpda_stack_level,
              line       TYPE tpda_sc_line,
-             eventtype  TYPE tpda_event_type,
-             eventname  TYPE tpda_event,
+             eventtype  TYPE string,
+             eventname  TYPE string,
              first      TYPE xfeld,
              last       TYPE xfeld,
              program    TYPE tpda_program,
