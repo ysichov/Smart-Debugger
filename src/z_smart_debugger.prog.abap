@@ -1555,7 +1555,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     FIELD-SYMBOLS: <f>         TYPE ANY TABLE,
                    <new_table> TYPE ANY TABLE.
-   BREAK-POINT.
+   
     ASSIGN c_obj->* TO <new_table>.
     o_tabl ?= cl_abap_typedescr=>describe_by_data( <new_table> ).
 
