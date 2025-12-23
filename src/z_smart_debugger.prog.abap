@@ -1,5 +1,5 @@
 *<SCRIPT:PERSISTENT>
-"REPORT  Z_SMART_DEBUGGER_SCRIPT.
+"REPORT  z_smart_debugger_script.
 
 *<SCRIPT:HEADER>
 *<SCRIPTNAME>Z_SMART_DEBUGGER_SCRIPT</SCRIPTNAME>
@@ -462,6 +462,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
           mt_locals         TYPE tpda_scr_locals_it,
           mt_globals        TYPE tpda_scr_globals_it,
           mt_ret_exp        TYPE tpda_scr_locals_it,
+          m_hide            TYPE x,
           m_counter         TYPE i,
           mt_steps          TYPE  TABLE OF lcl_appl=>t_step_counter, "source code steps
           mt_var_step       TYPE  TABLE OF lcl_appl=>var_table_h,
@@ -676,7 +677,7 @@ CLASS lcl_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
     DATA: main_node_key   TYPE salv_de_node_key,
           m_refresh       TYPE xfeld,
           m_leaf          TYPE string,
-          m_hide          TYPE x,
+          "m_hide          TYPE x,
           m_clear         TYPE flag,
           m_locals        TYPE x,
           m_globals       TYPE x,
@@ -1555,18 +1556,18 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
     FIELD-SYMBOLS: <f>         TYPE ANY TABLE,
                    <new_table> TYPE ANY TABLE.
-   
+
     ASSIGN c_obj->* TO <new_table>.
     o_tabl ?= cl_abap_typedescr=>describe_by_data( <new_table> ).
 
-    try.
-      o_struc ?= o_tabl->get_table_line_type( ).
+    TRY.
+        o_struc ?= o_tabl->get_table_line_type( ).
 
 
-    CREATE DATA r_data TYPE HANDLE o_struc.
-    ASSIGN r_data->* TO FIELD-SYMBOL(<new_line>).
+        CREATE DATA r_data TYPE HANDLE o_struc.
+        ASSIGN r_data->* TO FIELD-SYMBOL(<new_line>).
 
-    o_table_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
+        o_table_descr ?= cl_tpda_script_data_descr=>factory( i_name ).
         table_clone = o_table_descr->elem_clone( ).
         ASSIGN table_clone->* TO <f>.
         DATA: count TYPE i.
@@ -2164,7 +2165,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
               CLEAR <hist>-done.
             ELSE.
               "check initial.
-              IF mo_tree_local->m_hide IS NOT INITIAL.
+              IF m_hide IS NOT INITIAL.
                 ASSIGN hist-ref->* TO FIELD-SYMBOL(<new>).
                 IF <new> IS NOT INITIAL.
                   APPEND INITIAL LINE TO vars_history ASSIGNING <hist>.
@@ -2180,6 +2181,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ELSE.
             IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
             mo_tree_local->clear( ).
+            mo_tree_exp->clear( ).
+            mo_tree_imp->clear( ).
           ENDIF.
         ENDLOOP.
       ENDLOOP.
@@ -2481,6 +2484,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
       ENDIF.
 
       IF mo_tree_local->m_locals IS NOT INITIAL.
+        "BREAK-POINT.
         LOOP AT locals INTO DATA(local).
 
           CASE local-parkind.
@@ -2568,6 +2572,8 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     READ TABLE it_var WITH KEY del = abap_true TRANSPORTING NO FIELDS.
     IF sy-subrc = 0.
       mo_tree_local->clear( ).
+      mo_tree_exp->clear( ).
+      mo_tree_imp->clear( ).
     ENDIF.
 
     mo_tree_imp->m_leaf =  'IMP'.
@@ -2702,7 +2708,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
         IF sy-subrc = 0.
           <var>-done = abap_true.
         ELSE.
-          IF o_tree->m_hide IS INITIAL.
+          IF m_hide IS INITIAL.
 
             is_skip = abap_true.
             CONTINUE.
@@ -5818,7 +5824,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
   METHOD traverse.
 
     ASSIGN ir_up->* TO FIELD-SYMBOL(<new>).
-    IF <new> IS INITIAL AND m_hide IS NOT INITIAL.
+    IF <new> IS INITIAL AND mo_debugger->m_hide IS NOT INITIAL.
       me->del_variable( CONV #( is_var-name )  ).
       RETURN.
     ENDIF.
@@ -6088,7 +6094,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
                   rel = if_salv_c_node_relation=>next_sibling.
                   DELETE mt_vars WHERE name = is_var-name.
                 ELSE.
-                  IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
+                  IF ( <new_value> IS INITIAL AND mo_debugger->m_hide IS NOT INITIAL ).
                   ELSE.
                     RETURN.
                   ENDIF.
@@ -6297,13 +6303,13 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
               rel = if_salv_c_node_relation=>next_sibling.
               DELETE mt_vars WHERE name = is_var-name.
             ELSE.
-              IF ( <new_value> IS INITIAL AND m_hide IS NOT INITIAL ).
+              IF ( <new_value> IS INITIAL AND mo_Debugger->m_hide IS NOT INITIAL ).
                 me->del_variable( CONV #( is_var-name )  ).
               ENDIF.
             ENDIF.
           ENDIF.
 
-          IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
+          IF <new_value> IS INITIAL AND mo_debugger->m_hide IS NOT INITIAL.
             me->del_variable( CONV #( is_var-name ) ).
             RETURN.
           ENDIF.
@@ -6312,7 +6318,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
       ENDTRY.
     ELSE.
 
-      IF <new_value> IS INITIAL AND m_hide IS NOT INITIAL.
+      IF <new_value> IS INITIAL AND mo_Debugger->m_hide IS NOT INITIAL.
         RETURN.
       ENDIF.
     ENDIF.
@@ -6491,7 +6497,7 @@ CLASS lcl_rtti_tree IMPLEMENTATION.
         RETURN.
 
       WHEN 'INITIALS'."Show/hide empty variables
-        m_hide = m_hide BIT-XOR c_mask.
+        mo_debugger->m_hide = mo_debugger->m_hide BIT-XOR c_mask.
         m_clear = abap_true.
 
       WHEN 'LOCALS'."Show/hide locals variables
