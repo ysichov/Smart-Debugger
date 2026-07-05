@@ -318,6 +318,9 @@ METHOD execute_action.
           IF rv_text CS 'set=X'.
             remember_ai_breakpoint( is_action ).
           ENDIF.
+          IF rv_text CS 'deleted=X'.
+            forget_ai_breakpoint( is_action ).
+          ENDIF.
           mo_debugger->mo_window->set_program_line( mo_debugger->mo_window->m_prg-line ).
         ENDIF.
     ENDCASE.
