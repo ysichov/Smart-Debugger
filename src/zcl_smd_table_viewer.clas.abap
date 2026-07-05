@@ -25,14 +25,14 @@ public section.
   data M_VISIBLE type C .
   data M_STD_TBAR type X .
   data M_SHOW_EMPTY type I .
-  "data MO_WINDOW type ref to CL_ACE_WINDOW . "TODO
+  data MO_WINDOW type ref to ZCL_SMD_SMD_WINDOW .
 
   methods CONSTRUCTOR
     importing
       !I_TNAME type ANY optional
       !I_ADDITIONAL_NAME type STRING optional
-      !IR_TAB type ref to DATA optional.
-      "!IO_WINDOW type ref to CL_ACE_WINDOW .
+      !IR_TAB type ref to DATA optional
+      !IO_WINDOW type ref to ZCL_SMD_SMD_WINDOW optional .
   methods REFRESH_TABLE
     for event SELECTION_DONE of ZCL_SMD_SEL_OPT .
 protected section.
@@ -116,7 +116,7 @@ CLASS ZCL_SMD_TABLE_VIEWER IMPLEMENTATION.
                    <temptab> TYPE ANY TABLE.
 
     super->constructor( i_additional_name = i_additional_name ).
-    "mo_window = io_window. "TODO
+    mo_window = io_window.
     m_lang = sy-langu.
     mo_sel_width = 0.
     m_tabname = i_tname.
@@ -362,10 +362,11 @@ CLASS ZCL_SMD_TABLE_VIEWER IMPLEMENTATION.
 
     mo_box = create( i_width = 800 i_hight = 150 ).
     "save new popup ref
-    "TODO
-*    APPEND INITIAL LINE TO lcl_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>).
-*    <popup>-parent = mo_window->mo_box.
-*    <popup>-child = mo_box.
+    IF mo_window IS BOUND.
+      APPEND INITIAL LINE TO zcl_smd_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>).
+      <popup>-parent = mo_window->mo_box.
+      <popup>-child = mo_box.
+    ENDIF.
 
     SET HANDLER on_box_close FOR mo_box.
 
@@ -431,27 +432,28 @@ CLASS ZCL_SMD_TABLE_VIEWER IMPLEMENTATION.
         IF sy-subrc = 0.
           IF <val> = 'Table'.
             ASSIGN COMPONENT 'REF'  OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
-            "lcl_appl=>open_int_table( EXPORTING i_name = CONV #( e_column-fieldname ) it_ref = <ref> io_window = mo_window ). "TODO
+            zcl_smd_appl=>open_int_table( EXPORTING i_name = CONV #( e_column-fieldname ) it_ref = <ref> io_window = mo_window ).
           ENDIF.
         ELSE.
           TRY.
               o_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| ).
               table_clone = o_table_descr->elem_clone( ).
-              "todo  lcl_appl=>open_int_table( EXPORTING i_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone io_window = mo_window ).
+              zcl_smd_appl=>open_int_table( EXPORTING i_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone io_window = mo_window ).
             CATCH cx_sy_move_cast_error.
           ENDTRY.
         ENDIF.
       WHEN 'STEP'.
-      "todo  MOVE-CORRESPONDING <row> TO mo_window->m_prg.
-      "todo  MOVE-CORRESPONDING <row> TO mo_window->mo_debugger->ms_stack.
+        CHECK mo_window IS BOUND.
+        MOVE-CORRESPONDING <row> TO mo_window->m_prg.
+        MOVE-CORRESPONDING <row> TO mo_window->mo_debugger->ms_stack.
 
-        "todo mo_window->show_coverage( ).
-        "todo mo_window->mo_debugger->show_step( ).
+        mo_window->show_coverage( ).
+        mo_window->mo_debugger->show_step( ).
       WHEN OTHERS. "check if it is an embedded table.
         TRY.
             o_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| ).
             table_clone = o_table_descr->elem_clone( ).
-            "todo lcl_appl=>open_int_table( EXPORTING i_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone io_window = mo_window ).
+            zcl_smd_appl=>open_int_table( EXPORTING i_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone io_window = mo_window ).
           CATCH cx_sy_move_cast_error.
         ENDTRY.
     ENDCASE.
@@ -471,13 +473,12 @@ CLASS ZCL_SMD_TABLE_VIEWER IMPLEMENTATION.
 
     APPEND VALUE #( function = 'TECH' icon = icon_wd_caption quickinfo = 'Tech names'  butn_type = 0 ) TO toolbar.
 
-"TODO
-*    LOOP AT lcl_appl=>mt_lang INTO DATA(lang).
-*      IF sy-tabix > 10.
-*        EXIT.
-*      ENDIF.
-*      APPEND VALUE #( function = lang-spras icon = icon_foreign_trade quickinfo = lang-sptxt butn_type = 0 text = lang-sptxt ) TO toolbar.
-*    ENDLOOP.
+    LOOP AT zcl_smd_appl=>mt_lang INTO DATA(lang).
+      IF sy-tabix > 10.
+        EXIT.
+      ENDIF.
+      APPEND VALUE #( function = lang-spras icon = icon_foreign_trade quickinfo = lang-sptxt butn_type = 0 text = lang-sptxt ) TO toolbar.
+    ENDLOOP.
 
     toolbar = VALUE ttb_button( BASE toolbar
      ( function = 'SHOW'  icon = icon_list  quickinfo = 'Show empty columns'   butn_type = 0  )
@@ -549,33 +550,31 @@ CLASS ZCL_SMD_TABLE_VIEWER IMPLEMENTATION.
             <fields>-scrtext_l = <fields>-scrtext_m = <fields>-scrtext_s =  <fields>-reptext = <fields>-fieldname.
 
           WHEN OTHERS. "header names translation
-            "TODO
-*            IF line_exists( lcl_appl=>mt_lang[ spras = e_ucomm ] ).
-*              translate_field( EXPORTING i_lang = CONV #( e_ucomm )  CHANGING c_fld = <fields> ).
-*              IF mo_sel IS BOUND.
-*                READ TABLE mo_sel->mt_sel_tab ASSIGNING FIELD-SYMBOL(<sel>) WITH KEY field_label = <fields>-fieldname.
-*                IF sy-subrc = 0.
-*                  IF <fields>-scrtext_l IS NOT INITIAL.
-*                    <sel>-name = <fields>-scrtext_l.
-*                  ENDIF.
-*                  IF <sel>-name IS INITIAL.
-*                    IF <fields>-reptext IS NOT INITIAL.
-*                      <sel>-name = <fields>-reptext.
-*                    ENDIF.
-*                  ENDIF.
-*                ENDIF.
-*              ENDIF.
-*            ENDIF.
+            IF line_exists( zcl_smd_appl=>mt_lang[ spras = e_ucomm ] ).
+              translate_field( EXPORTING i_lang = CONV #( e_ucomm )  CHANGING c_fld = <fields> ).
+              IF mo_sel IS BOUND.
+                READ TABLE mo_sel->mt_sel_tab ASSIGNING FIELD-SYMBOL(<sel>) WITH KEY field_label = <fields>-fieldname.
+                IF sy-subrc = 0.
+                  IF <fields>-scrtext_l IS NOT INITIAL.
+                    <sel>-name = <fields>-scrtext_l.
+                  ENDIF.
+                  IF <sel>-name IS INITIAL.
+                    IF <fields>-reptext IS NOT INITIAL.
+                      <sel>-name = <fields>-reptext.
+                    ENDIF.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+            ENDIF.
         ENDCASE.
       ENDLOOP.
     ENDIF.
 
-"TODO
-*    IF line_exists( lcl_appl=>mt_lang[ spras = e_ucomm ] ).
-*      m_lang = e_ucomm.
-*      set_header( ).
-*      mo_sel->set_value( i_field = 'SPRSL' i_low = m_lang ).
-*    ENDIF.
+    IF line_exists( zcl_smd_appl=>mt_lang[ spras = e_ucomm ] ).
+      m_lang = e_ucomm.
+      set_header( ).
+      mo_sel->set_value( i_field = 'SPRSL' i_low = m_lang ).
+    ENDIF.
 
     CALL METHOD mo_alv->set_frontend_fieldcatalog EXPORTING it_fieldcatalog = it_fields[].
 
@@ -597,21 +596,19 @@ CLASS ZCL_SMD_TABLE_VIEWER IMPLEMENTATION.
     DATA: tabix LIKE sy-tabix.
     sender->free( ).
 
-    "Free Memory TODO
-*    LOOP AT lcl_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>) WHERE alv_viewer IS NOT INITIAL.
-*      IF <obj>-alv_viewer->mo_box = sender.
-*        tabix = sy-tabix.
-*        EXIT.
-*      ENDIF.
-*    ENDLOOP.
-    IF sy-subrc = 0.
-*      FREE <obj>-alv_viewer->mr_table.
-*      FREE <obj>-alv_viewer->mo_alv.
-*
-*      FREE <obj>-alv_viewer.
-*      IF tabix NE 0.
-*        DELETE lcl_appl=>mt_obj INDEX tabix.
-*      ENDIF.
+    "Free Memory
+    LOOP AT zcl_smd_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>) WHERE alv_viewer IS NOT INITIAL.
+      IF <obj>-alv_viewer->mo_box = sender.
+        tabix = sy-tabix.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+    IF tabix NE 0.
+      FREE <obj>-alv_viewer->mr_table.
+      FREE <obj>-alv_viewer->mo_alv.
+
+      FREE <obj>-alv_viewer.
+      DELETE zcl_smd_appl=>mt_obj INDEX tabix.
     ENDIF.
 
   endmethod.

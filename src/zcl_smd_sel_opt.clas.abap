@@ -225,7 +225,7 @@ CLASS ZCL_SMD_SEL_OPT IMPLEMENTATION.
       CALL FUNCTION 'DOCU_CALL'
         EXPORTING
           id                = 'DE'
-          langu             = sy-langu "mo_debugger->m_lang TODO
+          langu             = mo_debugger->m_lang
           object            = sel-element
           typ               = 'E'
           displ             = abap_true
@@ -256,25 +256,24 @@ CLASS ZCL_SMD_SEL_OPT IMPLEMENTATION.
 
     IF e_ucomm = 'SEL_OFF'. "Hide select-options alv
 
-      "mo_debugger->m_visible = ''. "TODO
+      mo_debugger->m_visible = ''.
 
       sel_width = 0.
-      "TODO
-*      CALL METHOD mo_debugger->mo_splitter->get_column_width
-*        EXPORTING
-*          id                = 1
-*        IMPORTING
-*          result            = mo_debugger->mo_sel_width
-*        EXCEPTIONS
-*          cntl_error        = 1
-*          cntl_system_error = 2
-*          OTHERS            = 3.
+      CALL METHOD mo_debugger->mo_splitter->get_column_width
+        EXPORTING
+          id                = 1
+        IMPORTING
+          result            = mo_debugger->mo_sel_width
+        EXCEPTIONS
+          cntl_error        = 1
+          cntl_system_error = 2
+          OTHERS            = 3.
 
       CALL METHOD mo_debugger->mo_splitter->set_column_width
         EXPORTING
           id    = 1
           width = sel_width.
-      "mo_debugger->mo_alv->set_toolbar_interactive( ). "TODO
+      mo_debugger->mo_alv->set_toolbar_interactive( ).
       RETURN.
     ENDIF.
 
@@ -292,7 +291,7 @@ CLASS ZCL_SMD_SEL_OPT IMPLEMENTATION.
       RAISE EVENT selection_done.
     ENDIF.
 
-    "zcl_smd_common=>refresh( mo_debugger->mo_alv ). "TODO
+    zcl_smd_common=>refresh( mo_debugger->mo_alv ).
     RAISE EVENT selection_done.
 
 
@@ -328,89 +327,88 @@ CLASS ZCL_SMD_SEL_OPT IMPLEMENTATION.
 
 
   method ON_DATA_CHANGED.
-"TODO DOOOOOOO
 
-*    DATA: start TYPE i,
-*          time  TYPE sy-uzeit.
-*
-*    FIELD-SYMBOLS: <field> TYPE any.
-*
-*    LOOP AT er_data_changed->mt_good_cells ASSIGNING FIELD-SYMBOL(<cells>).
-*      READ TABLE mt_sel_tab INDEX <cells>-row_id ASSIGNING FIELD-SYMBOL(<tab>).
-*      ASSIGN COMPONENT <cells>-fieldname OF STRUCTURE <tab> TO <field>.
-*      READ TABLE mo_debugger->mt_alv_catalog WITH KEY fieldname = <tab>-field_label INTO DATA(cat).
-*
-*      IF <field> IS NOT INITIAL AND <cells>-value IS INITIAL.
-*        READ TABLE <tab>-range INTO DATA(second) INDEX 2.
-*        IF sy-subrc = 0.
-*          IF ( <cells>-fieldname = 'LOW' AND <tab>-high IS INITIAL ) OR  ( <cells>-fieldname = 'HIGH' AND <tab>-low IS INITIAL  ).
-*            DELETE <tab>-range INDEX 1.
-*          ELSE.
-*            CLEAR second.
-*          ENDIF.
-*        ENDIF.
-*      ENDIF.
-*
-*      IF cat-convexit = 'ALPHA' AND NOT  <cells>-value CA '+*'.
-*        <cells>-value = |{ <cells>-value ALPHA = IN }|.
-*        start = 128 - cat-dd_outlen.
-*        <cells>-value = <cells>-value+start(cat-dd_outlen).
-*      ENDIF.
-*
-*      IF <cells>-value IS NOT INITIAL.
-*        IF <tab>-int_type = 'D'.
-*          DATA: date TYPE sy-datum.
-*          CALL FUNCTION 'CONVERT_DATE_INPUT'
-*            EXPORTING
-*              input                     = <cells>-value
-*              plausibility_check        = abap_true
-*            IMPORTING
-*              output                    = date
-*            EXCEPTIONS
-*              plausibility_check_failed = 1
-*              wrong_format_in_input     = 2
-*              OTHERS                    = 3.
-*
-*          IF sy-subrc = 0.
-*            <cells>-value = |{ date DATE = USER }|.
-*          ENDIF.
-*        ELSEIF <tab>-int_type = 'T'.
-*          CALL FUNCTION 'CONVERT_TIME_INPUT'
-*            EXPORTING
-*              input                     = <cells>-value
-*            IMPORTING
-*              output                    = time
-*            EXCEPTIONS
-*              plausibility_check_failed = 1
-*              wrong_format_in_input     = 2
-*              OTHERS                    = 3.
-*          <cells>-value = time+0(2) && ':' && time+2(2) && ':' && time+4(2).
-*        ENDIF.
-*      ENDIF.
-*    ENDLOOP.
-*    CHECK sy-subrc = 0.
-*
-*    IF second IS INITIAL.
-*      <field> = <cells>-value.
-*      er_data_changed->modify_cell( EXPORTING i_row_id = <cells>-row_id i_fieldname = <cells>-fieldname i_value = <cells>-value ).
-*    ELSE.
-*      <tab>-low = second-low.
-*      er_data_changed->modify_cell( EXPORTING i_row_id = <cells>-row_id i_fieldname = 'LOW' i_value = second-low ).
-*      IF second-high CO '0 '.
-*        CLEAR second-high.
-*      ENDIF.
-*      <tab>-high = second-high.
-*      er_data_changed->modify_cell( EXPORTING i_row_id = <cells>-row_id i_fieldname = 'HIGH' i_value = second-high ).
-*
-*      <tab>-opti = second-opti.
-*      er_data_changed->modify_cell( EXPORTING i_row_id = <cells>-row_id i_fieldname = 'OPTI' i_value = second-opti ).
-*      <tab>-sign = second-sign.
-*      er_data_changed->modify_cell( EXPORTING i_row_id = <cells>-row_id i_fieldname = 'SIGN' i_value = second-sign ).
-*    ENDIF.
-*
-*    update_sel_row( CHANGING c_sel_row = <tab> ).
-*    zcl_smd_common=>refresh( EXPORTING i_obj = mo_sel_alv i_layout = ms_layout ).
-*    raise_selection_done( ).
+    DATA: start TYPE i,
+          time  TYPE sy-uzeit.
+
+    FIELD-SYMBOLS: <field> TYPE any.
+
+    LOOP AT er_data_changed->mt_good_cells ASSIGNING FIELD-SYMBOL(<cells>).
+      READ TABLE mt_sel_tab INDEX <cells>-row_id ASSIGNING FIELD-SYMBOL(<tab>).
+      ASSIGN COMPONENT <cells>-fieldname OF STRUCTURE <tab> TO <field>.
+      READ TABLE mo_debugger->mt_alv_catalog WITH KEY fieldname = <tab>-field_label INTO DATA(cat).
+
+      IF <field> IS NOT INITIAL AND <cells>-value IS INITIAL.
+        READ TABLE <tab>-range INTO DATA(second) INDEX 2.
+        IF sy-subrc = 0.
+          IF ( <cells>-fieldname = 'LOW' AND <tab>-high IS INITIAL ) OR  ( <cells>-fieldname = 'HIGH' AND <tab>-low IS INITIAL  ).
+            DELETE <tab>-range INDEX 1.
+          ELSE.
+            CLEAR second.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      IF cat-convexit = 'ALPHA' AND NOT  <cells>-value CA '+*'.
+        <cells>-value = |{ <cells>-value ALPHA = IN }|.
+        start = 128 - cat-dd_outlen.
+        <cells>-value = <cells>-value+start(cat-dd_outlen).
+      ENDIF.
+
+      IF <cells>-value IS NOT INITIAL.
+        IF <tab>-int_type = 'D'.
+          DATA: date TYPE sy-datum.
+          CALL FUNCTION 'CONVERT_DATE_INPUT'
+            EXPORTING
+              input                     = <cells>-value
+              plausibility_check        = abap_true
+            IMPORTING
+              output                    = date
+            EXCEPTIONS
+              plausibility_check_failed = 1
+              wrong_format_in_input     = 2
+              OTHERS                    = 3.
+
+          IF sy-subrc = 0.
+            <cells>-value = |{ date DATE = USER }|.
+          ENDIF.
+        ELSEIF <tab>-int_type = 'T'.
+          CALL FUNCTION 'CONVERT_TIME_INPUT'
+            EXPORTING
+              input                     = <cells>-value
+            IMPORTING
+              output                    = time
+            EXCEPTIONS
+              plausibility_check_failed = 1
+              wrong_format_in_input     = 2
+              OTHERS                    = 3.
+          <cells>-value = time+0(2) && ':' && time+2(2) && ':' && time+4(2).
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+    CHECK sy-subrc = 0.
+
+    IF second IS INITIAL.
+      <field> = <cells>-value.
+      er_data_changed->modify_cell( EXPORTING i_row_id = <cells>-row_id i_fieldname = <cells>-fieldname i_value = <cells>-value ).
+    ELSE.
+      <tab>-low = second-low.
+      er_data_changed->modify_cell( EXPORTING i_row_id = <cells>-row_id i_fieldname = 'LOW' i_value = second-low ).
+      IF second-high CO '0 '.
+        CLEAR second-high.
+      ENDIF.
+      <tab>-high = second-high.
+      er_data_changed->modify_cell( EXPORTING i_row_id = <cells>-row_id i_fieldname = 'HIGH' i_value = second-high ).
+
+      <tab>-opti = second-opti.
+      er_data_changed->modify_cell( EXPORTING i_row_id = <cells>-row_id i_fieldname = 'OPTI' i_value = second-opti ).
+      <tab>-sign = second-sign.
+      er_data_changed->modify_cell( EXPORTING i_row_id = <cells>-row_id i_fieldname = 'SIGN' i_value = second-sign ).
+    ENDIF.
+
+    update_sel_row( CHANGING c_sel_row = <tab> ).
+    zcl_smd_common=>refresh( EXPORTING i_obj = mo_sel_alv i_layout = ms_layout ).
+    raise_selection_done( ).
 
 
   endmethod.
@@ -427,165 +425,162 @@ CLASS ZCL_SMD_SEL_OPT IMPLEMENTATION.
 
 
   method ON_F4.
-"TODO
-*
-*    DATA: return_tab TYPE STANDARD TABLE OF ddshretval,
-*          objects    TYPE TABLE OF objec,
-*          objec      TYPE objec,
-*          otype      TYPE otype,
-*          plvar      TYPE plvar,
-*          multiple   TYPE xfeld,
-*          clear      TYPE xfeld.
-*
-*    IF e_fieldname = 'LOW'.
-*      multiple = abap_true.
-*    ENDIF.
-*
-*    READ TABLE mt_sel_tab ASSIGNING FIELD-SYMBOL(<sel>) INDEX es_row_no-row_id.
-*    DATA(fname) =  <sel>-field_label.
-*
-*    mt_sel[] = mt_sel_tab[].
-*    IF <sel>-element = 'HROBJID'.
-*      READ TABLE mt_sel_tab INTO DATA(sel) WITH KEY field_label = 'OTYPE'.
-*      otype = sel-low.
-*      READ TABLE mt_sel_tab INTO sel WITH KEY field_label = 'PLVAR'.
-*      IF sy-subrc = 0 AND sel-low IS NOT INITIAL.
-*        plvar = sel-low.
-*      ELSE.
-*        CALL FUNCTION 'RH_GET_ACTIVE_WF_PLVAR'
-*          IMPORTING
-*            act_plvar       = plvar
-*          EXCEPTIONS
-*            no_active_plvar = 1
-*            OTHERS          = 2.
-*      ENDIF.
-*    ELSEIF <sel>-element = 'PERSNO'.
-*      otype = 'P'.
-*    ENDIF.
-*
-*    IF otype IS NOT INITIAL.
-*      CALL FUNCTION 'RH_OBJID_REQUEST'
-*        EXPORTING
-*          plvar            = plvar
-*          otype            = otype
-*          seark_begda      = sy-datum
-*          seark_endda      = sy-datum
-*          dynpro_repid     = sy-repid
-*          dynpro_dynnr     = sy-dynnr
-*          set_mode         = multiple
-*        IMPORTING
-*          sel_object       = objec
-*        TABLES
-*          sel_hrobject_tab = objects
-*        EXCEPTIONS
-*          OTHERS           = 6.
-*      IF sy-subrc = 0.
-*        clear = abap_true.
-*        LOOP AT objects INTO objec.
-*          IF e_fieldname = 'LOW'.
-*            set_value( EXPORTING i_field = <sel>-field_label i_low = objec-objid i_clear = clear ).
-*            CLEAR clear.
-*          ELSE.
-*            set_value( EXPORTING i_field = <sel>-field_label i_high = objec-objid i_clear = clear ).
-*          ENDIF.
-*        ENDLOOP.
-*      ENDIF.
-*    ELSE.
-*
-*      CALL FUNCTION 'F4IF_FIELD_VALUE_REQUEST'
-*        EXPORTING
-*          tabname           = mo_debugger->m_tabname
-*          fieldname         = fname
-*          callback_program  = sy-repid
-*          callback_form     = 'CALLBACK_F4_SEL' "callback_method - doesn't work for local class
-*          multiple_choice   = multiple
-*        TABLES
-*          return_tab        = return_tab
-*        EXCEPTIONS
-*          field_not_found   = 1
-*          no_help_for_field = 2
-*          inconsistent_help = 3
-*          no_values_found   = 4
-*          OTHERS            = 5.
-*
-*      IF sy-subrc = 0 AND lines( return_tab ) > 0.
-*        ASSIGN er_event_data->m_data->* TO FIELD-SYMBOL(<itab>).
-*        CLEAR <sel>-range.
-*        clear = abap_true.
-*        LOOP AT return_tab ASSIGNING FIELD-SYMBOL(<ret>) WHERE fieldname = fname.
-*          IF e_fieldname = 'LOW'.
-*            set_value( EXPORTING i_field = <sel>-field_label i_low = <ret>-fieldval i_clear = clear ).
-*            CLEAR clear.
-*          ELSE.
-*            set_value( EXPORTING i_field = <sel>-field_label i_high = <ret>-fieldval ).
-*          ENDIF.
-*        ENDLOOP.
-*      ENDIF.
-*    ENDIF.
-*    er_event_data->m_event_handled = abap_true.
-*    raise_selection_done( ).
+
+    DATA: return_tab TYPE STANDARD TABLE OF ddshretval,
+          objects    TYPE TABLE OF objec,
+          objec      TYPE objec,
+          otype      TYPE otype,
+          plvar      TYPE plvar,
+          multiple   TYPE xfeld,
+          clear      TYPE xfeld.
+
+    IF e_fieldname = 'LOW'.
+      multiple = abap_true.
+    ENDIF.
+
+    READ TABLE mt_sel_tab ASSIGNING FIELD-SYMBOL(<sel>) INDEX es_row_no-row_id.
+    DATA(fname) =  <sel>-field_label.
+
+    mt_sel[] = mt_sel_tab[].
+    IF <sel>-element = 'HROBJID'.
+      READ TABLE mt_sel_tab INTO DATA(sel) WITH KEY field_label = 'OTYPE'.
+      otype = sel-low.
+      READ TABLE mt_sel_tab INTO sel WITH KEY field_label = 'PLVAR'.
+      IF sy-subrc = 0 AND sel-low IS NOT INITIAL.
+        plvar = sel-low.
+      ELSE.
+        CALL FUNCTION 'RH_GET_ACTIVE_WF_PLVAR'
+          IMPORTING
+            act_plvar       = plvar
+          EXCEPTIONS
+            no_active_plvar = 1
+            OTHERS          = 2.
+      ENDIF.
+    ELSEIF <sel>-element = 'PERSNO'.
+      otype = 'P'.
+    ENDIF.
+
+    IF otype IS NOT INITIAL.
+      CALL FUNCTION 'RH_OBJID_REQUEST'
+        EXPORTING
+          plvar            = plvar
+          otype            = otype
+          seark_begda      = sy-datum
+          seark_endda      = sy-datum
+          dynpro_repid     = sy-repid
+          dynpro_dynnr     = sy-dynnr
+          set_mode         = multiple
+        IMPORTING
+          sel_object       = objec
+        TABLES
+          sel_hrobject_tab = objects
+        EXCEPTIONS
+          OTHERS           = 6.
+      IF sy-subrc = 0.
+        clear = abap_true.
+        LOOP AT objects INTO objec.
+          IF e_fieldname = 'LOW'.
+            set_value( EXPORTING i_field = <sel>-field_label i_low = objec-objid i_clear = clear ).
+            CLEAR clear.
+          ELSE.
+            set_value( EXPORTING i_field = <sel>-field_label i_high = objec-objid i_clear = clear ).
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+    ELSE.
+
+      CALL FUNCTION 'F4IF_FIELD_VALUE_REQUEST'
+        EXPORTING
+          tabname           = mo_debugger->m_tabname
+          fieldname         = fname
+          callback_program  = sy-repid
+          callback_form     = 'CALLBACK_F4_SEL' "callback_method - doesn't work for local class
+          multiple_choice   = multiple
+        TABLES
+          return_tab        = return_tab
+        EXCEPTIONS
+          field_not_found   = 1
+          no_help_for_field = 2
+          inconsistent_help = 3
+          no_values_found   = 4
+          OTHERS            = 5.
+
+      IF sy-subrc = 0 AND lines( return_tab ) > 0.
+        ASSIGN er_event_data->m_data->* TO FIELD-SYMBOL(<itab>).
+        CLEAR <sel>-range.
+        clear = abap_true.
+        LOOP AT return_tab ASSIGNING FIELD-SYMBOL(<ret>) WHERE fieldname = fname.
+          IF e_fieldname = 'LOW'.
+            set_value( EXPORTING i_field = <sel>-field_label i_low = <ret>-fieldval i_clear = clear ).
+            CLEAR clear.
+          ELSE.
+            set_value( EXPORTING i_field = <sel>-field_label i_high = <ret>-fieldval ).
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+    er_event_data->m_event_handled = abap_true.
+    raise_selection_done( ).
 
 
   endmethod.
 
 
   method ON_GRID_BUTTON_CLICK.
-"TODO
-*
-*
-*    DATA: tabfield TYPE rstabfield,
-*          opt      TYPE rsoptions VALUE 'XXXXXXXXXX',
-*          sign     TYPE raldb_sign,
-*          option   TYPE raldb_opti.
-*
-*    READ TABLE mt_sel_tab INDEX es_row_no-row_id ASSIGNING FIELD-SYMBOL(<tab>).
-*    CASE es_col_id.
-*      WHEN 'OPTION_ICON'. "edit select logical expression type
-*        CALL FUNCTION 'SELECT_OPTION_OPTIONS'
-*          EXPORTING
-*            selctext     = 'nnnn'
-*            option_list  = opt
-*          IMPORTING
-*            sign         = sign
-*            option       = option
-*          EXCEPTIONS
-*            delete_line  = 1
-*            not_executed = 2
-*            illegal_sign = 3
-*            OTHERS       = 4.
-*        IF sy-subrc = 0.
-*          <tab>-sign = sign.
-*          <tab>-opti = option.
-*        ELSEIF sy-subrc = 1.
-*          CLEAR: <tab>-low, <tab>-high,<tab>-sign, <tab>-opti, <tab>-range.
-*        ENDIF.
-*      WHEN 'MORE_ICON'. "edit ranges
-*        tabfield-tablename = mo_debugger->m_tabname.
-*        tabfield-fieldname = <tab>-field_label.
-*
-*        CALL FUNCTION 'COMPLEX_SELECTIONS_DIALOG'
-*          EXPORTING
-*            title             = 'title'
-*            text              = 'text'
-*            tab_and_field     = tabfield
-*          TABLES
-*            range             = <tab>-range
-*          EXCEPTIONS
-*            no_range_tab      = 1
-*            cancelled         = 2
-*            internal_error    = 3
-*            invalid_fieldname = 4
-*            OTHERS            = 5.
-*        IF sy-subrc = 0.
-*          READ TABLE <tab>-range INDEX 1 INTO DATA(range).
-*          MOVE-CORRESPONDING range TO <tab>.
-*          IF <tab>-opti NE 'BT'.
-*            CLEAR <tab>-high.
-*          ENDIF.
-*        ENDIF.
-*    ENDCASE.
-*    update_sel_row( CHANGING c_sel_row = <tab> ).
-*    RAISE EVENT selection_done.
+
+    DATA: tabfield TYPE rstabfield,
+          opt      TYPE rsoptions VALUE 'XXXXXXXXXX',
+          sign     TYPE raldb_sign,
+          option   TYPE raldb_opti.
+
+    READ TABLE mt_sel_tab INDEX es_row_no-row_id ASSIGNING FIELD-SYMBOL(<tab>).
+    CASE es_col_id.
+      WHEN 'OPTION_ICON'. "edit select logical expression type
+        CALL FUNCTION 'SELECT_OPTION_OPTIONS'
+          EXPORTING
+            selctext     = 'nnnn'
+            option_list  = opt
+          IMPORTING
+            sign         = sign
+            option       = option
+          EXCEPTIONS
+            delete_line  = 1
+            not_executed = 2
+            illegal_sign = 3
+            OTHERS       = 4.
+        IF sy-subrc = 0.
+          <tab>-sign = sign.
+          <tab>-opti = option.
+        ELSEIF sy-subrc = 1.
+          CLEAR: <tab>-low, <tab>-high,<tab>-sign, <tab>-opti, <tab>-range.
+        ENDIF.
+      WHEN 'MORE_ICON'. "edit ranges
+        tabfield-tablename = mo_debugger->m_tabname.
+        tabfield-fieldname = <tab>-field_label.
+
+        CALL FUNCTION 'COMPLEX_SELECTIONS_DIALOG'
+          EXPORTING
+            title             = 'title'
+            text              = 'text'
+            tab_and_field     = tabfield
+          TABLES
+            range             = <tab>-range
+          EXCEPTIONS
+            no_range_tab      = 1
+            cancelled         = 2
+            internal_error    = 3
+            invalid_fieldname = 4
+            OTHERS            = 5.
+        IF sy-subrc = 0.
+          READ TABLE <tab>-range INDEX 1 INTO DATA(range).
+          MOVE-CORRESPONDING range TO <tab>.
+          IF <tab>-opti NE 'BT'.
+            CLEAR <tab>-high.
+          ENDIF.
+        ENDIF.
+    ENDCASE.
+    update_sel_row( CHANGING c_sel_row = <tab> ).
+    RAISE EVENT selection_done.
 
 
   endmethod.

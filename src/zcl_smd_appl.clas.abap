@@ -162,12 +162,12 @@ CLASS zcl_smd_appl IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD init_lang.
-*    SELECT c~spras t~sptxt INTO CORRESPONDING FIELDS OF TABLE mt_lang
-*      FROM t002c AS c
-*      INNER JOIN t002t AS t
-*      ON c~spras = t~sprsl
-*      WHERE t~spras = sy-langu
-*      ORDER BY c~ladatum DESCENDING c~lauzeit DESCENDING.
+    SELECT c~spras t~sptxt INTO CORRESPONDING FIELDS OF TABLE mt_lang
+      FROM t002c AS c
+      INNER JOIN t002t AS t
+      ON c~spras = t~sprsl
+      WHERE t~spras = sy-langu
+      ORDER BY c~ladatum DESCENDING c~lauzeit DESCENDING.
   ENDMETHOD.
 
   METHOD check_mermaid.
@@ -191,15 +191,15 @@ CLASS zcl_smd_appl IMPLEMENTATION.
 
   METHOD open_int_table.
 
-*    DATA r_tab TYPE REF TO data.
-*    IF it_ref IS BOUND.
-*      r_tab = it_ref.
-*    ELSE.
-*      GET REFERENCE OF it_tab INTO r_tab.
-*    ENDIF.
-*    APPEND INITIAL LINE TO zcl_smd_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
-*    <obj>-alv_viewer = NEW #(  i_additional_name = i_name ir_tab = r_tab io_window = io_window ).
-*    <obj>-alv_viewer->mo_sel->raise_selection_done( ).
+    DATA r_tab TYPE REF TO data.
+    IF it_ref IS BOUND.
+      r_tab = it_ref.
+    ELSE.
+      GET REFERENCE OF it_tab INTO r_tab.
+    ENDIF.
+    APPEND INITIAL LINE TO zcl_smd_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
+    <obj>-alv_viewer = NEW #(  i_additional_name = i_name ir_tab = r_tab io_window = io_window ).
+    <obj>-alv_viewer->mo_sel->raise_selection_done( ).
 
   ENDMETHOD.
 
