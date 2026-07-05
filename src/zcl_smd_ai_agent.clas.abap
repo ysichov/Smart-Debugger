@@ -1,6 +1,9 @@
-CLASS zcl_smd_ai_agent DEFINITION PUBLIC CREATE PUBLIC.
+class ZCL_SMD_AI_AGENT definition
+  public
+  create private .
 
-  PUBLIC SECTION.
+
+PUBLIC SECTION.
     CONSTANTS c_provider TYPE string VALUE 'MISTRAL'.
     CONSTANTS c_keyname  TYPE string VALUE 'Default'.
     CONSTANTS c_model    TYPE text255 VALUE 'mistral-large-latest'.
@@ -21,9 +24,10 @@ CLASS zcl_smd_ai_agent DEFINITION PUBLIC CREATE PUBLIC.
         !is_action     TYPE zif_smd_ai_agent_types=>ty_action
       RETURNING
         VALUE(rv_text) TYPE string.
+protected section.
+private section.
 
-  PRIVATE SECTION.
-    TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
+TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
 
     DATA mo_debugger TYPE REF TO zcl_smd_debugger_base.
     DATA mv_last_error TYPE string.
@@ -79,132 +83,19 @@ CLASS zcl_smd_ai_agent DEFINITION PUBLIC CREATE PUBLIC.
         !i_line TYPE string
       CHANGING
         !ct_lines TYPE tt_string.
-
 ENDCLASS.
 
-CLASS zcl_smd_ai_agent IMPLEMENTATION.
 
-  METHOD constructor.
-    mo_debugger = io_debugger.
-  ENDMETHOD.
 
-  METHOD run.
+CLASS ZCL_SMD_AI_AGENT IMPLEMENTATION.
 
-    CLEAR es_action.
-    DATA(lv_api_key) = get_default_api_key( ).
-    IF lv_api_key IS INITIAL.
-      ev_text = |AI agent cannot start: { mv_last_error }|.
-      RETURN.
-    ENDIF.
 
-    TRY.
-        DATA(lv_guard) = ensure_guard_breakpoint( ).
+  method APPEND_LINE.
+    APPEND i_line TO ct_lines.
+  endmethod.
 
-        DATA(lo_llm) = NEW zcl_abapai_llm_client(
-          i_model    = c_model
-          i_apikey   = lv_api_key
-          i_provider = c_provider ).
 
-        lo_llm->set_temperature( '0.1' ).
-        lo_llm->set_max_tokens( 4000 ).
-
-        DATA(lo_context) = NEW zcl_ai_tool_context(
-          io_llm        = lo_llm
-          i_agents_path = `` ).
-
-        zcl_ai_tool_factory=>initialize( lo_context ).
-
-        DATA lt_tool_calls TYPE zcl_code_ai_api=>tt_tool_calls.
-
-        DATA(lv_answer) = lo_llm->ask_with_tools(
-          EXPORTING
-            i_prompt        = build_prompt( i_task )
-            i_system_prompt = get_system_prompt( )
-            i_tools_json    = get_tools_json( )
-          IMPORTING
-            et_tool_calls   = lt_tool_calls ).
-
-        READ TABLE lt_tool_calls INDEX 1 INTO DATA(ls_call).
-        IF sy-subrc = 0.
-          es_action = parse_tool_call(
-            i_name      = ls_call-name
-            i_arguments = ls_call-arguments ).
-        ENDIF.
-
-        ev_text =
-          |Provider: { c_provider } / { c_model }| &&
-          cl_abap_char_utilities=>newline &&
-          |Time: { lo_llm->get_last_seconds( ) } sec, tokens in/out: { lo_llm->mv_last_tok_in }/{ lo_llm->mv_last_tok_out }| &&
-          cl_abap_char_utilities=>newline &&
-          lv_guard &&
-          cl_abap_char_utilities=>newline &&
-          cl_abap_char_utilities=>newline &&
-          lv_answer.
-
-        IF es_action-tool IS NOT INITIAL.
-          ev_text = ev_text &&
-            cl_abap_char_utilities=>newline &&
-            cl_abap_char_utilities=>newline &&
-            |Pending AI action: { es_action-tool } { es_action-command } { es_action-variable } { es_action-include }:{ es_action-line }| &&
-            cl_abap_char_utilities=>newline &&
-            |Intent: { es_action-reason }| &&
-            cl_abap_char_utilities=>newline &&
-            |Press AI again to confirm this action.|.
-        ENDIF.
-
-      CATCH cx_root INTO DATA(lx_root).
-        ev_text = |AI agent failed: { lx_root->get_text( ) }|.
-    ENDTRY.
-
-  ENDMETHOD.
-
-  METHOD execute_action.
-
-    CASE is_action-tool.
-      WHEN 'read_variable'.
-        rv_text = read_variable( is_action-variable ).
-
-      WHEN 'step_debugger'.
-        rv_text = |Confirmed debugger step { is_action-command }. Intent: { is_action-reason }|.
-
-      WHEN OTHERS.
-        rv_text = execute_plugin_tool( is_action ).
-    ENDCASE.
-
-    mv_last_tool_result = rv_text.
-
-  ENDMETHOD.
-
-  METHOD get_default_api_key.
-
-    CLEAR: rv_api_key, mv_last_error.
-
-    SELECT SINGLE secret
-      FROM zaicode_apikey
-      INTO @DATA(lv_secret)
-      WHERE username = @sy-uname
-        AND provider = @c_provider
-        AND keyname  = @c_keyname.
-
-    IF sy-subrc <> 0 OR lv_secret IS INITIAL.
-      mv_last_error = |No stored key for { c_provider } / { c_keyname } in ZAICODE_APIKEY|.
-      RETURN.
-    ENDIF.
-
-    TRY.
-        rv_api_key = zcl_aicode_crypto=>decrypt(
-          i_username = sy-uname
-          i_provider = c_provider
-          i_name     = c_keyname
-          i_password = ''
-          i_secret   = lv_secret ).
-      CATCH cx_sec_sxml_encrypt_error.
-        mv_last_error = |Cannot decrypt { c_provider } / { c_keyname }. The key probably has a password.|.
-    ENDTRY.
-
-  ENDMETHOD.
-
-  METHOD build_prompt.
+METHOD build_prompt.
 
     DATA lt_lines TYPE tt_string.
     DATA lv_line TYPE string.
@@ -305,22 +196,158 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD get_system_prompt.
 
-    rv_prompt =
-      `You are the Smart Debugger AI agent for ABAP. ` &&
-      `Use only the debugger snapshot provided by the user prompt. ` &&
-      `Find likely bugs, suspicious state transitions, wrong variable values, and useful next debug actions. ` &&
-      `When you need debugger control, call exactly one tool. ` &&
-      `Use read_variable when the exact runtime value of any ABAP variable, field, component, reference, or table expression is needed. ` &&
-      `Never call F8/continue unless you explain why it is safe; prefer F5/F6/F7 for investigation. ` &&
-      `Before continuing, assume a guard breakpoint exists at the end of the current include. ` &&
-      `Do not reveal hidden chain-of-thought; write a concise analysis summary instead. ` &&
-      `Answer in Russian unless the user asks otherwise. Structure the answer as: Intent, Analysis, Findings, Proposed action.`;
+  method CONSTRUCTOR.
+      mo_debugger = io_debugger.
+  endmethod.
+
+
+METHOD ensure_guard_breakpoint.
+
+    CHECK mo_debugger IS BOUND.
+    CHECK mo_debugger->mo_window IS BOUND.
+
+    DATA(lv_include) = mo_debugger->mo_window->m_prg-include.
+    DATA(lv_program) = mo_debugger->mo_window->m_prg-program.
+
+    IF lv_include IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    IF lv_program IS INITIAL.
+      lv_program = lv_include.
+    ENDIF.
+
+    READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = lv_include INTO DATA(ls_source).
+    IF sy-subrc <> 0 OR ls_source-source IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    DATA(lv_line) = lines( ls_source-source->lines ).
+    IF lv_line <= 0.
+      RETURN.
+    ENDIF.
+
+    CALL FUNCTION 'RS_SET_BREAKPOINT'
+      EXPORTING
+        index       = lv_line
+        program     = lv_include
+        mainprogram = lv_program
+        bp_type     = 'S'
+      EXCEPTIONS
+        not_executed = 1
+        OTHERS       = 2.
+
+    rv_text = COND string(
+      WHEN sy-subrc = 0 THEN |Guard breakpoint: { lv_include }:{ lv_line }|
+      ELSE |Guard breakpoint was not set: { lv_include }:{ lv_line }| ).
 
   ENDMETHOD.
 
-  METHOD get_tools_json.
+
+METHOD execute_action.
+
+    CASE is_action-tool.
+      WHEN 'read_variable'.
+        rv_text = read_variable( is_action-variable ).
+
+      WHEN 'step_debugger'.
+        rv_text = |Confirmed debugger step { is_action-command }. Intent: { is_action-reason }|.
+
+      WHEN OTHERS.
+        rv_text = execute_plugin_tool( is_action ).
+    ENDCASE.
+
+    mv_last_tool_result = rv_text.
+
+  ENDMETHOD.
+
+
+METHOD execute_plugin_tool.
+
+    TRY.
+        DATA(lo_tool) = zcl_ai_tool_factory=>get_tool( is_action-tool ).
+        IF lo_tool IS NOT BOUND.
+          rv_text = |Unknown AI action: { is_action-tool }|.
+          RETURN.
+        ENDIF.
+
+        DATA(ls_result) = lo_tool->execute( i_arguments = is_action-arguments ).
+        IF ls_result-error_text IS NOT INITIAL.
+          rv_text = ls_result-error_text.
+        ELSE.
+          rv_text = ls_result-xml_payload.
+        ENDIF.
+      CATCH cx_root INTO DATA(lx_root).
+        rv_text = |AI action { is_action-tool } failed: { lx_root->get_text( ) }|.
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+METHOD get_default_api_key.
+
+    CLEAR: rv_api_key, mv_last_error.
+
+    SELECT SINGLE secret
+      FROM zaicode_apikey
+      INTO @DATA(lv_secret)
+      WHERE username = @sy-uname
+        AND provider = @c_provider
+        AND keyname  = @c_keyname.
+
+    IF sy-subrc <> 0 OR lv_secret IS INITIAL.
+      mv_last_error = |No stored key for { c_provider } / { c_keyname } in ZAICODE_APIKEY|.
+      RETURN.
+    ENDIF.
+
+    TRY.
+        rv_api_key = zcl_aicode_crypto=>decrypt(
+          i_username = sy-uname
+          i_provider = c_provider
+          i_name     = c_keyname
+          i_password = ''
+          i_secret   = lv_secret ).
+      CATCH cx_sec_sxml_encrypt_error.
+        mv_last_error = |Cannot decrypt { c_provider } / { c_keyname }. The key probably has a password.|.
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+METHOD get_plugin_tools_json.
+
+    rv_json = `[]`.
+
+    TRY.
+        DATA lt_tool_names TYPE string_table.
+        APPEND 'set_breakpoint' TO lt_tool_names.
+
+        rv_json = zcl_ai_tool_factory=>build_tools_json( it_tool_names = lt_tool_names ).
+      CATCH cx_root.
+        rv_json = `[]`.
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+METHOD get_system_prompt.
+
+    rv_prompt =
+      'You are the Smart Debugger AI agent for ABAP. ' &&
+      'Use only the debugger snapshot provided by the user prompt. ' &&
+      'Find likely bugs, suspicious state transitions, wrong variable values, and useful next debug actions. ' &&
+      'When you need debugger control, call exactly one tool. ' &&
+      'Use read_variable when the exact runtime value of any ABAP variable, field, component, reference, or table expression is needed. ' &&
+      'Never call F8/continue unless you explain why it is safe; prefer F5/F6/F7 for investigation. ' &&
+      'Before continuing, assume a guard breakpoint exists at the end of the current include. ' &&
+      'Do not reveal hidden chain-of-thought; write a concise analysis summary instead. ' &&
+      'Answer in Russian unless the user asks otherwise. Structure the answer as: Intent, Analysis, Findings, Proposed action.'.
+
+  ENDMETHOD.
+
+
+METHOD get_tools_json.
 
     DATA(lv_json) =
       `[` &&
@@ -358,22 +385,8 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD get_plugin_tools_json.
 
-    rv_json = `[]`.
-
-    TRY.
-        DATA lt_tool_names TYPE string_table.
-        APPEND 'set_breakpoint' TO lt_tool_names.
-
-        rv_json = zcl_ai_tool_factory=>build_tools_json( it_tool_names = lt_tool_names ).
-      CATCH cx_root.
-        rv_json = `[]`.
-    ENDTRY.
-
-  ENDMETHOD.
-
-  METHOD parse_tool_call.
+METHOD parse_tool_call.
 
     TYPES:
       BEGIN OF ty_step_args,
@@ -417,70 +430,8 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD ensure_guard_breakpoint.
 
-    CHECK mo_debugger IS BOUND.
-    CHECK mo_debugger->mo_window IS BOUND.
-
-    DATA(lv_include) = mo_debugger->mo_window->m_prg-include.
-    DATA(lv_program) = mo_debugger->mo_window->m_prg-program.
-
-    IF lv_include IS INITIAL.
-      RETURN.
-    ENDIF.
-
-    IF lv_program IS INITIAL.
-      lv_program = lv_include.
-    ENDIF.
-
-    READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = lv_include INTO DATA(ls_source).
-    IF sy-subrc <> 0 OR ls_source-source IS INITIAL.
-      RETURN.
-    ENDIF.
-
-    DATA(lv_line) = lines( ls_source-source->lines ).
-    IF lv_line <= 0.
-      RETURN.
-    ENDIF.
-
-    CALL FUNCTION 'RS_SET_BREAKPOINT'
-      EXPORTING
-        index       = lv_line
-        program     = lv_include
-        mainprogram = lv_program
-        bp_type     = 'S'
-      EXCEPTIONS
-        not_executed = 1
-        OTHERS       = 2.
-
-    rv_text = COND string(
-      WHEN sy-subrc = 0 THEN |Guard breakpoint: { lv_include }:{ lv_line }|
-      ELSE |Guard breakpoint was not set: { lv_include }:{ lv_line }| ).
-
-  ENDMETHOD.
-
-  METHOD execute_plugin_tool.
-
-    TRY.
-        DATA(lo_tool) = zcl_ai_tool_factory=>get_tool( is_action-tool ).
-        IF lo_tool IS NOT BOUND.
-          rv_text = |Unknown AI action: { is_action-tool }|.
-          RETURN.
-        ENDIF.
-
-        DATA(ls_result) = lo_tool->execute( i_arguments = is_action-arguments ).
-        IF ls_result-error_text IS NOT INITIAL.
-          rv_text = ls_result-error_text.
-        ELSE.
-          rv_text = ls_result-xml_payload.
-        ENDIF.
-      CATCH cx_root INTO DATA(lx_root).
-        rv_text = |AI action { is_action-tool } failed: { lx_root->get_text( ) }|.
-    ENDTRY.
-
-  ENDMETHOD.
-
-  METHOD read_variable.
+METHOD read_variable.
 
     DATA lr_simple TYPE REF TO tpda_sys_symbsimple.
     DATA lr_string TYPE REF TO tpda_sys_symbstring.
@@ -541,8 +492,74 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD append_line.
-    APPEND i_line TO ct_lines.
-  ENDMETHOD.
 
+METHOD run.
+
+    CLEAR es_action.
+    DATA(lv_api_key) = get_default_api_key( ).
+    IF lv_api_key IS INITIAL.
+      ev_text = |AI agent cannot start: { mv_last_error }|.
+      RETURN.
+    ENDIF.
+
+    TRY.
+        DATA(lv_guard) = ensure_guard_breakpoint( ).
+
+        DATA(lo_llm) = NEW zcl_abapai_llm_client(
+          i_model    = c_model
+          i_apikey   = lv_api_key
+          i_provider = c_provider ).
+
+        lo_llm->set_temperature( '0.1' ).
+        lo_llm->set_max_tokens( 4000 ).
+
+        DATA(lo_context) = NEW zcl_ai_tool_context(
+          io_llm        = lo_llm
+          i_agents_path = `` ).
+
+        zcl_ai_tool_factory=>initialize( lo_context ).
+
+        DATA lt_tool_calls TYPE zcl_code_ai_api=>tt_tool_calls.
+
+        DATA(lv_answer) = lo_llm->ask_with_tools(
+          EXPORTING
+            i_prompt        = build_prompt( i_task )
+            i_system_prompt = get_system_prompt( )
+            i_tools_json    = get_tools_json( )
+          IMPORTING
+            et_tool_calls   = lt_tool_calls ).
+
+        READ TABLE lt_tool_calls INDEX 1 INTO DATA(ls_call).
+        IF sy-subrc = 0.
+          es_action = parse_tool_call(
+            i_name      = ls_call-name
+            i_arguments = ls_call-arguments ).
+        ENDIF.
+
+        ev_text =
+          |Provider: { c_provider } / { c_model }| &&
+          cl_abap_char_utilities=>newline &&
+          |Time: { lo_llm->get_last_seconds( ) } sec, tokens in/out: { lo_llm->mv_last_tok_in }/{ lo_llm->mv_last_tok_out }| &&
+          cl_abap_char_utilities=>newline &&
+          lv_guard &&
+          cl_abap_char_utilities=>newline &&
+          cl_abap_char_utilities=>newline &&
+          lv_answer.
+
+        IF es_action-tool IS NOT INITIAL.
+          ev_text = ev_text &&
+            cl_abap_char_utilities=>newline &&
+            cl_abap_char_utilities=>newline &&
+            |Pending AI action: { es_action-tool } { es_action-command } { es_action-variable } { es_action-include }:{ es_action-line }| &&
+            cl_abap_char_utilities=>newline &&
+            |Intent: { es_action-reason }| &&
+            cl_abap_char_utilities=>newline &&
+            |Press AI again to confirm this action.|.
+        ENDIF.
+
+      CATCH cx_root INTO DATA(lx_root).
+        ev_text = |AI agent failed: { lx_root->get_text( ) }|.
+    ENDTRY.
+
+  ENDMETHOD.
 ENDCLASS.
