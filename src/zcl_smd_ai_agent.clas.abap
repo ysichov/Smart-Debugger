@@ -34,19 +34,12 @@ CLASS zcl_smd_ai_agent DEFINITION
   PRIVATE SECTION.
 
 TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
-TYPES:
-  BEGIN OF ty_ai_breakpoint,
-    include TYPE string,
-    line    TYPE i,
-    reason  TYPE string,
-  END OF ty_ai_breakpoint,
-  tt_ai_breakpoints TYPE STANDARD TABLE OF ty_ai_breakpoint WITH EMPTY KEY.
 
     DATA mo_debugger TYPE REF TO zcl_smd_debugger_base.
     DATA mv_last_error TYPE string.
     DATA mv_last_tool_result TYPE string.
     DATA mt_action_log TYPE tt_string.
-    DATA mt_ai_breakpoints TYPE tt_ai_breakpoints.
+    DATA mt_ai_breakpoints TYPE tt_string.
 
     CLASS-DATA gv_cached_password TYPE string.
 
@@ -179,10 +172,10 @@ METHOD build_prompt.
       IF mt_ai_breakpoints IS NOT INITIAL.
         append_line( EXPORTING i_line = `` CHANGING ct_lines = lt_lines ).
         append_line( EXPORTING i_line = `Known AI-set breakpoints:` CHANGING ct_lines = lt_lines ).
-        LOOP AT mt_ai_breakpoints INTO DATA(ls_ai_breakpoint).
+        LOOP AT mt_ai_breakpoints INTO DATA(lv_ai_breakpoint).
           append_line(
             EXPORTING
-              i_line = |{ sy-tabix }. { ls_ai_breakpoint-include }:{ ls_ai_breakpoint-line } reason={ ls_ai_breakpoint-reason }|
+              i_line = |{ sy-tabix }. { lv_ai_breakpoint }|
             CHANGING
               ct_lines = lt_lines ).
         ENDLOOP.
@@ -369,6 +362,7 @@ METHOD execute_action.
 METHOD is_known_ai_breakpoint.
 
     DATA lv_include TYPE string.
+    DATA lv_key TYPE string.
 
     CHECK is_action-tool = 'set_breakpoint'.
     CHECK is_action-include IS NOT INITIAL.
@@ -377,9 +371,10 @@ METHOD is_known_ai_breakpoint.
     lv_include = is_action-include.
     TRANSLATE lv_include TO UPPER CASE.
     CONDENSE lv_include.
+    lv_key = |{ lv_include }:{ is_action-line }|.
 
     READ TABLE mt_ai_breakpoints TRANSPORTING NO FIELDS
-      WITH KEY include = lv_include line = is_action-line.
+      WITH KEY table_line = lv_key.
     rv_known = xsdbool( sy-subrc = 0 ).
 
   ENDMETHOD.
@@ -388,6 +383,7 @@ METHOD is_known_ai_breakpoint.
 METHOD forget_ai_breakpoint.
 
     DATA lv_include TYPE string.
+    DATA lv_key TYPE string.
 
     CHECK is_action-tool = 'set_breakpoint'.
     CHECK is_action-include IS NOT INITIAL.
@@ -396,8 +392,9 @@ METHOD forget_ai_breakpoint.
     lv_include = is_action-include.
     TRANSLATE lv_include TO UPPER CASE.
     CONDENSE lv_include.
+    lv_key = |{ lv_include }:{ is_action-line }|.
 
-    DELETE mt_ai_breakpoints WHERE include = lv_include AND line = is_action-line.
+    DELETE mt_ai_breakpoints WHERE table_line = lv_key.
 
   ENDMETHOD.
 
@@ -405,6 +402,7 @@ METHOD forget_ai_breakpoint.
 METHOD remember_ai_breakpoint.
 
     DATA lv_include TYPE string.
+    DATA lv_key TYPE string.
 
     CHECK is_action-tool = 'set_breakpoint'.
     CHECK is_action-include IS NOT INITIAL.
@@ -413,17 +411,15 @@ METHOD remember_ai_breakpoint.
     lv_include = is_action-include.
     TRANSLATE lv_include TO UPPER CASE.
     CONDENSE lv_include.
+    lv_key = |{ lv_include }:{ is_action-line }|.
 
     READ TABLE mt_ai_breakpoints TRANSPORTING NO FIELDS
-      WITH KEY include = lv_include line = is_action-line.
+      WITH KEY table_line = lv_key.
     IF sy-subrc = 0.
       RETURN.
     ENDIF.
 
-    APPEND VALUE #(
-      include = lv_include
-      line    = is_action-line
-      reason  = is_action-reason ) TO mt_ai_breakpoints.
+    APPEND lv_key TO mt_ai_breakpoints.
 
   ENDMETHOD.
 
