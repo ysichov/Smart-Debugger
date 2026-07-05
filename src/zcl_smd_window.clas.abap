@@ -544,6 +544,8 @@ CLASS zcl_smd_window IMPLEMENTATION.
       cl_gui_cfw=>flush( ).
 
       IF lv_step_tool = 'step_debugger' AND lv_step_command IS NOT INITIAL.
+        CLEAR m_direction.
+        mo_debugger->m_hist_step = mo_debugger->m_step.
         hnd_toolbar( fcode = CONV ui_func( lv_step_command ) ).
       ENDIF.
       RETURN.

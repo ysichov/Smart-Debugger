@@ -292,6 +292,11 @@ METHOD execute_action.
 
       WHEN OTHERS.
         rv_text = execute_plugin_tool( is_action ).
+        IF is_action-tool = 'set_breakpoint'
+        AND mo_debugger IS BOUND
+        AND mo_debugger->mo_window IS BOUND.
+          mo_debugger->mo_window->set_program_line( mo_debugger->mo_window->m_prg-line ).
+        ENDIF.
     ENDCASE.
 
     mv_last_tool_result = rv_text.
