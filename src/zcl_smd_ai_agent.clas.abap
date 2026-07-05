@@ -279,6 +279,10 @@ METHOD execute_plugin_tool.
 
     TRY.
         DATA(lo_tool) = zcl_ai_tool_factory=>get_tool( is_action-tool ).
+        IF lo_tool IS NOT BOUND AND is_action-tool = 'set_breakpoint'.
+          CREATE OBJECT lo_tool TYPE zcl_smd_aitool_breakpoint.
+        ENDIF.
+
         IF lo_tool IS NOT BOUND.
           rv_text = |Unknown AI action: { is_action-tool }|.
           RETURN.
@@ -388,6 +392,19 @@ METHOD get_plugin_tools_json.
         rv_json = `[]`.
     ENDTRY.
 
+    IF strlen( rv_json ) <= 2.
+      TRY.
+          DATA lo_tool TYPE REF TO zif_ai_tool.
+          CREATE OBJECT lo_tool TYPE zcl_smd_aitool_breakpoint.
+          DATA(lv_schema) = lo_tool->get_schema( ).
+          IF lv_schema IS NOT INITIAL.
+            rv_json = `[` && lv_schema && `]`.
+          ENDIF.
+        CATCH cx_root.
+          rv_json = `[]`.
+      ENDTRY.
+    ENDIF.
+
   ENDMETHOD.
 
 
@@ -399,6 +416,7 @@ METHOD get_system_prompt.
       'Find likely bugs, suspicious state transitions, wrong variable values, and useful next debug actions. ' &&
       'When you need debugger control, call exactly one tool. ' &&
       'Use read_variable when the exact runtime value of any ABAP variable, field, component, reference, or table expression is needed. ' &&
+      'Use set_breakpoint with real TPDA include and 1-based source line numbers when stopping at a specific source line is useful; it still requires user confirmation before execution. ' &&
       'Never call F8/continue unless you explain why it is safe; prefer F5/F6/F7 for investigation. ' &&
       'Before continuing, assume a guard breakpoint exists at the end of the current include. ' &&
       'Do not reveal hidden chain-of-thought; write a concise analysis summary instead. ' &&
