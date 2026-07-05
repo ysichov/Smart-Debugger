@@ -54,7 +54,6 @@ REPORT  z_smart_debugger_script.
 *  & https://github.com/larshp/ABAP-Object-Visualizer - Abap Object Visualizer
 *  & https://github.com/ysichov/SDE_abapgit - Simple Data Explorer
 
-CLASS lcl_data_receiver DEFINITION DEFERRED.
 CLASS lcl_data_transmitter DEFINITION DEFERRED.
 CLASS zcl_smd_rtti_tree DEFINITION DEFERRED.
 CLASS lcl_ace_window DEFINITION DEFERRED.
@@ -83,8 +82,6 @@ CLASS lcl_appl DEFINITION.
         domain      TYPE text60,
         datatype    TYPE string,
         length      TYPE i,
-        transmitter TYPE REF TO lcl_data_transmitter,
-        receiver    TYPE REF TO lcl_data_receiver,
         color       TYPE lvc_t_scol,
         style       TYPE lvc_t_styl,
       END OF selection_display,
@@ -234,23 +231,6 @@ CLASS lcl_appl DEFINITION.
 
 ENDCLASS.
 
-
-CLASS lcl_dd_data DEFINITION."drag&drop data
-
-  PUBLIC  SECTION.
-    DATA: m_row    TYPE i,
-          m_column TYPE lvc_s_col.
-
-ENDCLASS.
-
-CLASS lcl_dragdrop DEFINITION.
-
-  PUBLIC SECTION.
-    CLASS-METHODS:
-      drag FOR EVENT ondrag OF cl_gui_alv_grid IMPORTING e_dragdropobj e_row e_column ,
-      drop FOR EVENT ondrop OF cl_gui_alv_grid IMPORTING e_dragdropobj e_row.
-
-ENDCLASS.
 
 CLASS lcl_debugger_script DEFINITION DEFERRED.
 
@@ -3563,31 +3543,6 @@ CLASS lcl_data_transmitter IMPLEMENTATION.
 
 ENDCLASS.
 
-CLASS lcl_data_receiver DEFINITION.
-
-  PUBLIC SECTION.
-    DATA: mo_transmitter TYPE REF TO lcl_data_transmitter,
-          o_tab_from     TYPE REF TO lcl_table_viewer,
-          o_sel_to       TYPE REF TO lcl_sel_opt,
-          m_from_field   TYPE lvc_fname,
-          m_to_field     TYPE lvc_fname.
-    METHODS: constructor
-      IMPORTING io_transmitter TYPE REF TO lcl_data_transmitter OPTIONAL
-                io_tab_from    TYPE REF TO lcl_table_viewer OPTIONAL
-                io_sel_to      TYPE REF TO lcl_sel_opt OPTIONAL
-                i_from_field   TYPE lvc_fname OPTIONAL
-                i_to_field     TYPE lvc_fname OPTIONAL,
-      shut_down,
-      update FOR EVENT data_changed OF lcl_data_transmitter IMPORTING e_row,
-      update_col FOR EVENT col_changed OF lcl_data_transmitter IMPORTING e_column,
-      on_grid_button_click
-        FOR EVENT button_click OF cl_gui_alv_grid
-        IMPORTING
-          es_col_id
-          es_row_no.
-
-ENDCLASS.
-
 CLASS lcl_sel_opt DEFINITION.
 
   PUBLIC SECTION.
@@ -3674,113 +3629,6 @@ CLASS lcl_table_viewer DEFINITION INHERITING FROM zcl_smd_popup.
 
 ENDCLASS.
 
-
-CLASS lcl_data_receiver IMPLEMENTATION.
-
-  METHOD constructor.
-
-    o_sel_to = io_sel_to.
-    m_from_field =  i_from_field.
-    m_to_field =  i_to_field.
-    o_tab_from = io_tab_from.
-    mo_transmitter = io_transmitter.
-
-    IF mo_transmitter IS NOT INITIAL.
-      IF o_tab_from IS INITIAL.
-        SET HANDLER me->update FOR io_transmitter.
-      ELSE.
-        SET HANDLER me->update_col FOR io_transmitter.
-      ENDIF.
-    ELSE.
-      SET HANDLER me->update FOR ALL INSTANCES.
-    ENDIF.
-
-  ENDMETHOD.
-
-  METHOD shut_down.
-
-    IF mo_transmitter IS NOT INITIAL.
-      SET HANDLER me->update FOR mo_transmitter  ACTIVATION space.
-    ELSE.
-      SET HANDLER me->update FOR ALL INSTANCES  ACTIVATION space.
-    ENDIF.
-    CLEAR o_sel_to.
-
-  ENDMETHOD.
-
-  METHOD on_grid_button_click.
-
-    FIELD-SYMBOLS: <table> TYPE STANDARD TABLE.
-
-    CHECK m_from_field = es_col_id-fieldname.
-    ASSIGN o_tab_from->mr_table->* TO <table>.
-    READ TABLE <table> INDEX es_row_no-row_id ASSIGNING FIELD-SYMBOL(<row>).
-    ASSIGN COMPONENT es_col_id-fieldname OF STRUCTURE <row> TO  FIELD-SYMBOL(<field>).
-    CHECK o_sel_to IS NOT INITIAL.
-    o_sel_to->set_value( i_field = m_to_field i_low = <field> ).
-    o_sel_to->raise_selection_done( ).
-
-  ENDMETHOD.
-
-  METHOD  update.
-
-    DATA: updated.
-
-    READ TABLE o_sel_to->mt_sel_tab ASSIGNING FIELD-SYMBOL(<to>) WITH KEY field_label = m_to_field.
-    IF <to>-range[] = e_row-range[].
-      updated = abap_true."so as not to have an infinite event loop
-    ENDIF.
-    MOVE-CORRESPONDING e_row TO <to>.
-    IF <to>-transmitter IS BOUND AND updated IS INITIAL.
-      <to>-transmitter->emit( EXPORTING e_row = e_row ).
-    ENDIF.
-    o_sel_to->raise_selection_done( ).
-
-  ENDMETHOD.
-
-  METHOD update_col.
-
-    DATA: updated,
-          sel_row   TYPE lcl_appl=>t_sel_row.
-
-    FIELD-SYMBOLS: <tab>   TYPE STANDARD TABLE,
-                   <field> TYPE any.
-
-    CHECK o_sel_to IS NOT INITIAL.
-    READ TABLE o_sel_to->mt_sel_tab ASSIGNING FIELD-SYMBOL(<to>) WITH KEY field_label = m_to_field.
-    DATA(old_range) = <to>-range.
-    CLEAR: <to>-sign, <to>-opti, <to>-low, <to>-high, <to>-range.
-    ASSIGN o_tab_from->mr_table->* TO <tab>.
-
-    LOOP AT <tab> ASSIGNING FIELD-SYMBOL(<row>).
-      ASSIGN COMPONENT e_column OF STRUCTURE <row> TO <field>.
-      IF line_exists( <to>-range[ low = <field> ] ).
-        APPEND VALUE #( sign = 'I' opti = 'EQ' low = <field> ) TO <to>-range.
-      ENDIF.
-    ENDLOOP.
-
-    IF sy-subrc NE 0." empty column
-      APPEND VALUE #( sign = 'I' opti = 'EQ' low = '' ) TO <to>-range.
-    ENDIF.
-
-    LOOP AT <to>-range ASSIGNING FIELD-SYMBOL(<sel>).
-      <to>-low = <sel>-low.
-      o_sel_to->update_sel_row( CHANGING c_sel_row = <to> ).
-      EXIT.
-    ENDLOOP.
-
-    MOVE-CORRESPONDING <to> TO sel_row.
-    IF <to>-range = old_range.
-      updated = abap_true."so as not to have an infinite event loop
-    ENDIF.
-    IF <to>-transmitter IS BOUND AND updated IS INITIAL.
-      <to>-transmitter->emit( EXPORTING e_row = sel_row ).
-      o_sel_to->raise_selection_done( ).
-    ENDIF.
-
-  ENDMETHOD.
-
-ENDCLASS.
 
 
 CLASS lcl_table_viewer IMPLEMENTATION.
@@ -3990,7 +3838,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
                   handle_user_command
                   handle_tab_toolbar
                   handle_doubleclick
-                  lcl_dragdrop=>drag
                   FOR mo_alv.
 
     CALL METHOD mo_alv->set_table_for_first_display
@@ -4231,14 +4078,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       FREE <obj>-alv_viewer->mr_table.
       FREE <obj>-alv_viewer->mo_alv.
 
-      "shutdown receivers.
-      IF <obj>-alv_viewer->mo_sel IS NOT INITIAL.
-        LOOP AT <obj>-alv_viewer->mo_sel->mt_sel_tab INTO DATA(sel).
-          IF sel-receiver IS BOUND.
-            sel-receiver->shut_down( ).
-          ENDIF.
-        ENDLOOP.
-      ENDIF.
       FREE <obj>-alv_viewer.
       IF tabix NE 0.
         DELETE lcl_appl=>mt_obj INDEX tabix.
@@ -4358,10 +4197,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     set_header( ).
 
     LOOP AT mo_sel->mt_sel_tab  ASSIGNING FIELD-SYMBOL(<sel>).
-      IF <sel>-transmitter IS NOT INITIAL.
-        MOVE-CORRESPONDING <sel> TO row.
-        <sel>-transmitter->emit( e_row = row ).
-      ENDIF.
       LOOP AT <sel>-range INTO DATA(range).
         APPEND VALUE #( fieldname = <sel>-field_label
                               low = range-low
@@ -4422,8 +4257,6 @@ CLASS lcl_sel_opt IMPLEMENTATION.
 
     SET HANDLER handle_user_command
                 handle_sel_toolbar
-                lcl_dragdrop=>drag
-                lcl_dragdrop=>drop
                 on_data_changed
                 on_data_changed_finished
                 on_grid_button_click
@@ -4476,10 +4309,6 @@ CLASS lcl_sel_opt IMPLEMENTATION.
     zcl_smd_common=>refresh( mo_sel_alv ).
     RAISE EVENT selection_done.
     LOOP AT mt_sel_tab  ASSIGNING FIELD-SYMBOL(<sel>).
-      IF <sel>-transmitter IS NOT INITIAL.
-        MOVE-CORRESPONDING <sel> TO row.
-        <sel>-transmitter->emit( e_row = row ).
-      ENDIF.
     ENDLOOP.
 
   ENDMETHOD.
@@ -4545,11 +4374,6 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       CLEAR:  <to>-opti, <to>-sign.
       <to>-high = i_high.
       update_sel_row( CHANGING c_sel_row = <to> ).
-    ENDIF.
-    IF <to>-transmitter IS BOUND.
-      DATA: row TYPE lcl_appl=>t_sel_row.
-      MOVE-CORRESPONDING <to> TO row.
-      <to>-transmitter->emit( EXPORTING e_row = row ).
     ENDIF.
 
   ENDMETHOD.
@@ -4652,10 +4476,6 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       ENDIF.
     ENDIF.
     c_sel_row-more_icon = COND #( WHEN c_sel_row-range IS INITIAL THEN icon_enter_more    ELSE icon_display_more  ).
-
-    IF c_sel_row-receiver IS BOUND AND c_sel_row-inherited IS INITIAL.
-      c_sel_row-inherited = icon_businav_value_chain.
-    ENDIF.
 
   ENDMETHOD.
 
@@ -4938,13 +4758,6 @@ CLASS lcl_sel_opt IMPLEMENTATION.
           text  = 'Clear Select-Options'.
     ENDIF.
 
-    IF sel-receiver IS NOT INITIAL OR index IS INITIAL.
-      CALL METHOD e_object->add_function
-        EXPORTING
-          fcode = 'DELR'
-          text  = 'Delete receiver'.
-    ENDIF.
-
   ENDMETHOD.
 
   METHOD handle_user_command.
@@ -4982,12 +4795,6 @@ CLASS lcl_sel_opt IMPLEMENTATION.
         IF e_ucomm = 'SEL_CLEAR'.
           CLEAR : <sel>-low, <sel>-high, <sel>-sign, <sel>-opti, <sel>-range.
         ELSEIF e_ucomm = 'DELR'.
-          IF <sel>-receiver IS NOT INITIAL.
-            <sel>-receiver->shut_down( ).
-            FREE <sel>-receiver.
-            CLEAR <sel>-receiver.
-            CLEAR <sel>-inherited.
-          ENDIF.
         ENDIF.
         update_sel_row( CHANGING c_sel_row = <sel> ).
       ENDLOOP.
@@ -6000,152 +5807,6 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
 
 ENDCLASS.
 
-CLASS lcl_dragdrop IMPLEMENTATION.
-
-  METHOD drag.
-
-    DATA(dataobj) = NEW lcl_dd_data( ).
-    dataobj->m_row = e_row-index.
-    dataobj->m_column = e_column.
-    e_dragdropobj->object = dataobj.
-
-  ENDMETHOD.
-
-  METHOD drop."It should be refactored someday...
-
-    DATA: row          TYPE lcl_appl=>t_sel_row,
-          set_receiver.
-
-    LOOP AT lcl_appl=>mt_obj INTO DATA(lo).
-      "to
-      IF lo-alv_viewer->mo_sel IS BOUND.
-        IF e_dragdropobj->droptargetctrl = lo-alv_viewer->mo_sel->mo_sel_alv.
-          DATA(o_to) = lo-alv_viewer->mo_sel.
-        ENDIF.
-      ENDIF.
-
-      "from tab
-      IF lo-alv_viewer->mo_alv = e_dragdropobj->dragsourcectrl.
-        DATA(o_from_tab) = lo-alv_viewer.
-        CONTINUE.
-      ENDIF.
-
-      IF e_dragdropobj->dragsourcectrl = lo-alv_viewer->mo_sel->mo_sel_alv.
-        DATA(o_from_sel) = lo-alv_viewer->mo_sel.
-        lo-alv_viewer->mo_sel->mo_sel_alv->get_selected_rows( IMPORTING et_index_rows = DATA(sel_rows) ).
-        lo-alv_viewer->mo_sel->mo_sel_alv->get_selected_cells( IMPORTING et_cell = DATA(sel_cells) ).
-      ENDIF.
-    ENDLOOP.
-
-    IF o_from_tab IS BOUND." tab to select
-      FIELD-SYMBOLS: <table> TYPE STANDARD TABLE,
-                     <field> TYPE any.
-      o_from_tab->mo_alv->get_selected_cells( IMPORTING et_cell = sel_cells ).
-      o_from_tab->mo_alv->get_selected_columns( IMPORTING et_index_columns = DATA(sel_col) ).
-
-      LOOP AT sel_col INTO DATA(col).
-        TRY.
-            o_from_tab->mt_alv_catalog[ fieldname = col-fieldname ]-style = cl_gui_alv_grid=>mc_style_button.
-          CATCH cx_sy_itab_line_not_found.
-        ENDTRY.
-        READ TABLE o_from_tab->mo_column_emitters WITH KEY column = col ASSIGNING FIELD-SYMBOL(<emitter>).
-        IF sy-subrc NE 0.
-          APPEND INITIAL LINE TO o_from_tab->mo_column_emitters ASSIGNING <emitter>.
-          <emitter>-column = col.
-          <emitter>-emitter = NEW #( ).
-        ENDIF.
-      ENDLOOP.
-
-      IF sy-subrc = 0.
-        set_receiver = abap_true.
-        CALL METHOD o_from_tab->mo_alv->set_frontend_fieldcatalog EXPORTING it_fieldcatalog = o_from_tab->mt_alv_catalog.
-      ENDIF.
-
-      TRY.
-          ASSIGN o_from_tab->mr_table->* TO <table>.
-          READ TABLE o_to->mt_sel_tab ASSIGNING FIELD-SYMBOL(<to_tab>) INDEX e_row.
-          LOOP AT sel_cells INTO DATA(cell).
-            IF sy-tabix = 1.
-              DATA(colname) = cell-col_id-fieldname.
-            ENDIF.
-            READ TABLE <table> INDEX cell-row_id ASSIGNING FIELD-SYMBOL(<str>).
-            ASSIGN COMPONENT colname OF STRUCTURE <str> TO <field>.
-            IF sy-subrc = 0.
-              IF set_receiver IS NOT INITIAL.
-                IF <to_tab>-receiver IS BOUND.
-                  <to_tab>-receiver->shut_down( ).
-                ENDIF.
-                CREATE OBJECT <to_tab>-receiver
-                  EXPORTING
-                    io_transmitter = <emitter>-emitter
-                    i_from_field   = CONV #( sel_cells[ 1 ]-col_id )
-                    i_to_field     = <to_tab>-field_label
-                    io_sel_to      = o_to
-                    io_tab_from    = o_from_tab.
-                SET HANDLER <to_tab>-receiver->on_grid_button_click FOR o_from_tab->mo_alv.
-              ENDIF.
-
-              IF <to_tab>-range IS INITIAL.
-                <to_tab>-low = <field>.
-              ENDIF.
-              IF NOT line_exists( <to_tab>-range[ low = <field> ] ).
-                APPEND VALUE #( sign = 'I' opti = 'EQ' low = <field>  ) TO <to_tab>-range.
-              ENDIF.
-            ENDIF.
-          ENDLOOP.
-          o_to->update_sel_row( CHANGING c_sel_row = <to_tab> ).
-        CATCH cx_sy_itab_line_not_found.                "#EC NO_HANDLER
-      ENDTRY.
-    ENDIF.
-
-    "select to select
-    IF o_from_sel NE o_to.
-      IF sel_rows[] IS INITIAL.
-        DELETE sel_cells WHERE col_id NE 'FIELD_LABEL'.
-        LOOP AT sel_cells INTO DATA(sel).
-          APPEND INITIAL LINE TO sel_rows ASSIGNING FIELD-SYMBOL(<row>).
-          <row>-index = sel-row_id-index.
-        ENDLOOP.
-      ENDIF.
-
-      LOOP AT sel_rows ASSIGNING <row>.
-        READ TABLE o_from_sel->mt_sel_tab ASSIGNING FIELD-SYMBOL(<from_tab>) INDEX <row>-index.
-        IF lines( sel_rows ) = 1.
-          READ TABLE o_to->mt_sel_tab ASSIGNING <to_tab> INDEX e_row.
-        ELSE.
-          READ TABLE o_to->mt_sel_tab ASSIGNING <to_tab> WITH KEY field_label = <from_tab>-field_label.
-          IF sy-subrc NE 0.
-            CONTINUE.
-          ENDIF.
-        ENDIF.
-        MOVE-CORRESPONDING <from_tab> TO row.
-        MOVE-CORRESPONDING row TO <to_tab>.
-        <from_tab>-emitter = icon_workflow_external_event.
-        <to_tab>-inherited = icon_businav_value_chain.
-        IF <from_tab>-transmitter IS INITIAL.
-          CREATE OBJECT <from_tab>-transmitter.
-        ENDIF.
-        IF <to_tab>-receiver IS NOT INITIAL.
-          <to_tab>-receiver->shut_down( ). "receiver clearing
-          FREE <to_tab>-receiver.
-        ENDIF.
-        CREATE OBJECT <to_tab>-receiver
-          EXPORTING
-            io_transmitter = <from_tab>-transmitter
-            io_sel_to      = o_to
-            i_to_field     = <to_tab>-field_label.
-      ENDLOOP.
-    ENDIF.
-
-    DATA(o_alv) = CAST cl_gui_alv_grid( e_dragdropobj->dragsourcectrl ).
-    zcl_smd_common=>refresh( EXPORTING i_obj = o_alv ).
-
-    o_alv ?= e_dragdropobj->droptargetctrl.
-    o_to->raise_selection_done( ).
-
-  ENDMETHOD.
-
-ENDCLASS.
 
 CLASS lcl_source_parser IMPLEMENTATION.
 
