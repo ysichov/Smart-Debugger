@@ -141,6 +141,30 @@ METHOD build_prompt.
         lv_line = lv_line && |include={ mo_debugger->mo_window->m_prg-include } |.
         lv_line = lv_line && |line={ mo_debugger->mo_window->m_prg-line }|.
         append_line( EXPORTING i_line = lv_line CHANGING ct_lines = lt_lines ).
+
+        append_line( EXPORTING i_line = `` CHANGING ct_lines = lt_lines ).
+        append_line( EXPORTING i_line = `Source code with real line numbers:` CHANGING ct_lines = lt_lines ).
+
+        LOOP AT mo_debugger->mo_window->mt_source INTO DATA(ls_source_for_prompt).
+          append_line(
+            EXPORTING
+              i_line = |--- include={ ls_source_for_prompt-include } ---|
+            CHANGING
+              ct_lines = lt_lines ).
+
+          IF ls_source_for_prompt-source IS INITIAL.
+            append_line( EXPORTING i_line = `source unavailable` CHANGING ct_lines = lt_lines ).
+            CONTINUE.
+          ENDIF.
+
+          LOOP AT ls_source_for_prompt-source->lines INTO DATA(lv_source_line).
+            append_line(
+              EXPORTING
+                i_line = |{ sy-tabix }: { lv_source_line }|
+              CHANGING
+                ct_lines = lt_lines ).
+          ENDLOOP.
+        ENDLOOP.
       ENDIF.
 
       append_line( EXPORTING i_line = `` CHANGING ct_lines = lt_lines ).
