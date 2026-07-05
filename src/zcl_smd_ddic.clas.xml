@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<abapGit version="v1.0.0" serializer="LCL_OBJECT_CLAS" serializer_version="v1.0.0">
+ <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+  <asx:values>
+   <DESCRIPTIONS>
+    <SEOCOMPOTX>
+     <CMPNAME>GET_TEXT_TABLE</CMPNAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>GET_TEXT_TABLE</DESCRIPT>
+    </SEOCOMPOTX>
+   </DESCRIPTIONS>
+   <DESCRIPTIONS_SUB>
+    <SEOSUBCOTX>
+     <CMPNAME>GET_TEXT_TABLE</CMPNAME>
+     <SCONAME>E_TAB</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>E_TAB</DESCRIPT>
+    </SEOSUBCOTX>
+    <SEOSUBCOTX>
+     <CMPNAME>GET_TEXT_TABLE</CMPNAME>
+     <SCONAME>I_TNAME</SCONAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>I_TNAME</DESCRIPT>
+    </SEOSUBCOTX>
+   </DESCRIPTIONS_SUB>
+  </asx:values>
+ </asx:abap>
+</abapGit>
