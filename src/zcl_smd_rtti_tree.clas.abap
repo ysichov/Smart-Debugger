@@ -299,7 +299,6 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD traverse_struct.
-
     DATA: component      TYPE abap_component_tab,
           o_struct_descr TYPE REF TO cl_abap_structdescr,
           tree           TYPE ts_table,
@@ -393,14 +392,33 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
         ENDIF.
       ENDIF.
 
-      e_root_key = m_tree->get_nodes( )->add_node(
-             related_node   = key
-             relationship   = rel
-             data_row       = tree
-             collapsed_icon = icon
-             expanded_icon  = icon
-             text           = text
-             folder         = abap_false )->get_key( ).
+      TRY.
+          e_root_key = m_tree->get_nodes( )->add_node(
+                 related_node   = key
+                 relationship   = rel
+                 data_row       = tree
+                 collapsed_icon = icon
+                 expanded_icon  = icon
+                 text           = text
+                 folder         = abap_false )->get_key( ).
+        CATCH cx_root.
+          "stale sibling key (tree rebuilt too fast between steps) - retry as a fresh
+          "node directly under the parent instead of dumping the whole debug session
+          rel = i_rel.
+          TRY.
+              e_root_key = m_tree->get_nodes( )->add_node(
+                     related_node   = i_parent_key
+                     relationship   = rel
+                     data_row       = tree
+                     collapsed_icon = icon
+                     expanded_icon  = icon
+                     text           = text
+                     folder         = abap_false )->get_key( ).
+            CATCH cx_root.
+              "give up on this single node rather than crash the session
+              RETURN.
+          ENDTRY.
+      ENDTRY.
 
       APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
       <vars>-key = e_root_key.
@@ -425,7 +443,6 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
         o_node->delete( ).
       ENDIF.
     ENDIF.
-
   ENDMETHOD.
 
   METHOD traverse_elem.
@@ -588,7 +605,6 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD traverse_obj.
-
     DATA: tree TYPE ts_table,
           text TYPE lvc_value,
           icon TYPE salv_de_tree_image,
@@ -641,14 +657,32 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
       rel = i_rel.
     ENDIF.
 
-    e_root_key = m_tree->get_nodes( )->add_node(
-     related_node   = key
-     relationship   = rel
-     data_row       = tree
-     collapsed_icon = icon
-     expanded_icon  = icon
-     text           = text
-     folder         = abap_false )->get_key( ).
+    TRY.
+        e_root_key = m_tree->get_nodes( )->add_node(
+         related_node   = key
+         relationship   = rel
+         data_row       = tree
+         collapsed_icon = icon
+         expanded_icon  = icon
+         text           = text
+         folder         = abap_false )->get_key( ).
+      CATCH cx_root.
+        "stale sibling/parent key (tree rebuilt too fast between steps) - retry
+        "as a fresh node directly under the parent instead of dumping the session
+        TRY.
+            e_root_key = m_tree->get_nodes( )->add_node(
+             related_node   = i_parent_key
+             relationship   = i_rel
+             data_row       = tree
+             collapsed_icon = icon
+             expanded_icon  = icon
+             text           = text
+             folder         = abap_false )->get_key( ).
+          CATCH cx_root.
+            "give up on this single node rather than crash the session
+            RETURN.
+        ENDTRY.
+    ENDTRY.
 
     APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
     <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
@@ -666,11 +700,9 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
     IF o_node IS NOT INITIAL.
       o_node->delete( ).
     ENDIF.
-
   ENDMETHOD.
 
   METHOD traverse_table.
-
     DATA: o_table_descr TYPE REF TO cl_abap_tabledescr,
           tree          TYPE ts_table,
           text          TYPE lvc_value,
@@ -771,16 +803,37 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
     IF sy-subrc NE 0.
 
       tree-fullname = is_var-name.
-      e_root_key =
-        m_tree->get_nodes( )->add_node(
-          related_node   = key
-          relationship   = i_rel
-          collapsed_icon = icon
-          expanded_icon  = icon
-          data_row       = tree
-          text           = text
-          folder         = abap_true
-        )->get_key( ).
+
+      TRY.
+          e_root_key =
+            m_tree->get_nodes( )->add_node(
+              related_node   = key
+              relationship   = i_rel
+              collapsed_icon = icon
+              expanded_icon  = icon
+              data_row       = tree
+              text           = text
+              folder         = abap_true
+            )->get_key( ).
+        CATCH cx_root.
+          "stale sibling/parent key (tree rebuilt too fast between steps) - retry
+          "as a fresh node directly under the parent instead of dumping the session
+          TRY.
+              e_root_key =
+                m_tree->get_nodes( )->add_node(
+                  related_node   = i_parent_key
+                  relationship   = i_rel
+                  collapsed_icon = icon
+                  expanded_icon  = icon
+                  data_row       = tree
+                  text           = text
+                  folder         = abap_true
+                )->get_key( ).
+            CATCH cx_root.
+              "give up on this single node rather than crash the session
+              RETURN.
+          ENDTRY.
+      ENDTRY.
 
       APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
       <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
@@ -802,21 +855,24 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
         ENDIF.
       ENDIF.
     ENDIF.
-
   ENDMETHOD.
 
   METHOD add_node.
-
-    main_node_key =
-          m_tree->get_nodes( )->add_node(
-            related_node   = ''
-            collapsed_icon = i_icon
-            expanded_icon = i_icon
-            relationship   = if_salv_c_node_relation=>last_child
-            row_style = if_salv_c_tree_style=>intensified
-            text           = CONV #( i_name )
-            folder         = abap_true
-          )->get_key( ).
+    TRY.
+        main_node_key =
+              m_tree->get_nodes( )->add_node(
+                related_node   = ''
+                collapsed_icon = i_icon
+                expanded_icon = i_icon
+                relationship   = if_salv_c_node_relation=>last_child
+                row_style = if_salv_c_tree_style=>intensified
+                text           = CONV #( i_name )
+                folder         = abap_true
+              )->get_key( ).
+      CATCH cx_root.
+        "avoid dumping the whole debug session if the tree is mid-rebuild
+        RETURN.
+    ENDTRY.
 
     CASE i_name.
       WHEN 'Locals'.
@@ -832,11 +888,9 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
       WHEN 'System variables'.
         m_syst_key = main_node_key.
     ENDCASE.
-
   ENDMETHOD.
 
   METHOD add_obj_nodes.
-
     DATA match TYPE match_result_tab.
     FIND ALL OCCURRENCES OF  '-' IN is_var-name RESULTS match. "Only first level of instance should be here
     IF lines( match ) > 1.
@@ -863,22 +917,28 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
     IF sy-subrc NE 0.
 
       READ TABLE mt_vars WITH KEY path = is_var-parent INTO DATA(var).
-      node_key =
-        m_tree->get_nodes( )->add_node(
-          related_node   = var-key
-          relationship   = if_salv_c_node_relation=>last_child
-          collapsed_icon = icon
-          expanded_icon  = icon
-          text           = text
-          folder         = abap_true
-        )->get_key( ).
+
+      TRY.
+          node_key =
+            m_tree->get_nodes( )->add_node(
+              related_node   = var-key
+              relationship   = if_salv_c_node_relation=>last_child
+              collapsed_icon = icon
+              expanded_icon  = icon
+              text           = text
+              folder         = abap_true
+            )->get_key( ).
+        CATCH cx_root.
+          "stale parent key (tree rebuilt too fast) - skip this leaf node
+          "rather than dumping the whole debug session
+          RETURN.
+      ENDTRY.
 
       APPEND INITIAL LINE TO mt_classes_leaf ASSIGNING <class>.
       <class>-name = is_var-parent.
       <class>-key = node_key.
       <class>-type = is_var-cl_leaf.
     ENDIF.
-
   ENDMETHOD.
 
   METHOD delete_node.

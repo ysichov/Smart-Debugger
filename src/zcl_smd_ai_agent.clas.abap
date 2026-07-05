@@ -16,7 +16,7 @@ CLASS zcl_smd_ai_agent DEFINITION
       IMPORTING
         !i_task        TYPE string
       EXPORTING
-        !es_action     TYPE zif_smd_ai_agent_types=>ty_action
+        !et_actions    TYPE zif_smd_ai_agent_types=>tt_action
         !ev_text       TYPE string.
 
     METHODS execute_action
@@ -30,6 +30,9 @@ CLASS zcl_smd_ai_agent DEFINITION
         !io_debugger  TYPE REF TO zcl_smd_debugger_base
       RETURNING
         VALUE(ro_agent) TYPE REF TO zcl_smd_ai_agent.
+    METHODS reset_last_tool_result.
+    METHODS get_last_tool_result
+      RETURNING VALUE(rv_text) TYPE string.
   PROTECTED SECTION.
   PRIVATE SECTION.
 
@@ -115,6 +118,10 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
         !is_action        TYPE zif_smd_ai_agent_types=>ty_action
       RETURNING
         VALUE(rv_known)   TYPE abap_bool.
+METHODS validate_evidence
+      IMPORTING is_action TYPE zif_smd_ai_agent_types=>ty_action
+      EXPORTING ev_detail TYPE string
+      RETURNING VALUE(rv_valid) TYPE abap_bool.
 ENDCLASS.
 
 
@@ -313,7 +320,7 @@ METHOD ensure_guard_breakpoint.
   ENDMETHOD.
 
 
-METHOD execute_action.
+  METHOD execute_action.
 
     CASE is_action-tool.
       WHEN 'read_variable'.
@@ -321,6 +328,35 @@ METHOD execute_action.
 
       WHEN 'step_debugger'.
         rv_text = |Confirmed debugger step { is_action-command }. Intent: { is_action-reason }|.
+
+      WHEN 'report_findings'.
+        IF is_action-status = 'confirmed'.
+          DATA lv_detail TYPE string.
+          DATA(lv_valid) = validate_evidence(
+            EXPORTING is_action = is_action
+            IMPORTING ev_detail = lv_detail ).
+
+          IF lv_valid = abap_true.
+            rv_text =
+              |FINDINGS CONFIRMED - { lv_detail }. Diagnosis: { is_action-diagnosis }| &&
+              COND #( WHEN is_action-fix_suggestion IS NOT INITIAL
+                      THEN | Fix: { is_action-fix_suggestion }|
+                      ELSE `` ).
+          ELSE.
+            rv_text =
+              |FINDINGS REJECTED - { lv_detail } | &&
+              |This diagnosis stays a hypothesis; it is NOT confirmed. | &&
+              |Propose the next debugger action (set_breakpoint / step_debugger / | &&
+              |read_variable) that would produce verifiable evidence for | &&
+              |evidence_variable={ is_action-evidence_variable }, then call | &&
+              |report_findings again once that evidence is visible in Variable | &&
+              |history or Current variables/state.|.
+          ENDIF.
+        ELSE.
+          rv_text =
+            |Hypothesis recorded: { is_action-diagnosis }. Not yet confirmed - | &&
+            |continue investigating and propose the next debugger action.|.
+        ENDIF.
 
       WHEN OTHERS.
         rv_text = execute_plugin_tool( is_action ).
@@ -337,7 +373,12 @@ METHOD execute_action.
         ENDIF.
     ENDCASE.
 
-    mv_last_tool_result = rv_text.
+    IF mv_last_tool_result IS INITIAL.
+      mv_last_tool_result = rv_text.
+    ELSE.
+      mv_last_tool_result = mv_last_tool_result && cl_abap_char_utilities=>newline && rv_text.
+    ENDIF.
+
     APPEND |{ sy-datum } { sy-uzeit } tool={ is_action-tool } command={ is_action-command } variable={ is_action-variable } target={ is_action-include }:{ is_action-line } reason={ is_action-reason } result={ rv_text }|
       TO mt_action_log.
 
@@ -491,31 +532,118 @@ METHOD get_plugin_tools_json.
   ENDMETHOD.
 
 
-METHOD get_system_prompt.
-
+  METHOD get_system_prompt.
     rv_prompt =
       'You are the Smart Debugger AI agent for ABAP. ' &&
       'Use only the debugger snapshot provided by the user prompt. ' &&
-      'Find likely bugs, suspicious state transitions, wrong variable values, and useful next debug actions. ' &&
-      'When you need debugger control, call exactly one tool. ' &&
-      'If source code is available, you may give a diagnosis from code reading, but mark it as a hypothesis until runtime state confirms it. ' &&
-      'For a suspected logic bug, first set a breakpoint on the most suspicious executable line, preferably the condition or assignment that can prove the bug, not merely the loop header. ' &&
-      'After the breakpoint is confirmed and reached, use step_debugger and read_variable to verify the relevant variables before stating Findings as confirmed. ' &&
-      'If the bug is not yet runtime-confirmed, clearly say which diagnosis you suspect and immediately propose the next debugger action needed to confirm it. ' &&
-      'Use read_variable when the exact runtime value of any ABAP variable, field, component, reference, or table expression is needed. ' &&
-      'Use set_breakpoint with real TPDA include and 1-based source line numbers when stopping at a specific source line is useful; it still requires user confirmation before execution. ' &&
-      'Do not set a breakpoint again if it is already listed under Known AI-set breakpoints; continue to it or verify state there instead. ' &&
-      'After a relevant breakpoint has been set and the next goal is to reach it, propose step_debugger F8/continue; do not use F5 to walk toward a known breakpoint. ' &&
-      'Use F5/F6/F7 only after reaching the suspicious area, when a single-step observation is needed. ' &&
-      'Never call F8/continue unless you explain why it is safe and what breakpoint or guard stop will catch execution. ' &&
-      'Before continuing, assume a guard breakpoint exists at the end of the current include. ' &&
-      'Do not reveal hidden chain-of-thought; write a concise analysis summary instead. ' &&
-      'Answer in English. Structure the answer as: Intent, Analysis, Findings, Proposed action.'.
-
+      'Find likely bugs, suspicious state transitions, wrong variable values, ' &&
+      'and useful next debug actions. ' &&
+      'In a single turn you may call several tools together when they form ' &&
+      'one logical chain, for example set_breakpoint together with ' &&
+      'step_debugger F8 to run to it, or a single step_debugger together ' &&
+      'with every read_variable call needed to inspect the resulting state. ' &&
+      'The chain you propose in one turn is confirmed once by the user and ' &&
+      'then executed automatically in this fixed order: all set_breakpoint ' &&
+      'calls first, then at most one step_debugger call, then all ' &&
+      'read_variable calls; you are not asked again between these steps, ' &&
+      'so request every variable you will need at that point together with ' &&
+      'the step, in the same turn. ' &&
+      'Call at most one step_debugger per turn; never propose two step or ' &&
+      'continue commands in the same turn, since you have not observed the ' &&
+      'state in between them. ' &&
+      'CONCLUSIONS GO THROUGH A TOOL, NOT PROSE - this overrides any older ' &&
+      'habit of writing a free-text "Findings: confirmed" sentence. The ' &&
+      'only way to state a conclusion, hypothesis or confirmed, is to call ' &&
+      'the report_findings tool. Do not write your own "Findings" or ' &&
+      '"confirmed by runtime evidence" wording in prose; call the tool ' &&
+      'instead and let its result stand as the record. ' &&
+      'If source code is available, you may form a diagnosis from code ' &&
+      'reading, but call report_findings with status=hypothesis until ' &&
+      'runtime state confirms it - never status=confirmed at that point. ' &&
+      'report_findings with status=confirmed is only valid when ' &&
+      'evidence_variable and evidence_value literally appear together, ' &&
+      'this turn, in the user prompt sections "Current variables/state:", ' &&
+      '"Variable history:", or "Last confirmed tool result:". A value you ' &&
+      'compute yourself by mentally re-executing the ABAP logic, ' &&
+      'hand-tracing a VALUE #( ... ) construction, or reasoning about what ' &&
+      'a loop or calculation "must" produce is source-reading, not runtime ' &&
+      'evidence, even when you are confident it is correct and even when ' &&
+      'it later turns out to be correct - use status=hypothesis for that. ' &&
+      'A status=confirmed call that does not match those sections will be ' &&
+      'rejected automatically and the investigation continues; if that ' &&
+      'happens, propose the next debugger action that would produce the ' &&
+      'missing evidence instead of repeating the same confirmed claim. ' &&
+      'For a suspected logic bug, first set a breakpoint on the most ' &&
+      'suspicious executable line, preferably the condition or assignment ' &&
+      'that can prove the bug, not merely the loop header; combine it in ' &&
+      'the same turn with step_debugger F8 to run to it, unless another ' &&
+      'breakpoint should logically fire first. ' &&
+      'After the breakpoint is confirmed and reached, combine step_debugger ' &&
+      'with the read_variable calls needed to verify the relevant variables ' &&
+      'in the same turn, before calling report_findings with status=confirmed. ' &&
+      'If the bug is not yet runtime-confirmed, call report_findings with ' &&
+      'status=hypothesis stating which diagnosis you suspect, and in the ' &&
+      'same turn propose the next chain of debugger actions needed to ' &&
+      'confirm it. ' &&
+      'STOP CONDITION - this overrides every other instruction about ' &&
+      'proposing actions: once report_findings has been called with ' &&
+      'status=confirmed and accepted (its result says FINDINGS CONFIRMED, ' &&
+      'not FINDINGS REJECTED), the investigation is over. Do not call ' &&
+      'set_breakpoint, step_debugger, read_variable, or report_findings ' &&
+      'again in that turn or any later turn for the same bug. Do not ' &&
+      'invent further steps to double-check an already-confirmed fact, and ' &&
+      'do not keep stepping through more loop iterations or customers ' &&
+      '"just to be sure" once a FINDINGS CONFIRMED result exists. In that ' &&
+      'case, summarize the fix (what code change would correct it) and say ' &&
+      'plainly that no further debugging is needed - propose no new tool ' &&
+      'chain. Only continue proposing debugger actions while a genuine ' &&
+      'open question remains that runtime state has not yet answered, or ' &&
+      'while the last report_findings call was rejected or was a hypothesis. ' &&
+      'Use read_variable when the exact runtime value of any ABAP variable, ' &&
+      'field, component, reference, or table expression is needed; call it ' &&
+      'once per variable, and include every variable you currently need in ' &&
+      'the same turn instead of asking one at a time. ' &&
+      'Use set_breakpoint with real TPDA include and 1-based source line ' &&
+      'numbers when stopping at a specific source line is useful; the ' &&
+      'chain still requires user confirmation before it executes. ' &&
+      'Do not set a breakpoint again if it is already listed under Known ' &&
+      'AI-set breakpoints; continue to it or verify state there instead. ' &&
+      'After a relevant breakpoint has been set and the next goal is to ' &&
+      'reach it - including reaching the SAME breakpoint again on a later ' &&
+      'loop iteration or a later call - propose step_debugger F8/continue; ' &&
+      'do not use F5, F6, or F7 to walk toward a known breakpoint, since ' &&
+      'single-stepping only advances one statement at a time and will not ' &&
+      'reliably land on the next hit of that breakpoint. ' &&
+      'Use F5/F6/F7 only once you are already at or near the suspicious ' &&
+      'area and need a single-step observation, not to travel toward a ' &&
+      'breakpoint that has not fired yet. ' &&
+      'Never call F8/continue unless you explain why it is safe and what ' &&
+      'breakpoint or guard stop will catch execution. ' &&
+      'Before continuing, assume a guard breakpoint exists at the end of ' &&
+      'the current include. ' &&
+      'Do not reveal hidden chain-of-thought; write a concise analysis ' &&
+      'summary instead. ' &&
+      'Answer in English. Structure the answer as: Intent, Analysis, then ' &&
+      'a report_findings tool call carrying your conclusion, plus any ' &&
+      'further debugger tool calls needed this turn.'.
   ENDMETHOD.
 
 
-METHOD get_tools_json.
+  METHOD get_tools_json.
+
+    DATA(lv_findings_desc) =
+      `The ONLY way to conclude the investigation. ` &&
+      `status=hypothesis: you suspect a cause from source reading or ` &&
+      `partial evidence but have not yet observed a matching entry in ` &&
+      `Variable history or Current variables/state; you must still ` &&
+      `propose the next debugger action in this same turn. ` &&
+      `status=confirmed: you can cite an exact evidence_variable and ` &&
+      `evidence_value that literally appear together in the Variable ` &&
+      `history or Current variables/state sections of the current prompt ` &&
+      `(optionally at evidence_step); a value you computed yourself by ` &&
+      `re-executing or hand-tracing the ABAP code does NOT qualify, even ` &&
+      `if correct. A confirmed call that cannot be matched against those ` &&
+      `sections will be rejected and the investigation will continue.`.
 
     DATA(lv_json) =
       `[` &&
@@ -538,6 +666,24 @@ METHOD get_tools_json.
       `"reason": { "type":"string",` &&
       `"description":"Visible intent shown before confirmation" } },` &&
       `"required":["variable","reason"],` &&
+      `"additionalProperties":false } } },` &&
+      `{ "type":"function", "function": {` &&
+      `"name":"report_findings",` &&
+      `"description":"` && lv_findings_desc && `",` &&
+      `"parameters": { "type":"object", "properties": {` &&
+      `"status": { "type":"string", "enum":["hypothesis","confirmed"],` &&
+      `"description":"hypothesis = still investigating; confirmed = runtime-verified, ends the investigation" },` &&
+      `"diagnosis": { "type":"string",` &&
+      `"description":"One or two sentences describing the suspected or confirmed root cause" },` &&
+      `"evidence_variable": { "type":"string",` &&
+      `"description":"Required when status=confirmed. Exact variable name or path as printed in Variable history or Current variables/state" },` &&
+      `"evidence_step": { "type":"string",` &&
+      `"description":"Required when status=confirmed. Step number as shown in Variable history / Recent debugger steps" },` &&
+      `"evidence_value": { "type":"string",` &&
+      `"description":"Required when status=confirmed. Exact value shown for that variable at that step/state" },` &&
+      `"fix_suggestion": { "type":"string",` &&
+      `"description":"Suggested ABAP code change that would correct the confirmed bug" } },` &&
+      `"required":["status","diagnosis"],` &&
       `"additionalProperties":false } } }`.
 
     DATA(lv_plugin_json) = get_plugin_tools_json( ).
@@ -554,7 +700,7 @@ METHOD get_tools_json.
   ENDMETHOD.
 
 
-METHOD parse_tool_call.
+  METHOD parse_tool_call.
 
     TYPES:
       BEGIN OF ty_step_args,
@@ -571,7 +717,15 @@ METHOD parse_tool_call.
       BEGIN OF ty_read_args,
         variable TYPE string,
         reason   TYPE string,
-      END OF ty_read_args.
+      END OF ty_read_args,
+      BEGIN OF ty_findings_args,
+        status            TYPE string,
+        diagnosis         TYPE string,
+        evidence_variable TYPE string,
+        evidence_step     TYPE string,
+        evidence_value    TYPE string,
+        fix_suggestion    TYPE string,
+      END OF ty_findings_args.
 
     rs_action-tool = i_name.
     rs_action-arguments = i_arguments.
@@ -597,6 +751,16 @@ METHOD parse_tool_call.
           DATA ls_read TYPE ty_read_args.
           /ui2/cl_json=>deserialize( EXPORTING json = i_arguments CHANGING data = ls_read ).
           MOVE-CORRESPONDING ls_read TO rs_action.
+
+        ELSEIF i_name = 'report_findings'.
+          DATA ls_findings TYPE ty_findings_args.
+          /ui2/cl_json=>deserialize( EXPORTING json = i_arguments CHANGING data = ls_findings ).
+          MOVE-CORRESPONDING ls_findings TO rs_action.
+          TRANSLATE rs_action-status TO LOWER CASE.
+          CONDENSE rs_action-status.
+          IF rs_action-status <> 'confirmed'.
+            rs_action-status = 'hypothesis'.
+          ENDIF.
         ENDIF.
       CATCH cx_root INTO DATA(lx_root).
         rs_action-reason = |Cannot parse tool call arguments: { lx_root->get_text( ) }|.
@@ -669,7 +833,7 @@ METHOD read_variable.
 
 METHOD run.
 
-    CLEAR es_action.
+    CLEAR et_actions.
     DATA(lv_api_key) = get_default_api_key( ).
     IF lv_api_key IS INITIAL.
       ev_text = |AI agent cannot start: { mv_last_error }|.
@@ -703,12 +867,11 @@ METHOD run.
           IMPORTING
             et_tool_calls   = lt_tool_calls ).
 
-        READ TABLE lt_tool_calls INDEX 1 INTO DATA(ls_call).
-        IF sy-subrc = 0.
-          es_action = parse_tool_call(
+        LOOP AT lt_tool_calls INTO DATA(ls_call).
+          APPEND parse_tool_call(
             i_name      = ls_call-name
-            i_arguments = ls_call-arguments ).
-        ENDIF.
+            i_arguments = ls_call-arguments ) TO et_actions.
+        ENDLOOP.
 
         ev_text =
           |Provider: { c_provider } / { c_model }| &&
@@ -720,15 +883,22 @@ METHOD run.
           cl_abap_char_utilities=>newline &&
           lv_answer.
 
-        IF es_action-tool IS NOT INITIAL.
+        IF et_actions IS NOT INITIAL.
           ev_text = ev_text &&
             cl_abap_char_utilities=>newline &&
             cl_abap_char_utilities=>newline &&
-            |Pending AI action: { es_action-tool } { es_action-command } { es_action-variable } { es_action-include }:{ es_action-line }| &&
+            |Pending AI actions ({ lines( et_actions ) }):|.
+
+          LOOP AT et_actions INTO DATA(ls_pending_action).
+            ev_text = ev_text &&
+              cl_abap_char_utilities=>newline &&
+              |{ sy-tabix }. { ls_pending_action-tool } { ls_pending_action-command }{ ls_pending_action-variable } { ls_pending_action-include }:{ ls_pending_action-line } - { ls_pending_action-reason }|.
+          ENDLOOP.
+
+          ev_text = ev_text &&
             cl_abap_char_utilities=>newline &&
-            |Intent: { es_action-reason }| &&
             cl_abap_char_utilities=>newline &&
-            |Press AI again to confirm this action.|.
+            |Press AI again to confirm and run this chain.|.
         ELSE.
           DATA(lv_action_log) = get_action_log_text( ).
           IF lv_action_log IS NOT INITIAL.
@@ -840,6 +1010,82 @@ METHOD is_known_ai_breakpoint.
     READ TABLE mt_ai_breakpoints TRANSPORTING NO FIELDS
       WITH KEY table_line = lv_key.
     rv_known = xsdbool( sy-subrc = 0 ).
+
+  ENDMETHOD.
+METHOD reset_last_tool_result.
+    CLEAR mv_last_tool_result.
+  ENDMETHOD.
+METHOD get_last_tool_result.
+    rv_text = mv_last_tool_result.
+  ENDMETHOD.
+  METHOD validate_evidence.
+
+    CLEAR ev_detail.
+    rv_valid = abap_false.
+
+    IF mo_debugger IS NOT BOUND.
+      ev_detail = 'No debugger session is bound - nothing to verify against.'.
+      RETURN.
+    ENDIF.
+
+    IF is_action-evidence_variable IS INITIAL.
+      ev_detail = 'evidence_variable is empty - cannot verify.'.
+      RETURN.
+    ENDIF.
+
+    DATA lv_step_str TYPE string.
+    DATA lv_step     TYPE i.
+    DATA lv_have_step TYPE abap_bool VALUE abap_false.
+
+    lv_step_str = is_action-evidence_step.
+    REPLACE ALL OCCURRENCES OF '#' IN lv_step_str WITH ``.
+    CONDENSE lv_step_str.
+    IF lv_step_str CO '0123456789' AND lv_step_str IS NOT INITIAL.
+      lv_step = lv_step_str.
+      lv_have_step = abap_true.
+    ENDIF.
+
+    " 1) Variable history - the authoritative, step-tagged evidence source
+    LOOP AT mo_debugger->mt_vars_hist INTO DATA(ls_hist).
+      IF lv_have_step = abap_true AND ls_hist-step <> lv_step.
+        CONTINUE.
+      ENDIF.
+
+      IF ls_hist-name CS is_action-evidence_variable
+      OR is_action-evidence_variable CS ls_hist-name
+      OR ls_hist-path CS is_action-evidence_variable.
+
+        IF is_action-evidence_value IS INITIAL
+        OR ls_hist-short CS is_action-evidence_value
+        OR is_action-evidence_value CS ls_hist-short.
+          rv_valid = abap_true.
+          ev_detail = |Matched in Variable history: step={ ls_hist-step } { ls_hist-name } = { ls_hist-short }|.
+          RETURN.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+
+    " 2) Current variables/state - fallback for "right now" evidence
+    LOOP AT mo_debugger->mt_state INTO DATA(ls_state).
+      IF ls_state-name CS is_action-evidence_variable
+      OR is_action-evidence_variable CS ls_state-name
+      OR ls_state-path CS is_action-evidence_variable.
+
+        IF is_action-evidence_value IS INITIAL
+        OR ls_state-short CS is_action-evidence_value
+        OR is_action-evidence_value CS ls_state-short.
+          rv_valid = abap_true.
+          ev_detail = |Matched in Current variables/state: { ls_state-name } = { ls_state-short }|.
+          RETURN.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+
+    ev_detail =
+      |No matching entry found in Variable history| &&
+      COND #( WHEN lv_have_step = abap_true THEN | (step { lv_step })| ELSE `` ) &&
+      | or Current variables/state for variable '{ is_action-evidence_variable }'| &&
+      | with value '{ is_action-evidence_value }'. This is source-reading, not runtime evidence.|.
 
   ENDMETHOD.
 ENDCLASS.
