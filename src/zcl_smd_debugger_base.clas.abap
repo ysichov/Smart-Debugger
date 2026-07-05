@@ -500,13 +500,13 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
 *
 *          old_generation = abap_true.
 *          IF old_generation IS INITIAL.
-*            "--- создаём структуру на основе component_tab
+*            "--- Create a structure based on component_tab
 *            DATA(o_struct) = cl_abap_structdescr=>create( comp ).
 *
-*            "--- создаём таблицу этой структуры
+*            "--- Create a table type for this structure
 *            DATA(o_table)  = cl_abap_tabledescr=>create( o_struct ).
 *
-*            "--- создаём реальный объект таблицы
+*            "--- Create the actual table object
 *            DATA lr_table TYPE REF TO data.
 *            CREATE DATA lr_table TYPE HANDLE o_table.
 *

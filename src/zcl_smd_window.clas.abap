@@ -508,11 +508,11 @@ CLASS zcl_smd_window IMPLEMENTATION.
 
     set_ai_text(
       io_text = mo_ai_prompt
-      i_text  = |Найди вероятную причину ошибки. Используй текущий шаг, стек, переменные и историю изменений.| ).
+      i_text  = |Find the most likely cause of the bug. Use the current step, stack, variables, and change history.| ).
 
     set_ai_text(
       io_text = mo_ai_result
-      i_text  = |AI agent ready. Кнопка AI теперь запускает анализ текущего состояния дебага.| ).
+      i_text  = |AI agent ready. Press AI again to analyze the current debugger state.| ).
 
     cl_gui_cfw=>flush( ).
 

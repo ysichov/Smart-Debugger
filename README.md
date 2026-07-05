@@ -28,7 +28,7 @@ the script will define all your local and global variables, and show them in a s
  - button 'CLASS-DATA' will show Static(Global) variables from active classes.
  - button 'LDB' will show all mess of LDB global variables whuch by default is hidden here. In standard debugger we see all the mess and can't avoid it.
 
-The Next Big Thing - is a hierarchiсal trees for structures, deep structures and class instance objects. We have a 'helicopter view' for all variables at any step!
+The Next Big Thing - is hierarchical trees for structures, deep structures and class instance objects. We have a 'helicopter view' for all variables at any step!
 
 Tables wih header lines and defined with 'OCCURS' are shown as variable_name[] next to its header structure variable.
 Double-click on any table variable will show it in separate window! And we don't have no limitations for windows quantity. If you have a big display you can open more then 10 tables simultaneously and analyse it!
