@@ -4,8 +4,6 @@
 
 <img width="621" height="616" alt="image" src="https://github.com/user-attachments/assets/dd3108d6-a3ee-4a2e-9a0b-66b91cb03e9b" />
 
-<img width="400" height="390" alt="image" src="https://github.com/user-attachments/assets/4cd84ec5-2ff1-482a-964a-6a6af14511f3" />
-
 
 Smart Debugger - SAP Script program for viewing state - all objects and data structures in debug.
 
