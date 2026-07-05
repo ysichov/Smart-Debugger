@@ -5,16 +5,7 @@ CLASS zcl_smd_ai_agent DEFINITION PUBLIC CREATE PUBLIC.
     CONSTANTS c_keyname  TYPE string VALUE 'Default'.
     CONSTANTS c_model    TYPE text255 VALUE 'mistral-large-latest'.
 
-    TYPES:
-      BEGIN OF ty_action,
-        tool    TYPE string,
-        command TYPE string,
-        program TYPE string,
-        include TYPE string,
-        line    TYPE i,
-        variable TYPE string,
-        reason  TYPE string,
-      END OF ty_action.
+    TYPES ty_action TYPE zif_smd_ai_agent_types=>ty_action.
 
     METHODS constructor
       IMPORTING

@@ -147,7 +147,7 @@ CLASS zcl_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUBL
           mo_ai_prompt           TYPE REF TO cl_gui_textedit,
           mo_ai_result           TYPE REF TO cl_gui_textedit,
           mo_ai_agent            TYPE REF TO zcl_smd_ai_agent,
-          ms_ai_pending_action   TYPE zcl_smd_ai_agent=>ty_action,
+          ms_ai_pending_action   TYPE zif_smd_ai_agent_types=>ty_action,
           mo_code_viewer         TYPE REF TO cl_gui_abapedit,
           mt_stack               TYPE TABLE OF zcl_smd_appl=>t_stack,
           mo_toolbar             TYPE REF TO cl_gui_toolbar,
