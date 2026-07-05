@@ -565,6 +565,7 @@ METHOD parse_tool_call.
         program TYPE string,
         include TYPE string,
         line    TYPE i,
+        mode    TYPE string,
         reason  TYPE string,
       END OF ty_break_args,
       BEGIN OF ty_read_args,
@@ -586,6 +587,11 @@ METHOD parse_tool_call.
           DATA ls_break TYPE ty_break_args.
           /ui2/cl_json=>deserialize( EXPORTING json = i_arguments CHANGING data = ls_break ).
           MOVE-CORRESPONDING ls_break TO rs_action.
+          TRANSLATE rs_action-mode TO LOWER CASE.
+          CONDENSE rs_action-mode.
+          IF rs_action-mode IS INITIAL.
+            rs_action-mode = 'set'.
+          ENDIF.
 
         ELSEIF i_name = 'read_variable'.
           DATA ls_read TYPE ty_read_args.
