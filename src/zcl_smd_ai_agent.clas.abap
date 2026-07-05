@@ -504,6 +504,7 @@ METHOD get_system_prompt.
       'If the bug is not yet runtime-confirmed, clearly say which diagnosis you suspect and immediately propose the next debugger action needed to confirm it. ' &&
       'Use read_variable when the exact runtime value of any ABAP variable, field, component, reference, or table expression is needed. ' &&
       'Use set_breakpoint with real TPDA include and 1-based source line numbers when stopping at a specific source line is useful; it still requires user confirmation before execution. ' &&
+      'Do not set a breakpoint again if it is already listed under Known AI-set breakpoints; continue to it or verify state there instead. ' &&
       'After a relevant breakpoint has been set and the next goal is to reach it, propose step_debugger F8/continue; do not use F5 to walk toward a known breakpoint. ' &&
       'Use F5/F6/F7 only after reaching the suspicious area, when a single-step observation is needed. ' &&
       'Never call F8/continue unless you explain why it is safe and what breakpoint or guard stop will catch execution. ' &&
