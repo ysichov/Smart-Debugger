@@ -5,8 +5,6 @@ CLASS zcl_smd_ai_agent DEFINITION PUBLIC CREATE PUBLIC.
     CONSTANTS c_keyname  TYPE string VALUE 'Default'.
     CONSTANTS c_model    TYPE text255 VALUE 'mistral-large-latest'.
 
-    TYPES ty_action TYPE zif_smd_ai_agent_types=>ty_action.
-
     METHODS constructor
       IMPORTING
         !io_debugger TYPE REF TO zcl_smd_debugger_base.
@@ -15,12 +13,12 @@ CLASS zcl_smd_ai_agent DEFINITION PUBLIC CREATE PUBLIC.
       IMPORTING
         !i_task        TYPE string
       EXPORTING
-        !es_action     TYPE ty_action
+        !es_action     TYPE zif_smd_ai_agent_types=>ty_action
         !ev_text       TYPE string.
 
     METHODS execute_action
       IMPORTING
-        !is_action     TYPE ty_action
+        !is_action     TYPE zif_smd_ai_agent_types=>ty_action
       RETURNING
         VALUE(rv_text) TYPE string.
 
@@ -46,22 +44,19 @@ CLASS zcl_smd_ai_agent DEFINITION PUBLIC CREATE PUBLIC.
         VALUE(rv_prompt) TYPE string.
 
     METHODS get_tools_json
-      IMPORTING
-        !io_llm          TYPE REF TO zcl_abapai_llm_client
       RETURNING
         VALUE(rv_json) TYPE string.
 
     METHODS get_plugin_tools_json
-      IMPORTING
-        !io_llm          TYPE REF TO zcl_abapai_llm_client
       RETURNING
         VALUE(rv_json) TYPE string.
 
     METHODS parse_tool_call
       IMPORTING
-        !is_call         TYPE zcl_code_ai_api=>ty_tool_call
+        !i_name          TYPE string
+        !i_arguments     TYPE string
       RETURNING
-        VALUE(rs_action) TYPE ty_action.
+        VALUE(rs_action) TYPE zif_smd_ai_agent_types=>ty_action.
 
     METHODS ensure_guard_breakpoint
       RETURNING
@@ -69,7 +64,7 @@ CLASS zcl_smd_ai_agent DEFINITION PUBLIC CREATE PUBLIC.
 
     METHODS execute_plugin_tool
       IMPORTING
-        !is_action     TYPE ty_action
+        !is_action     TYPE zif_smd_ai_agent_types=>ty_action
       RETURNING
         VALUE(rv_text) TYPE string.
 
@@ -113,19 +108,27 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
         lo_llm->set_temperature( '0.1' ).
         lo_llm->set_max_tokens( 4000 ).
 
+        DATA(lo_context) = NEW zcl_ai_tool_context(
+          io_llm        = lo_llm
+          i_agents_path = `` ).
+
+        zcl_ai_tool_factory=>initialize( lo_context ).
+
         DATA lt_tool_calls TYPE zcl_code_ai_api=>tt_tool_calls.
 
         DATA(lv_answer) = lo_llm->ask_with_tools(
           EXPORTING
             i_prompt        = build_prompt( i_task )
             i_system_prompt = get_system_prompt( )
-            i_tools_json    = get_tools_json( io_llm = lo_llm )
+            i_tools_json    = get_tools_json( )
           IMPORTING
             et_tool_calls   = lt_tool_calls ).
 
         READ TABLE lt_tool_calls INDEX 1 INTO DATA(ls_call).
         IF sy-subrc = 0.
-          es_action = parse_tool_call( ls_call ).
+          es_action = parse_tool_call(
+            i_name      = ls_call-name
+            i_arguments = ls_call-arguments ).
         ENDIF.
 
         ev_text =
@@ -342,7 +345,7 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
       `"required":["variable","reason"],` &&
       `"additionalProperties":false } } }`.
 
-    DATA(lv_plugin_json) = get_plugin_tools_json( io_llm = io_llm ).
+    DATA(lv_plugin_json) = get_plugin_tools_json( ).
     IF strlen( lv_plugin_json ) > 2.
       DATA(lv_len) = strlen( lv_plugin_json ) - 2.
       DATA(lv_plugin_body) = lv_plugin_json+1(lv_len).
@@ -360,12 +363,6 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
     rv_json = `[]`.
 
     TRY.
-        DATA(lo_context) = NEW zcl_ai_tool_context(
-          io_llm        = io_llm
-          i_agents_path = `` ).
-
-        zcl_ai_tool_factory=>initialize( lo_context ).
-
         DATA lt_tool_names TYPE string_table.
         APPEND 'set_breakpoint' TO lt_tool_names.
 
@@ -394,24 +391,24 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
         reason   TYPE string,
       END OF ty_read_args.
 
-    rs_action-tool = is_call-name.
-    rs_action-arguments = is_call-arguments.
+    rs_action-tool = i_name.
+    rs_action-arguments = i_arguments.
 
     TRY.
-        IF is_call-name = 'step_debugger'.
+        IF i_name = 'step_debugger'.
           DATA ls_step TYPE ty_step_args.
-          /ui2/cl_json=>deserialize( EXPORTING json = is_call-arguments CHANGING data = ls_step ).
+          /ui2/cl_json=>deserialize( EXPORTING json = i_arguments CHANGING data = ls_step ).
           rs_action-command = ls_step-command.
           rs_action-reason = ls_step-reason.
 
-        ELSEIF is_call-name = 'set_breakpoint'.
+        ELSEIF i_name = 'set_breakpoint'.
           DATA ls_break TYPE ty_break_args.
-          /ui2/cl_json=>deserialize( EXPORTING json = is_call-arguments CHANGING data = ls_break ).
+          /ui2/cl_json=>deserialize( EXPORTING json = i_arguments CHANGING data = ls_break ).
           MOVE-CORRESPONDING ls_break TO rs_action.
 
-        ELSEIF is_call-name = 'read_variable'.
+        ELSEIF i_name = 'read_variable'.
           DATA ls_read TYPE ty_read_args.
-          /ui2/cl_json=>deserialize( EXPORTING json = is_call-arguments CHANGING data = ls_read ).
+          /ui2/cl_json=>deserialize( EXPORTING json = i_arguments CHANGING data = ls_read ).
           MOVE-CORRESPONDING ls_read TO rs_action.
         ENDIF.
       CATCH cx_root INTO DATA(lx_root).
