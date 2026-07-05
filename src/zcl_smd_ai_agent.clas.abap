@@ -156,6 +156,18 @@ METHOD build_prompt.
         append_line( EXPORTING i_line = |Last confirmed tool result: { mv_last_tool_result }| CHANGING ct_lines = lt_lines ).
       ENDIF.
 
+      IF mt_ai_breakpoints IS NOT INITIAL.
+        append_line( EXPORTING i_line = `` CHANGING ct_lines = lt_lines ).
+        append_line( EXPORTING i_line = `Known AI-set breakpoints:` CHANGING ct_lines = lt_lines ).
+        LOOP AT mt_ai_breakpoints INTO DATA(lv_ai_breakpoint).
+          append_line(
+            EXPORTING
+              i_line = |{ sy-tabix }. { lv_ai_breakpoint }|
+            CHANGING
+              ct_lines = lt_lines ).
+        ENDLOOP.
+      ENDIF.
+
       IF mo_debugger->mo_window IS BOUND.
         lv_line = |Screen program: program={ mo_debugger->mo_window->m_prg-program } |.
         lv_line = lv_line && |include={ mo_debugger->mo_window->m_prg-include } |.
