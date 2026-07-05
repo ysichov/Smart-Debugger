@@ -201,7 +201,7 @@ CLASS lcl_source_parser DEFINITION.
 
 ENDCLASS.
 
-CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super.
+CLASS lcl_debugger_base DEFINITION ABSTRACT INHERITING FROM cl_tpda_script_class_super.
 
   PUBLIC SECTION.
     TYPES: BEGIN OF t_obj,
@@ -370,6 +370,16 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
         i_parent_calculated TYPE string OPTIONAL
         i_cl_leaf           TYPE int4
         i_instance          TYPE string OPTIONAL.
+
+ENDCLASS.
+
+CLASS lcl_debugger_script DEFINITION INHERITING FROM lcl_debugger_base.
+
+  PUBLIC SECTION.
+    METHODS: prologue  REDEFINITION,
+             init      REDEFINITION,
+             script    REDEFINITION,
+             end       REDEFINITION.
 
 ENDCLASS.
 
@@ -723,7 +733,7 @@ CLASS lcl_smd_window DEFINITION INHERITING FROM zcl_smd_popup .
 
 ENDCLASS.
 
-CLASS lcl_debugger_script IMPLEMENTATION.
+CLASS lcl_debugger_base IMPLEMENTATION.
 
   METHOD prologue.
     super->prologue( ).
@@ -738,22 +748,22 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     lcl_appl=>init_lang( ).
     lcl_appl=>init_icons_table( ).
 
-    mo_window = NEW lcl_smd_window( me ).
+    mo_window = NEW lcl_smd_window( CAST lcl_debugger_script( me ) ).
 
     mo_tree_imp = NEW zcl_smd_rtti_tree( i_header   = 'Importing parameters'
                                      i_type     = 'I'
                                      i_cont     = mo_window->mo_importing_container
-                                     i_debugger = me ).
+                                     i_debugger = CAST lcl_debugger_script( me ) ).
 
     mo_tree_local = NEW zcl_smd_rtti_tree( i_header   = 'Variables'
                                        i_type     = 'L'
                                        i_cont     = mo_window->mo_locals_container
-                                       i_debugger = me ).
+                                       i_debugger = CAST lcl_debugger_script( me ) ).
 
     mo_tree_exp = NEW zcl_smd_rtti_tree( i_header   = 'Exporting & Returning parameters'
                                      i_type     = 'E'
                                      i_cont     = mo_window->mo_exporting_container
-                                     i_debugger = me ).
+                                     i_debugger = CAST lcl_debugger_script( me ) ).
 
     mo_tree_local->m_locals = mo_tree_local->m_locals BIT-XOR c_mask.
 
@@ -1720,7 +1730,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
           ENDIF.
         ENDIF.
       ELSE.
-        lcl_source_parser=>parse_tokens( i_program = mo_window->m_prg-include io_debugger = me ).
+        lcl_source_parser=>parse_tokens( i_program = mo_window->m_prg-include io_debugger = CAST lcl_debugger_script( me ) ).
         READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO source.
       ENDIF.
     ENDIF.
@@ -2841,6 +2851,26 @@ CLASS lcl_debugger_script IMPLEMENTATION.
                          i_cl_leaf     = i_cl_leaf
                          i_instance     = i_instance ).
 
+  ENDMETHOD.
+
+ENDCLASS.                    "lcl_debugger_base IMPLEMENTATION
+
+CLASS lcl_debugger_script IMPLEMENTATION.
+
+  METHOD prologue.
+    super->prologue( ).
+  ENDMETHOD.
+
+  METHOD init.
+    super->init( ).
+  ENDMETHOD.
+
+  METHOD script.
+    super->script( ).
+  ENDMETHOD.
+
+  METHOD end.
+    super->end( ).
   ENDMETHOD.
 
 ENDCLASS.                    "lcl_debugger_script IMPLEMENTATION
