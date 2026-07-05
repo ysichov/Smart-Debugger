@@ -552,11 +552,14 @@ CLASS zcl_smd_window IMPLEMENTATION.
     set_ai_text( io_text = mo_ai_result i_text = |AI is analyzing current debug state...| ).
     cl_gui_cfw=>flush( ).
 
-    DATA(lv_result) = mo_ai_agent->run(
+    DATA lv_result TYPE string.
+
+    mo_ai_agent->run(
       EXPORTING
         i_task    = lv_prompt
       IMPORTING
-        es_action = ms_ai_pending_action ).
+        es_action = ms_ai_pending_action
+        ev_text   = lv_result ).
 
     set_ai_text( io_text = mo_ai_result i_text = lv_result ).
     cl_gui_cfw=>flush( ).

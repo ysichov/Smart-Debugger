@@ -16,8 +16,7 @@ CLASS zcl_smd_ai_agent DEFINITION PUBLIC CREATE PUBLIC.
         !i_task        TYPE string
       EXPORTING
         !es_action     TYPE ty_action
-      RETURNING
-        VALUE(rv_text) TYPE string.
+        !ev_text       TYPE string.
 
     METHODS execute_action
       IMPORTING
@@ -99,7 +98,7 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
     CLEAR es_action.
     DATA(lv_api_key) = get_default_api_key( ).
     IF lv_api_key IS INITIAL.
-      rv_text = |AI agent cannot start: { mv_last_error }|.
+      ev_text = |AI agent cannot start: { mv_last_error }|.
       RETURN.
     ENDIF.
 
@@ -129,7 +128,7 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
           es_action = parse_tool_call( ls_call ).
         ENDIF.
 
-        rv_text =
+        ev_text =
           |Provider: { c_provider } / { c_model }| &&
           cl_abap_char_utilities=>newline &&
           |Time: { lo_llm->get_last_seconds( ) } sec, tokens in/out: { lo_llm->mv_last_tok_in }/{ lo_llm->mv_last_tok_out }| &&
@@ -140,7 +139,7 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
           lv_answer.
 
         IF es_action-tool IS NOT INITIAL.
-          rv_text = rv_text &&
+          ev_text = ev_text &&
             cl_abap_char_utilities=>newline &&
             cl_abap_char_utilities=>newline &&
             |Pending AI action: { es_action-tool } { es_action-command } { es_action-variable } { es_action-include }:{ es_action-line }| &&
@@ -151,7 +150,7 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
         ENDIF.
 
       CATCH cx_root INTO DATA(lx_root).
-        rv_text = |AI agent failed: { lx_root->get_text( ) }|.
+        ev_text = |AI agent failed: { lx_root->get_text( ) }|.
     ENDTRY.
 
   ENDMETHOD.
@@ -205,6 +204,7 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
   METHOD build_prompt.
 
     DATA lt_lines TYPE tt_string.
+    DATA lv_line TYPE string.
     DATA lv_newline TYPE string.
 
     lv_newline = cl_abap_char_utilities=>newline.
@@ -219,14 +219,11 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
         CHANGING
           ct_lines = lt_lines ).
 
-      append_line(
-        EXPORTING
-          i_line = |Current stack: program={ mo_debugger->ms_stack-program } | &&
-                   |include={ mo_debugger->ms_stack-include } | &&
-                   |line={ mo_debugger->ms_stack-line } | &&
-                   |event={ mo_debugger->ms_stack-eventtype } { mo_debugger->ms_stack-eventname }|
-        CHANGING
-          ct_lines = lt_lines ).
+      lv_line = |Current stack: program={ mo_debugger->ms_stack-program } |.
+      lv_line = lv_line && |include={ mo_debugger->ms_stack-include } |.
+      lv_line = lv_line && |line={ mo_debugger->ms_stack-line } |.
+      lv_line = lv_line && |event={ mo_debugger->ms_stack-eventtype } { mo_debugger->ms_stack-eventname }|.
+      append_line( EXPORTING i_line = lv_line CHANGING ct_lines = lt_lines ).
 
       IF mv_last_tool_result IS NOT INITIAL.
         append_line( EXPORTING i_line = `` CHANGING ct_lines = lt_lines ).
@@ -234,13 +231,10 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
       ENDIF.
 
       IF mo_debugger->mo_window IS BOUND.
-        append_line(
-          EXPORTING
-            i_line = |Screen program: program={ mo_debugger->mo_window->m_prg-program } | &&
-                     |include={ mo_debugger->mo_window->m_prg-include } | &&
-                     |line={ mo_debugger->mo_window->m_prg-line }|
-          CHANGING
-            ct_lines = lt_lines ).
+        lv_line = |Screen program: program={ mo_debugger->mo_window->m_prg-program } |.
+        lv_line = lv_line && |include={ mo_debugger->mo_window->m_prg-include } |.
+        lv_line = lv_line && |line={ mo_debugger->mo_window->m_prg-line }|.
+        append_line( EXPORTING i_line = lv_line CHANGING ct_lines = lt_lines ).
       ENDIF.
 
       append_line( EXPORTING i_line = `` CHANGING ct_lines = lt_lines ).
