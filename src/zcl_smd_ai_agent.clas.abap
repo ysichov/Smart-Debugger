@@ -315,6 +315,9 @@ METHOD execute_action.
         IF is_action-tool = 'set_breakpoint'
         AND mo_debugger IS BOUND
         AND mo_debugger->mo_window IS BOUND.
+          IF rv_text CS 'set=X'.
+            remember_ai_breakpoint( is_action ).
+          ENDIF.
           mo_debugger->mo_window->set_program_line( mo_debugger->mo_window->m_prg-line ).
         ENDIF.
     ENDCASE.
