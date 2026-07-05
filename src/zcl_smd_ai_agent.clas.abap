@@ -236,7 +236,9 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
       IF mo_debugger->mo_window IS BOUND.
         append_line(
           EXPORTING
-            i_line = |Screen program: program={ mo_debugger->mo_window->m_prg-program } include={ mo_debugger->mo_window->m_prg-include } line={ mo_debugger->mo_window->m_prg-line }|
+            i_line = |Screen program: program={ mo_debugger->mo_window->m_prg-program } | &&
+                     |include={ mo_debugger->mo_window->m_prg-include } | &&
+                     |line={ mo_debugger->mo_window->m_prg-line }|
           CHANGING
             ct_lines = lt_lines ).
       ENDIF.
