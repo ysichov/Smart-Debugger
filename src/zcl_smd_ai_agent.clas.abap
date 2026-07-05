@@ -221,7 +221,10 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
 
       append_line(
         EXPORTING
-          i_line = |Current stack: program={ mo_debugger->ms_stack-program } include={ mo_debugger->ms_stack-include } line={ mo_debugger->ms_stack-line } event={ mo_debugger->ms_stack-eventtype } { mo_debugger->ms_stack-eventname }|
+          i_line = |Current stack: program={ mo_debugger->ms_stack-program } | &&
+                   |include={ mo_debugger->ms_stack-include } | &&
+                   |line={ mo_debugger->ms_stack-line } | &&
+                   |event={ mo_debugger->ms_stack-eventtype } { mo_debugger->ms_stack-eventname }|
         CHANGING
           ct_lines = lt_lines ).
 
@@ -322,8 +325,26 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
 
     DATA(lv_json) =
       `[` &&
-      `{ "type":"function", "function": { "name":"step_debugger", "description":"Request one debugger step. The user must confirm before execution.", "parameters": { "type":"object", "properties": { "command": { "type":"string", "enum":["F5","F6","F7","F8"], "description":"F5 step into, F6 step over, F7 step out, F8 continue to breakpoint" }, "reason": { "type":"string", "description":"Visible intent shown to the user before confirmation" } }, "required":["command","reason"], "additionalProperties":false } } },` &&
-      `{ "type":"function", "function": { "name":"read_variable", "description":"Read the exact runtime value or type summary of any variable available in the current ABAP debugger context. The user must confirm before execution.", "parameters": { "type":"object", "properties": { "variable": { "type":"string", "description":"ABAP debugger expression, variable name, field path, component, reference, or table expression to inspect" }, "reason": { "type":"string", "description":"Visible intent shown to the user before confirmation" } }, "required":["variable","reason"], "additionalProperties":false } } }`.
+      `{ "type":"function", "function": {` &&
+      `"name":"step_debugger",` &&
+      `"description":"Request one debugger step.",` &&
+      `"parameters": { "type":"object", "properties": {` &&
+      `"command": { "type":"string", "enum":["F5","F6","F7","F8"],` &&
+      `"description":"F5 into, F6 over, F7 out, F8 continue" },` &&
+      `"reason": { "type":"string",` &&
+      `"description":"Visible intent shown before confirmation" } },` &&
+      `"required":["command","reason"],` &&
+      `"additionalProperties":false } } },` &&
+      `{ "type":"function", "function": {` &&
+      `"name":"read_variable",` &&
+      `"description":"Read a value from the ABAP debugger context.",` &&
+      `"parameters": { "type":"object", "properties": {` &&
+      `"variable": { "type":"string",` &&
+      `"description":"ABAP debugger expression or variable name" },` &&
+      `"reason": { "type":"string",` &&
+      `"description":"Visible intent shown before confirmation" } },` &&
+      `"required":["variable","reason"],` &&
+      `"additionalProperties":false } } }`.
 
     DATA(lv_plugin_json) = get_plugin_tools_json( io_llm = io_llm ).
     IF strlen( lv_plugin_json ) > 2.
