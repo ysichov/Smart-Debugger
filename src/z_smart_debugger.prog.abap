@@ -54,7 +54,6 @@ REPORT  z_smart_debugger_script.
 *  & https://github.com/larshp/ABAP-Object-Visualizer - Abap Object Visualizer
 *  & https://github.com/ysichov/SDE_abapgit - Simple Data Explorer
 
-CLASS lcl_ai DEFINITION DEFERRED.
 CLASS lcl_data_receiver DEFINITION DEFERRED.
 CLASS lcl_data_transmitter DEFINITION DEFERRED.
 CLASS zcl_smd_rtti_tree DEFINITION DEFERRED.
@@ -235,79 +234,6 @@ CLASS lcl_appl DEFINITION.
 
 ENDCLASS.
 
-CLASS lcl_popup DEFINITION.
-
-  PUBLIC SECTION.
-    CLASS-DATA m_counter              TYPE i.
-    DATA: m_additional_name      TYPE string,
-          mo_box                 TYPE REF TO cl_gui_dialogbox_container,
-          mo_splitter            TYPE REF TO cl_gui_splitter_container,
-          mo_splitter_imp_exp    TYPE REF TO cl_gui_splitter_container,
-          mo_variables_container TYPE REF TO cl_gui_container,
-          mo_tables_container    TYPE REF TO cl_gui_container.
-
-    METHODS: constructor IMPORTING i_additional_name TYPE string OPTIONAL,
-      create IMPORTING i_width       TYPE i
-                       i_hight       TYPE i
-                       i_name        TYPE text100 OPTIONAL
-             RETURNING VALUE(ro_box) TYPE REF TO cl_gui_dialogbox_container,
-      on_box_close FOR EVENT close OF cl_gui_dialogbox_container IMPORTING sender.
-
-ENDCLASS.
-
-
-CLASS lcl_popup IMPLEMENTATION.
-
-  METHOD constructor.
-    m_additional_name = i_additional_name.
-
-  ENDMETHOD.
-
-  METHOD create.
-
-    DATA: top  TYPE i,
-          left TYPE i.
-
-    ADD 1 TO m_counter.
-    top  = left = 1 + 2 * ( m_counter DIV 5 ) +  ( m_counter MOD 5 ) * 10.
-
-    CREATE OBJECT ro_box
-      EXPORTING
-        width                       = i_width
-        height                      = i_hight
-        top                         = top
-        left                        = left
-        caption                     = i_name
-        lifetime                    = 2
-      EXCEPTIONS
-        cntl_error                  = 1
-        cntl_system_error           = 2
-        create_error                = 3
-        lifetime_error              = 4
-        lifetime_dynpro_dynpro_link = 5
-        event_already_registered    = 6
-        error_regist_event          = 7
-        OTHERS                      = 8.
-    IF sy-subrc <> 0.
-      RETURN.
-    ENDIF.
-
-  ENDMETHOD.
-
-  METHOD on_box_close.
-    LOOP AT lcl_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>) WHERE parent = sender .
-      <popup>-child->free( ).
-      CLEAR <popup>-child.
-    ENDLOOP.
-    IF sy-subrc <> 0.
-      DELETE  lcl_appl=>mt_popups WHERE child = sender.
-    ENDIF.
-    DELETE lcl_appl=>mt_popups WHERE child IS INITIAL.
-    sender->free( ).
-  ENDMETHOD.
-
-ENDCLASS.
-
 
 CLASS lcl_dd_data DEFINITION."drag&drop data
 
@@ -323,83 +249,6 @@ CLASS lcl_dragdrop DEFINITION.
     CLASS-METHODS:
       drag FOR EVENT ondrag OF cl_gui_alv_grid IMPORTING e_dragdropobj e_row e_column ,
       drop FOR EVENT ondrop OF cl_gui_alv_grid IMPORTING e_dragdropobj e_row.
-
-ENDCLASS.
-
-CLASS lcl_alv_common DEFINITION.
-
-  PUBLIC SECTION.
-    CONSTANTS: c_white(4) TYPE x VALUE '00000001'. "white background
-
-    CLASS-METHODS:
-      refresh IMPORTING i_obj TYPE REF TO cl_gui_alv_grid i_layout TYPE lvc_s_layo OPTIONAL i_soft TYPE char01 OPTIONAL,
-      translate_field IMPORTING i_lang TYPE ddlanguage OPTIONAL CHANGING c_fld TYPE lvc_s_fcat,
-      get_selected IMPORTING i_obj TYPE REF TO cl_gui_alv_grid RETURNING VALUE(e_index) TYPE i.
-
-ENDCLASS.
-
-CLASS lcl_alv_common IMPLEMENTATION.
-
-  METHOD refresh.
-
-    DATA stable TYPE lvc_s_stbl.
-    stable = 'XX'.
-    IF i_layout IS SUPPLIED.
-      i_obj->set_frontend_layout( i_layout ).
-    ENDIF.
-    i_obj->refresh_table_display( EXPORTING is_stable = stable i_soft_refresh = i_soft ).
-
-  ENDMETHOD.
-
-  METHOD translate_field.
-
-    DATA: field_info TYPE TABLE OF dfies.
-
-    CALL FUNCTION 'DDIF_FIELDINFO_GET'
-      EXPORTING
-        tabname        = c_fld-tabname
-        fieldname      = c_fld-fieldname
-        langu          = i_lang
-      TABLES
-        dfies_tab      = field_info
-      EXCEPTIONS
-        not_found      = 1
-        internal_error = 2
-        OTHERS         = 3.
-
-    IF sy-subrc = 0.
-      READ TABLE field_info INDEX 1 INTO DATA(info).
-      IF info-scrtext_l IS INITIAL AND info-scrtext_m IS INITIAL AND info-scrtext_s IS INITIAL.
-        IF info-fieldtext IS NOT INITIAL.
-          MOVE info-fieldtext TO: c_fld-reptext, c_fld-scrtext_l, c_fld-scrtext_m, c_fld-scrtext_s .
-        ELSE.
-          MOVE info-fieldname TO: c_fld-reptext, c_fld-scrtext_l, c_fld-scrtext_m, c_fld-scrtext_s .
-        ENDIF.
-      ELSE.
-        c_fld-scrtext_l = info-scrtext_l.
-        c_fld-scrtext_m = info-scrtext_m.
-        c_fld-scrtext_s = info-scrtext_s.
-        IF info-reptext IS NOT INITIAL.
-          c_fld-reptext   = info-reptext.
-        ENDIF.
-      ENDIF.
-    ENDIF.
-
-  ENDMETHOD.
-
-  METHOD get_selected.
-
-    i_obj->get_selected_cells( IMPORTING et_cell = DATA(sel_cells) ).
-    IF lines( sel_cells ) > 0.
-      e_index = sel_cells[ 1 ]-row_id.
-    ELSE.
-      i_obj->get_selected_rows( IMPORTING et_index_rows = DATA(sel_rows) ).
-      IF lines( sel_rows ) > 0.
-        e_index = sel_rows[ 1 ]-index.
-      ENDIF.
-    ENDIF.
-
-  ENDMETHOD.
 
 ENDCLASS.
 
@@ -584,7 +433,7 @@ CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super
 
 ENDCLASS.
 
-CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_script.
+CLASS lcl_mermaid DEFINITION INHERITING FROM zcl_smd_popup FRIENDS  lcl_debugger_script.
 
   PUBLIC SECTION.
 
@@ -620,7 +469,7 @@ CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_scr
 
 ENDCLASS.
 
-CLASS zcl_smd_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
+CLASS zcl_smd_rtti_tree DEFINITION FINAL. " INHERITING FROM zcl_smd_popup.
 
   PUBLIC SECTION.
 
@@ -758,367 +607,9 @@ CLASS zcl_smd_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
 
 ENDCLASS.
 
-CLASS lcl_ai_api DEFINITION.
 
-  PUBLIC SECTION.
 
-    METHODS  call_openai  IMPORTING i_prompt TYPE string RETURNING VALUE(answer) TYPE string.
-  PRIVATE SECTION.
-    DATA: mv_api_key TYPE string.
-
-    METHODS: build_request
-      IMPORTING
-        i_prompt  TYPE string
-      EXPORTING
-        e_payload TYPE string ,
-      send_request
-        IMPORTING
-          i_payload  TYPE string
-        EXPORTING
-          e_response TYPE string,
-      output
-        IMPORTING
-                  i_prompt      TYPE string
-                  i_content     TYPE string
-        RETURNING VALUE(answer) TYPE string.
-
-ENDCLASS.
-
-CLASS lcl_ai_api IMPLEMENTATION.
-
-  METHOD call_openai.
-    DATA: prompt   TYPE string,
-          payload  TYPE string,
-          response TYPE string.
-
-    "Build payload
-    CALL METHOD build_request
-      EXPORTING
-        i_prompt  = i_prompt
-      IMPORTING
-        e_payload = payload.
-
-    CALL METHOD me->send_request
-      EXPORTING
-        i_payload  = payload
-      IMPORTING
-        e_response = response.
-
-    answer = output(
-      EXPORTING
-        i_prompt  = i_prompt
-        i_content = response ).
-
-  ENDMETHOD.
-
-  METHOD build_request.
-
-    DATA: payload TYPE string.
-
-    payload = |{ '{ "model": "mistral-tiny", "messages": [{ "role": "user", "content": "' && i_prompt &&  '" }], "max_tokens": 1000 } ' }|.
-
-    e_payload = payload.
-  ENDMETHOD.
-
-  METHOD send_request.
-
-    DATA: o_http_client TYPE REF TO if_http_client,
-          response_body TYPE string,
-          header        TYPE string.
-
-    CALL METHOD cl_http_client=>create_by_destination
-      EXPORTING
-        destination              = 'Z_LM' "SM59 local config
-      IMPORTING
-        client                   = o_http_client
-      EXCEPTIONS
-        argument_not_found       = 1
-        destination_not_found    = 2
-        destination_no_authority = 3
-        plugin_not_active        = 4
-        internal_error           = 5
-        OTHERS                   = 13.
-    IF sy-subrc <> 0.
-*     Implement suitable error handling here
-    ENDIF.
-
-    mv_api_key = 'lmstudio'. "any name for local LLMs or secret key for external
-    "set request header
-    o_http_client->request->set_header_field( name = 'Content-Type' value = 'application/json' ).
-    o_http_client->request->set_header_field( name = 'Authorization' value = |Bearer { mv_api_key }| ).
-
-    o_http_client->request->set_method('POST').
-
-    "set payload
-    o_http_client->request->set_cdata( i_payload ).
-
-    CALL METHOD o_http_client->send
-      EXCEPTIONS
-        http_communication_failure = 1
-        http_invalid_state         = 2
-        http_processing_failed     = 3
-        http_invalid_timeout       = 4
-        OTHERS                     = 5.
-    IF sy-subrc = 0.
-      CALL METHOD o_http_client->receive
-        EXCEPTIONS
-          http_communication_failure = 1
-          http_invalid_state         = 2
-          http_processing_failed     = 3
-          OTHERS                     = 4.
-      "Get response
-      IF sy-subrc <> 0.
-        response_body = o_http_client->response->get_data( ).
-        e_response = response_body.
-      ELSE.
-        response_body = o_http_client->response->get_data( ).
-        IF response_body IS NOT INITIAL.
-          e_response = response_body.
-        ELSE.
-          e_response = 'Call was succeesful, but got no response'.
-        ENDIF.
-      ENDIF.
-
-    ENDIF.
-
-  ENDMETHOD.
-
-  METHOD output.
-
-    DATA: text(1000) TYPE c,
-          string     TYPE string,
-          content    TYPE string,
-          reasoning  TYPE string.
-
-    TYPES: BEGIN OF lty_s_message,
-             role              TYPE string,
-             content           TYPE string,
-             reasoning_content TYPE string,
-           END           OF lty_s_message,
-           lty_t_message TYPE STANDARD TABLE OF lty_s_message WITH NON-UNIQUE DEFAULT KEY,
-           BEGIN OF lty_s_choice,
-             index         TYPE string,
-             message       TYPE lty_s_message,
-             logprobs      TYPE string,
-             finish_reason TYPE string,
-           END      OF lty_s_choice,
-           BEGIN OF lty_s_base_chatgpt_res,
-             id      TYPE string,
-             object  TYPE string,
-             created TYPE string,
-             model   TYPE string,
-             choices TYPE TABLE OF lty_s_choice WITH NON-UNIQUE DEFAULT KEY,
-           END OF lty_s_base_chatgpt_res.
-
-    DATA response TYPE lty_s_base_chatgpt_res.
-
-    DATA: binary TYPE xstring.
-
-    DATA: o_x2c TYPE REF TO cl_abap_conv_in_ce.
-    o_x2c = cl_abap_conv_in_ce=>create( encoding = 'UTF-8' ).
-    binary = i_content.
-    o_x2c->convert( EXPORTING input = binary
-                     IMPORTING data  = string ).
-
-    /ui2/cl_json=>deserialize( EXPORTING json = string CHANGING data = response ).
-
-    IF  response-choices IS NOT INITIAL.
-      content = response-choices[ 1 ]-message-content.
-      reasoning = response-choices[ 1 ]-message-reasoning_content.
-    ELSE.
-      content = string.
-    ENDIF.
-
-    answer = content.
-
-  ENDMETHOD.
-
-ENDCLASS.
-
-CLASS lcl_ai DEFINITION INHERITING FROM lcl_popup.
-
-  PUBLIC SECTION.
-    DATA: mo_ai_box               TYPE REF TO cl_gui_dialogbox_container,
-          mo_ai_splitter          TYPE REF TO cl_gui_splitter_container,
-          mo_ai_toolbar_container TYPE REF TO cl_gui_container,
-          mo_ai_toolbar           TYPE REF TO cl_gui_toolbar,
-          mo_prompt_container     TYPE REF TO cl_gui_container,
-          mo_answer_container     TYPE REF TO cl_gui_container,
-          mo_prompt_text          TYPE REF TO cl_gui_textedit,
-          mo_answer_text          TYPE REF TO cl_gui_textedit,
-          mv_prompt               TYPE string,
-          mv_answer               TYPE string.
-
-    METHODS: constructor IMPORTING io_source TYPE REF TO cl_ci_source_include
-                                   io_parent TYPE REF TO cl_gui_dialogbox_container,
-      add_ai_toolbar_buttons,
-      hnd_ai_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode.
-
-ENDCLASS.
-
-CLASS lcl_ai IMPLEMENTATION.
-
-  METHOD constructor.
-    super->constructor( ).
-
-    mo_ai_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.9' i_width = 1400 i_hight = 400 ).
-    CREATE OBJECT mo_ai_splitter
-      EXPORTING
-        parent  = mo_ai_box
-        rows    = 3
-        columns = 1
-      EXCEPTIONS
-        OTHERS  = 1.
-
-    "save new popup ref
-    APPEND INITIAL LINE TO lcl_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>).
-    <popup>-parent = io_parent.
-    <popup>-child = mo_ai_box.
-
-    SET HANDLER on_box_close FOR mo_ai_box.
-
-    mo_ai_splitter->get_container(
-         EXPORTING
-           row       = 1
-           column    = 1
-         RECEIVING
-           container = mo_ai_toolbar_container ).
-
-    mo_ai_splitter->get_container(
-      EXPORTING
-        row       = 2
-        column    = 1
-      RECEIVING
-        container = mo_prompt_container ).
-
-    mo_ai_splitter->get_container(
-      EXPORTING
-        row       = 3
-        column    = 1
-      RECEIVING
-        container = mo_answer_container  ).
-
-    mo_ai_splitter->set_row_height( id = 1 height = '3' ).
-
-    mo_ai_splitter->set_row_sash( id    = 1
-                                  type  = 0
-                                  value = 0 ).
-
-
-    SET HANDLER on_box_close FOR mo_ai_box.
-
-
-    CREATE OBJECT mo_prompt_text
-      EXPORTING
-        parent                 = mo_prompt_container
-      EXCEPTIONS
-        error_cntl_create      = 1
-        error_cntl_init        = 2
-        error_cntl_link        = 3
-        error_dp_create        = 4
-        gui_type_not_supported = 5
-        OTHERS                 = 6.
-    IF sy-subrc <> 0.
-      on_box_close( mo_box ).
-    ENDIF.
-
-    CREATE OBJECT mo_answer_text
-      EXPORTING
-        parent                 = mo_answer_container
-      EXCEPTIONS
-        error_cntl_create      = 1
-        error_cntl_init        = 2
-        error_cntl_link        = 3
-        error_dp_create        = 4
-        gui_type_not_supported = 5
-        OTHERS                 = 6.
-    IF sy-subrc <> 0.
-      on_box_close( mo_box ).
-    ENDIF.
-
-    mo_answer_text->set_readonly_mode( ).
-
-    CREATE OBJECT mo_ai_toolbar EXPORTING parent = mo_ai_toolbar_container.
-    add_ai_toolbar_buttons( ).
-    mo_ai_toolbar->set_visible( 'X' ).
-
-    "set prompt
-    DATA string TYPE TABLE OF char255.
-
-    APPEND INITIAL LINE TO string ASSIGNING FIELD-SYMBOL(<str>).
-    <str> = 'Explain please the meaning of this ABAP code'.
-    mv_prompt = <str>.
-    APPEND INITIAL LINE TO string ASSIGNING <str>.
-
-
-    LOOP AT io_source->lines INTO DATA(line).
-      APPEND INITIAL LINE TO string ASSIGNING <str>.
-      <str> = line.
-      mv_prompt = mv_prompt && <str>.
-    ENDLOOP.
-
-    mo_prompt_text->set_text_as_r3table( string ).
-    cl_gui_control=>set_focus( mo_ai_box ).
-
-  ENDMETHOD.
-
-  METHOD add_ai_toolbar_buttons.
-
-    DATA: button TYPE ttb_button,
-          events TYPE cntl_simple_events,
-          event  LIKE LINE OF events.
-
-    button  = VALUE #(
-     ( function = 'AI' icon = CONV #( icon_manikin_unknown_gender ) quickinfo = 'Ask AI' text = 'Ask AI' ) ).
-
-    mo_ai_toolbar->add_button_group( button ).
-
-*   Register events
-    event-eventid = cl_gui_toolbar=>m_id_function_selected.
-    event-appl_event = space.
-    APPEND event TO events.
-
-    mo_ai_toolbar->set_registered_events( events = events ).
-    SET HANDLER me->hnd_ai_toolbar FOR mo_ai_toolbar.
-
-  ENDMETHOD.
-
-  METHOD hnd_ai_toolbar.
-
-    DATA: prompt TYPE string.
-
-    CASE fcode.
-
-      WHEN 'AI'.
-
-        cl_gui_cfw=>flush( ).
-        DATA(o_ai) = NEW lcl_ai_api( ).
-
-        DATA text TYPE TABLE OF char255.
-        CALL METHOD mo_prompt_text->get_text_as_stream
-          IMPORTING
-            text = text.
-        CLEAR mv_prompt.
-        LOOP AT text INTO DATA(line).
-          CONCATENATE mv_prompt line
-                      "cl_abap_char_utilities=>newline
-                 INTO mv_prompt.
-        ENDLOOP.
-
-        REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline IN mv_prompt WITH ''.
-        REPLACE ALL OCCURRENCES OF '#' IN mv_prompt WITH ''.
-        REPLACE ALL OCCURRENCES OF REGEX '[[:cntrl:]]' IN mv_prompt WITH ' '.
-
-        mv_answer = o_ai->call_openai( mv_prompt ).
-        mo_answer_text->set_textstream( mv_answer ).
-
-    ENDCASE.
-
-  ENDMETHOD.
-
-ENDCLASS.
-
-CLASS lcl_ace_window DEFINITION INHERITING FROM lcl_popup .
+CLASS lcl_ace_window DEFINITION INHERITING FROM zcl_smd_popup .
 
   PUBLIC SECTION.
 
@@ -3557,7 +3048,6 @@ CLASS lcl_ace_window IMPLEMENTATION.
      "( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization switch' text = 'Visualization OFF' )
      "( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'Stack History switch' text = 'History On' )
      "( function = 'VARHIST' icon = CONV #( icon_graduate ) quickinfo = 'Variables History switch' text = 'Vars History On' )
-     "( function = 'AI' icon = CONV #( icon_manikin_unknown_gender ) quickinfo = 'Ask AI' text = 'Ask AI' )
      ( function = 'F5' icon = CONV #( icon_debugger_step_into ) quickinfo = 'Step into' text = 'Step into' )
      ( function = 'F6' icon = CONV #( icon_debugger_step_over ) quickinfo = 'Step over' text = 'Step over' )
      ( function = 'F7' icon = CONV #( icon_debugger_step_out ) quickinfo = 'Step out' text = 'Step out' )
@@ -3876,10 +3366,10 @@ CLASS lcl_ace_window IMPLEMENTATION.
     READ TABLE mt_stack INDEX 1 INTO DATA(stack).
     CASE fcode.
 
-      WHEN 'AI'.
-
-        READ TABLE mo_debugger->mo_window->mt_source INDEX 1 INTO DATA(source).
-        NEW lcl_ai( io_source = source-source io_parent =  mo_debugger->mo_window->mo_box ).
+*      WHEN 'AI'.
+*
+*        READ TABLE mo_debugger->mo_window->mt_source INDEX 1 INTO DATA(source).
+*        NEW lcl_ai( io_source = source-source io_parent =  mo_debugger->mo_window->mo_box ).
 
       WHEN 'ENGINE'.
         m_version = m_version BIT-XOR c_mask.
@@ -4132,7 +3622,7 @@ CLASS lcl_sel_opt DEFINITION.
 
 ENDCLASS.
 
-CLASS lcl_table_viewer DEFINITION INHERITING FROM lcl_popup.
+CLASS lcl_table_viewer DEFINITION INHERITING FROM zcl_smd_popup.
 
   PUBLIC SECTION.
     TYPES: BEGIN OF t_column_emitter,
@@ -4184,7 +3674,7 @@ CLASS lcl_table_viewer DEFINITION INHERITING FROM lcl_popup.
 
 ENDCLASS.
 
-CLASS lcl_text_viewer DEFINITION FINAL INHERITING FROM lcl_popup.
+CLASS lcl_text_viewer DEFINITION FINAL INHERITING FROM zcl_smd_popup.
 
   PUBLIC SECTION.
     DATA: mo_text     TYPE REF TO cl_gui_textedit.
@@ -4584,7 +4074,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
     mo_alv->set_frontend_fieldcatalog( EXPORTING it_fieldcatalog = mt_alv_catalog ).
 
     LOOP AT mt_alv_catalog ASSIGNING FIELD-SYMBOL(<cat>) WHERE scrtext_l IS INITIAL.
-      lcl_alv_common=>translate_field( CHANGING c_fld = <cat> ).
+      zcl_smd_common=>translate_field( CHANGING c_fld = <cat> ).
     ENDLOOP.
 
     mo_alv->set_frontend_fieldcatalog( EXPORTING it_fieldcatalog = mt_alv_catalog ).
@@ -4731,7 +4221,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       APPEND INITIAL LINE TO et_catalog ASSIGNING FIELD-SYMBOL(<catalog>).
 
       <catalog>-col_pos = ind.
-      <catalog>-style = lcl_alv_common=>c_white.
+      <catalog>-style = zcl_smd_common=>c_white.
       <catalog>-fieldname = ls-name.
       <catalog>-f4availabl = abap_true.
 
@@ -4908,12 +4398,12 @@ CLASS lcl_table_viewer IMPLEMENTATION.
 
     CALL METHOD mo_alv->set_frontend_fieldcatalog EXPORTING it_fieldcatalog = it_fields[].
 
-    lcl_alv_common=>refresh( mo_alv ).
+    zcl_smd_common=>refresh( mo_alv ).
     IF mo_sel IS BOUND.
       IF  e_ucomm = 'HIDE' OR e_ucomm = 'SHOW' OR e_ucomm = 'UPDATE' .
         mo_sel->update_sel_tab( ).
       ENDIF.
-      lcl_alv_common=>refresh( mo_sel->mo_sel_alv ).
+      zcl_smd_common=>refresh( mo_sel->mo_sel_alv ).
       mo_sel->mo_sel_alv->refresh_table_display(  ).
     ENDIF.
 
@@ -4946,8 +4436,8 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       CALL METHOD mo_alv->set_filter_criteria
         EXPORTING
           it_filter = filter.
-      lcl_alv_common=>refresh( mo_sel->mo_sel_alv ).
-      lcl_alv_common=>refresh( mo_alv ).
+      zcl_smd_common=>refresh( mo_sel->mo_sel_alv ).
+      zcl_smd_common=>refresh( mo_alv ).
       mo_sel->mo_debugger->handle_user_command( 'SHOW' ).
       LOOP AT mo_column_emitters INTO DATA(emit).
         emit-emitter->emit_col( emit-column ).
@@ -5044,7 +4534,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
 
     DATA: row TYPE lcl_appl=>t_sel_row.
 
-    lcl_alv_common=>refresh( mo_sel_alv ).
+    zcl_smd_common=>refresh( mo_sel_alv ).
     RAISE EVENT selection_done.
     LOOP AT mt_sel_tab  ASSIGNING FIELD-SYMBOL(<sel>).
       IF <sel>-transmitter IS NOT INITIAL.
@@ -5081,7 +4571,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       <sel_tab>-domain =  catalog-domname.
       <sel_tab>-datatype = catalog-datatype.
       <sel_tab>-length = catalog-outputlen.
-      lcl_alv_common=>translate_field( EXPORTING i_lang = mo_debugger->m_lang CHANGING c_fld = catalog ).
+      zcl_smd_common=>translate_field( EXPORTING i_lang = mo_debugger->m_lang CHANGING c_fld = catalog ).
       <sel_tab>-name = catalog-scrtext_l.
     ENDLOOP.
 
@@ -5469,7 +4959,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
     ENDIF.
 
     update_sel_row( CHANGING c_sel_row = <tab> ).
-    lcl_alv_common=>refresh( EXPORTING i_obj = mo_sel_alv i_layout = ms_layout ).
+    zcl_smd_common=>refresh( EXPORTING i_obj = mo_sel_alv i_layout = ms_layout ).
     raise_selection_done( ).
 
   ENDMETHOD.
@@ -5486,7 +4976,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
     DATA: func  TYPE ui_func,
           funcs TYPE ui_functions.
 
-    DATA(index) = lcl_alv_common=>get_selected( mo_sel_alv ).
+    DATA(index) = zcl_smd_common=>get_selected( mo_sel_alv ).
 
     IF index IS NOT INITIAL.
       READ TABLE mt_sel_tab INTO DATA(sel) INDEX index.
@@ -5565,7 +5055,7 @@ CLASS lcl_sel_opt IMPLEMENTATION.
       RAISE EVENT selection_done.
     ENDIF.
 
-    lcl_alv_common=>refresh( mo_debugger->mo_alv ).
+    zcl_smd_common=>refresh( mo_debugger->mo_alv ).
     RAISE EVENT selection_done.
 
   ENDMETHOD.                           "handle_user_command
@@ -6709,7 +6199,7 @@ CLASS lcl_dragdrop IMPLEMENTATION.
     ENDIF.
 
     DATA(o_alv) = CAST cl_gui_alv_grid( e_dragdropobj->dragsourcectrl ).
-    lcl_alv_common=>refresh( EXPORTING i_obj = o_alv ).
+    zcl_smd_common=>refresh( EXPORTING i_obj = o_alv ).
 
     o_alv ?= e_dragdropobj->droptargetctrl.
     o_to->raise_selection_done( ).
