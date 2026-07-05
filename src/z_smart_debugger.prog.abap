@@ -54,7 +54,6 @@ REPORT  z_smart_debugger_script.
 *  & https://github.com/larshp/ABAP-Object-Visualizer - Abap Object Visualizer
 *  & https://github.com/ysichov/SDE_abapgit - Simple Data Explorer
 
-CLASS lcl_data_transmitter DEFINITION DEFERRED.
 CLASS zcl_smd_rtti_tree DEFINITION DEFERRED.
 CLASS lcl_ace_window DEFINITION DEFERRED.
 CLASS lcl_table_viewer DEFINITION DEFERRED.
@@ -3520,28 +3519,8 @@ ENDCLASS.
 CLASS lcl_sel_opt DEFINITION DEFERRED.
 
 
-CLASS lcl_data_transmitter DEFINITION.
 
-  PUBLIC SECTION.
-    EVENTS: data_changed EXPORTING VALUE(e_row) TYPE lcl_appl=>t_sel_row,
-      col_changed EXPORTING VALUE(e_column) TYPE lvc_fname.
-    METHODS: emit IMPORTING e_row TYPE lcl_appl=>t_sel_row,
-      emit_col IMPORTING e_column TYPE lvc_fname.
 
-ENDCLASS.
-
-CLASS lcl_data_transmitter IMPLEMENTATION.
-
-  METHOD  emit.
-    RAISE EVENT data_changed EXPORTING e_row = e_row.
-
-  ENDMETHOD.
-
-  METHOD emit_col.
-    RAISE EVENT col_changed EXPORTING e_column = e_column.
-  ENDMETHOD.
-
-ENDCLASS.
 
 CLASS lcl_sel_opt DEFINITION.
 
@@ -3580,30 +3559,26 @@ ENDCLASS.
 CLASS lcl_table_viewer DEFINITION INHERITING FROM zcl_smd_popup.
 
   PUBLIC SECTION.
-    TYPES: BEGIN OF t_column_emitter,
-             column  TYPE lvc_fname,
-             emitter TYPE REF TO lcl_data_transmitter,
-           END OF t_column_emitter,
-           BEGIN OF t_elem,
-             field TYPE fieldname,
-             elem  TYPE ddobjname,
-           END OF t_elem.
+    TYPES:
+      BEGIN OF t_elem,
+        field TYPE fieldname,
+        elem  TYPE ddobjname,
+      END OF t_elem.
 
-    DATA: m_lang             TYPE ddlanguage,
-          m_tabname          TYPE tabname,
-          mo_alv             TYPE REF TO cl_gui_alv_grid,
-          mo_sel             TYPE REF TO lcl_sel_opt,
-          mr_table           TYPE REF TO data,
-          mo_sel_parent      TYPE REF TO cl_gui_container,
-          mo_alv_parent      TYPE REF TO cl_gui_container,
-          mt_alv_catalog     TYPE lvc_t_fcat,
-          mt_fields          TYPE TABLE OF t_elem,
-          mo_column_emitters TYPE TABLE OF t_column_emitter,
-          mo_sel_width       TYPE i,
+    DATA: m_lang         TYPE ddlanguage,
+          m_tabname      TYPE tabname,
+          mo_alv         TYPE REF TO cl_gui_alv_grid,
+          mo_sel         TYPE REF TO lcl_sel_opt,
+          mr_table       TYPE REF TO data,
+          mo_sel_parent  TYPE REF TO cl_gui_container,
+          mo_alv_parent  TYPE REF TO cl_gui_container,
+          mt_alv_catalog TYPE lvc_t_fcat,
+          mt_fields      TYPE TABLE OF t_elem,
+          mo_sel_width   TYPE i,
           m_visible,
-          m_std_tbar         TYPE x,
-          m_show_empty       TYPE i,
-          mo_window          TYPE REF TO lcl_ace_window.
+          m_std_tbar     TYPE x,
+          m_show_empty   TYPE i,
+          mo_window      TYPE REF TO lcl_ace_window.
 
     METHODS:
       constructor IMPORTING i_tname           TYPE any OPTIONAL
@@ -4213,9 +4188,6 @@ CLASS lcl_table_viewer IMPLEMENTATION.
       zcl_smd_common=>refresh( mo_sel->mo_sel_alv ).
       zcl_smd_common=>refresh( mo_alv ).
       mo_sel->mo_debugger->handle_user_command( 'SHOW' ).
-      LOOP AT mo_column_emitters INTO DATA(emit).
-        emit-emitter->emit_col( emit-column ).
-      ENDLOOP.
     ENDIF.
   ENDMETHOD.
 ENDCLASS.
