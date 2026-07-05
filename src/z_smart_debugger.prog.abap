@@ -3,7 +3,7 @@ REPORT  z_smart_debugger_script.
 
 *<SCRIPT:HEADER>
 *<SCRIPTNAME>Z_SMART_DEBUGGER_SCRIPT</SCRIPTNAME>
-*<SCRIPT_CLASS>zcl_smd_DEBUGGER_SCRIPT</SCRIPT_CLASS>
+*<SCRIPT_CLASS>LCL_DEBUGGER_SCRIPT</SCRIPT_CLASS>
 *<SINGLE_RUN>X</SINGLE_RUN>
 
 *</SCRIPT:HEADER>
@@ -17,7 +17,7 @@ REPORT  z_smart_debugger_script.
 
 *<SCRIPT:HEADER>
 *<SCRIPTNAME>Z_SMART_DEBUGGER_TEST</SCRIPTNAME>
-*<SCRIPT_CLASS>zcl_smd_DEBUGGER_SCRIPT</SCRIPT_CLASS>
+*<SCRIPT_CLASS>LCL_DEBUGGER_SCRIPT</SCRIPT_CLASS>
 *<SCRIPT_COMMENT>Debugger Skript: Default Template</SCRIPT_COMMENT>
 *<SINGLE_STEP>X</SINGLE_STEP>
 
@@ -54,13 +54,14 @@ REPORT  z_smart_debugger_script.
 *  & https://github.com/larshp/ABAP-Object-Visualizer - Abap Object Visualizer
 *  & https://github.com/ysichov/SDE_abapgit - Simple Data Explorer
 
-CLASS Zcl_smd_receiver DEFINITION DEFERRED.
-CLASS Zcl_smd_transmitter DEFINITION DEFERRED.
+CLASS lcl_ai DEFINITION DEFERRED.
+CLASS lcl_data_receiver DEFINITION DEFERRED.
+CLASS lcl_data_transmitter DEFINITION DEFERRED.
 CLASS zcl_smd_rtti_tree DEFINITION DEFERRED.
-CLASS Zcl_smd_window DEFINITION DEFERRED.
-CLASS zcl_smd_table_viewer DEFINITION DEFERRED.
-CLASS zcl_smd_mermaid DEFINITION DEFERRED.
-CLASS zcl_smd_appl DEFINITION.
+CLASS lcl_ace_window DEFINITION DEFERRED.
+CLASS lcl_table_viewer DEFINITION DEFERRED.
+CLASS lcl_mermaid DEFINITION DEFERRED.
+CLASS lcl_appl DEFINITION.
 
   PUBLIC SECTION.
 
@@ -83,8 +84,8 @@ CLASS zcl_smd_appl DEFINITION.
         domain      TYPE text60,
         datatype    TYPE string,
         length      TYPE i,
-        transmitter TYPE REF TO Zcl_smd_transmitter,
-        receiver    TYPE REF TO Zcl_smd_receiver,
+        transmitter TYPE REF TO lcl_data_transmitter,
+        receiver    TYPE REF TO lcl_data_receiver,
         color       TYPE lvc_t_scol,
         style       TYPE lvc_t_styl,
       END OF selection_display,
@@ -168,7 +169,7 @@ CLASS zcl_smd_appl DEFINITION.
 
            BEGIN OF t_obj,
              name       TYPE string,
-             alv_viewer TYPE REF TO zcl_smd_table_viewer,
+             alv_viewer TYPE REF TO lcl_table_viewer,
            END OF t_obj,
 
            BEGIN OF t_popup,
@@ -230,11 +231,11 @@ CLASS zcl_smd_appl DEFINITION.
       open_int_table IMPORTING it_tab    TYPE ANY TABLE OPTIONAL
                                it_ref    TYPE REF TO data OPTIONAL
                                i_name    TYPE string
-                               io_window TYPE REF TO Zcl_smd_window.
+                               io_window TYPE REF TO lcl_ace_window.
 
 ENDCLASS.
 
-CLASS zcl_smd_popup DEFINITION.
+CLASS lcl_popup DEFINITION.
 
   PUBLIC SECTION.
     CLASS-DATA m_counter              TYPE i.
@@ -255,7 +256,7 @@ CLASS zcl_smd_popup DEFINITION.
 ENDCLASS.
 
 
-CLASS zcl_smd_popup IMPLEMENTATION.
+CLASS lcl_popup IMPLEMENTATION.
 
   METHOD constructor.
     m_additional_name = i_additional_name.
@@ -294,21 +295,21 @@ CLASS zcl_smd_popup IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD on_box_close.
-    LOOP AT zcl_smd_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>) WHERE parent = sender .
+    LOOP AT lcl_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>) WHERE parent = sender .
       <popup>-child->free( ).
       CLEAR <popup>-child.
     ENDLOOP.
     IF sy-subrc <> 0.
-      DELETE  zcl_smd_appl=>mt_popups WHERE child = sender.
+      DELETE  lcl_appl=>mt_popups WHERE child = sender.
     ENDIF.
-    DELETE zcl_smd_appl=>mt_popups WHERE child IS INITIAL.
+    DELETE lcl_appl=>mt_popups WHERE child IS INITIAL.
     sender->free( ).
   ENDMETHOD.
 
 ENDCLASS.
 
 
-CLASS zcl_smd_dd_data DEFINITION."drag&drop data
+CLASS lcl_dd_data DEFINITION."drag&drop data
 
   PUBLIC  SECTION.
     DATA: m_row    TYPE i,
@@ -316,7 +317,7 @@ CLASS zcl_smd_dd_data DEFINITION."drag&drop data
 
 ENDCLASS.
 
-CLASS zcl_smd_dragdrop DEFINITION.
+CLASS lcl_dragdrop DEFINITION.
 
   PUBLIC SECTION.
     CLASS-METHODS:
@@ -325,30 +326,93 @@ CLASS zcl_smd_dragdrop DEFINITION.
 
 ENDCLASS.
 
-
-CLASS zcl_smd_rtti DEFINITION.
+CLASS lcl_alv_common DEFINITION.
 
   PUBLIC SECTION.
+    CONSTANTS: c_white(4) TYPE x VALUE '00000001'. "white background
+
     CLASS-METHODS:
-      create_table_by_name IMPORTING i_tname TYPE tabname
-                           CHANGING  c_table TYPE REF TO data,
-
-      create_struc_handle IMPORTING i_tname  TYPE tabname
-                          EXPORTING e_t_comp TYPE abap_component_tab
-                                    e_handle TYPE REF TO cl_abap_structdescr.
+      refresh IMPORTING i_obj TYPE REF TO cl_gui_alv_grid i_layout TYPE lvc_s_layo OPTIONAL i_soft TYPE char01 OPTIONAL,
+      translate_field IMPORTING i_lang TYPE ddlanguage OPTIONAL CHANGING c_fld TYPE lvc_s_fcat,
+      get_selected IMPORTING i_obj TYPE REF TO cl_gui_alv_grid RETURNING VALUE(e_index) TYPE i.
 
 ENDCLASS.
 
-CLASS zcl_smd_debugger_script DEFINITION DEFERRED.
+CLASS lcl_alv_common IMPLEMENTATION.
 
-CLASS zcl_smd_source_parser DEFINITION.
+  METHOD refresh.
+
+    DATA stable TYPE lvc_s_stbl.
+    stable = 'XX'.
+    IF i_layout IS SUPPLIED.
+      i_obj->set_frontend_layout( i_layout ).
+    ENDIF.
+    i_obj->refresh_table_display( EXPORTING is_stable = stable i_soft_refresh = i_soft ).
+
+  ENDMETHOD.
+
+  METHOD translate_field.
+
+    DATA: field_info TYPE TABLE OF dfies.
+
+    CALL FUNCTION 'DDIF_FIELDINFO_GET'
+      EXPORTING
+        tabname        = c_fld-tabname
+        fieldname      = c_fld-fieldname
+        langu          = i_lang
+      TABLES
+        dfies_tab      = field_info
+      EXCEPTIONS
+        not_found      = 1
+        internal_error = 2
+        OTHERS         = 3.
+
+    IF sy-subrc = 0.
+      READ TABLE field_info INDEX 1 INTO DATA(info).
+      IF info-scrtext_l IS INITIAL AND info-scrtext_m IS INITIAL AND info-scrtext_s IS INITIAL.
+        IF info-fieldtext IS NOT INITIAL.
+          MOVE info-fieldtext TO: c_fld-reptext, c_fld-scrtext_l, c_fld-scrtext_m, c_fld-scrtext_s .
+        ELSE.
+          MOVE info-fieldname TO: c_fld-reptext, c_fld-scrtext_l, c_fld-scrtext_m, c_fld-scrtext_s .
+        ENDIF.
+      ELSE.
+        c_fld-scrtext_l = info-scrtext_l.
+        c_fld-scrtext_m = info-scrtext_m.
+        c_fld-scrtext_s = info-scrtext_s.
+        IF info-reptext IS NOT INITIAL.
+          c_fld-reptext   = info-reptext.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD get_selected.
+
+    i_obj->get_selected_cells( IMPORTING et_cell = DATA(sel_cells) ).
+    IF lines( sel_cells ) > 0.
+      e_index = sel_cells[ 1 ]-row_id.
+    ELSE.
+      i_obj->get_selected_rows( IMPORTING et_index_rows = DATA(sel_rows) ).
+      IF lines( sel_rows ) > 0.
+        e_index = sel_rows[ 1 ]-index.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lcl_debugger_script DEFINITION DEFERRED.
+
+CLASS lcl_source_parser DEFINITION.
 
   PUBLIC SECTION.
-    CLASS-METHODS: parse_tokens IMPORTING i_program TYPE program io_debugger TYPE REF TO zcl_smd_debugger_script.
+    CLASS-METHODS: parse_tokens IMPORTING i_program TYPE program io_debugger TYPE REF TO lcl_debugger_script.
 
 ENDCLASS.
 
-CLASS zcl_smd_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super.
+CLASS lcl_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_super.
 
   PUBLIC SECTION.
     TYPES: BEGIN OF t_obj,
@@ -369,8 +433,8 @@ CLASS zcl_smd_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_s
           mt_ret_exp        TYPE tpda_scr_locals_it,
           m_hide            TYPE x,
           m_counter         TYPE i,
-          mt_steps          TYPE  TABLE OF zcl_smd_appl=>t_step_counter, "source code steps
-          mt_var_step       TYPE  TABLE OF zcl_smd_appl=>var_table_h,
+          mt_steps          TYPE  TABLE OF lcl_appl=>t_step_counter, "source code steps
+          mt_var_step       TYPE  TABLE OF lcl_appl=>var_table_h,
           m_step            TYPE i,
           m_is_find         TYPE xfeld,
           m_stop_stack      TYPE i,
@@ -378,17 +442,17 @@ CLASS zcl_smd_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_s
           m_refresh         TYPE xfeld, "to refactor
           m_update          TYPE xfeld,
           is_step           TYPE xfeld,
-          ms_stack_prev     TYPE   zcl_smd_appl=>t_stack,
-          ms_stack          TYPE   zcl_smd_appl=>t_stack,
+          ms_stack_prev     TYPE   lcl_appl=>t_stack,
+          ms_stack          TYPE   lcl_appl=>t_stack,
           is_history        TYPE xfeld,
           m_hist_step       TYPE i,
           m_step_delta      TYPE i,
-          mt_vars_hist_view TYPE STANDARD TABLE OF zcl_smd_appl=>var_table,
-          mt_vars_hist      TYPE STANDARD TABLE OF zcl_smd_appl=>var_table,
-          mt_state          TYPE STANDARD TABLE OF zcl_smd_appl=>var_table,
+          mt_vars_hist_view TYPE STANDARD TABLE OF lcl_appl=>var_table,
+          mt_vars_hist      TYPE STANDARD TABLE OF lcl_appl=>var_table,
+          mt_state          TYPE STANDARD TABLE OF lcl_appl=>var_table,
           mv_recurse        TYPE i,
-          mt_classes_types  TYPE TABLE OF zcl_smd_appl=>t_classes_types,
-          mo_window         TYPE REF TO Zcl_smd_window,
+          mt_classes_types  TYPE TABLE OF lcl_appl=>t_classes_types,
+          mo_window         TYPE REF TO lcl_ace_window,
           mv_f7_stop        TYPE xfeld,
           m_f6_level        TYPE i,
           m_target_stack    TYPE i,
@@ -411,7 +475,7 @@ CLASS zcl_smd_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_s
       run_script_hist IMPORTING i_step  TYPE i OPTIONAL
                       EXPORTING es_stop TYPE xfeld
                       ,
-      show_variables CHANGING it_var TYPE zcl_smd_appl=>variables RETURNING VALUE(stop) TYPE xfeld,
+      show_variables CHANGING it_var TYPE lcl_appl=>variables RETURNING VALUE(stop) TYPE xfeld,
       set_selected_vars,
       save_hist IMPORTING
                   i_name              TYPE clike
@@ -520,7 +584,7 @@ CLASS zcl_smd_debugger_script DEFINITION INHERITING FROM  cl_tpda_script_class_s
 
 ENDCLASS.
 
-CLASS zcl_smd_mermaid DEFINITION INHERITING FROM zcl_smd_popup FRIENDS  zcl_smd_debugger_script.
+CLASS lcl_mermaid DEFINITION INHERITING FROM lcl_popup FRIENDS  lcl_debugger_script.
 
   PUBLIC SECTION.
 
@@ -532,7 +596,7 @@ CLASS zcl_smd_mermaid DEFINITION INHERITING FROM zcl_smd_popup FRIENDS  zcl_smd_
            tt_if TYPE STANDARD TABLE OF ts_if WITH EMPTY KEY.
 
 
-    DATA: mo_debugger     TYPE REF TO zcl_smd_debugger_script,
+    DATA: mo_debugger     TYPE REF TO lcl_debugger_script,
           mo_mm_container TYPE REF TO cl_gui_container,
           mo_mm_toolbar   TYPE REF TO cl_gui_container,
           mo_toolbar      TYPE REF TO cl_gui_toolbar,
@@ -541,9 +605,9 @@ CLASS zcl_smd_mermaid DEFINITION INHERITING FROM zcl_smd_popup FRIENDS  zcl_smd_
           ms_if           TYPE ts_if,
           mt_if           TYPE tt_if,
           mv_step         TYPE i,
-          mt_steps        TYPE zcl_smd_appl=>tt_steps.
+          mt_steps        TYPE lcl_appl=>tt_steps.
 
-    METHODS: constructor IMPORTING io_debugger TYPE REF TO zcl_smd_debugger_script
+    METHODS: constructor IMPORTING io_debugger TYPE REF TO lcl_debugger_script
                                    i_type      TYPE string,
 
       steps_flow IMPORTING i_direction TYPE ui_func OPTIONAL,
@@ -556,7 +620,7 @@ CLASS zcl_smd_mermaid DEFINITION INHERITING FROM zcl_smd_popup FRIENDS  zcl_smd_
 
 ENDCLASS.
 
-CLASS zcl_smd_rtti_tree DEFINITION FINAL. " INHERITING FROM zcl_smd_popup.
+CLASS zcl_smd_rtti_tree DEFINITION FINAL. " INHERITING FROM lcl_popup.
 
   PUBLIC SECTION.
 
@@ -595,16 +659,16 @@ CLASS zcl_smd_rtti_tree DEFINITION FINAL. " INHERITING FROM zcl_smd_popup.
           m_syst_key      TYPE salv_de_node_key,
           m_ldb_key       TYPE salv_de_node_key,
           m_icon          TYPE salv_de_tree_image,
-          mt_vars         TYPE STANDARD TABLE OF zcl_smd_appl=>var_table,
+          mt_vars         TYPE STANDARD TABLE OF lcl_appl=>var_table,
           mt_classes_leaf TYPE TABLE OF t_classes_leaf,
           m_prg_info      TYPE tpda_scr_prg_info,
-          mo_debugger     TYPE REF TO zcl_smd_debugger_script,
+          mo_debugger     TYPE REF TO lcl_debugger_script,
           m_tree          TYPE REF TO cl_salv_tree.
 
     METHODS constructor IMPORTING i_header   TYPE clike DEFAULT 'View'
                                   i_type     TYPE xfeld OPTIONAL
                                   i_cont     TYPE REF TO cl_gui_container OPTIONAL
-                                  i_debugger TYPE REF TO zcl_smd_debugger_script OPTIONAL.
+                                  i_debugger TYPE REF TO lcl_debugger_script OPTIONAL.
 
     METHODS del_variable IMPORTING  i_full_name TYPE string i_state TYPE xfeld OPTIONAL.
 
@@ -618,18 +682,18 @@ CLASS zcl_smd_rtti_tree DEFINITION FINAL. " INHERITING FROM zcl_smd_popup.
 
     METHODS add_obj_nodes
       IMPORTING
-                is_var            TYPE zcl_smd_appl=>var_table
+                is_var            TYPE lcl_appl=>var_table
       RETURNING VALUE(e_root_key) TYPE salv_de_node_key.
 
     METHODS delete_node IMPORTING i_key TYPE salv_de_node_key.
-    METHODS display IMPORTING io_debugger TYPE REF TO zcl_smd_debugger_script OPTIONAL.
+    METHODS display IMPORTING io_debugger TYPE REF TO lcl_debugger_script OPTIONAL.
 
     METHODS traverse
       IMPORTING
                 io_type_descr       TYPE REF TO cl_abap_typedescr
                 i_parent_key        TYPE salv_de_node_key
                 i_rel               TYPE salv_de_node_relation
-                is_var              TYPE zcl_smd_appl=>var_table
+                is_var              TYPE lcl_appl=>var_table
                 ir_up               TYPE REF TO data OPTIONAL
                 i_parent_calculated TYPE string OPTIONAL
                 i_struc_name        TYPE string OPTIONAL
@@ -640,7 +704,7 @@ CLASS zcl_smd_rtti_tree DEFINITION FINAL. " INHERITING FROM zcl_smd_popup.
                 io_type_descr       TYPE REF TO cl_abap_typedescr
                 i_parent_key        TYPE salv_de_node_key
                 i_rel               TYPE salv_de_node_relation
-                is_var              TYPE zcl_smd_appl=>var_table
+                is_var              TYPE lcl_appl=>var_table
                 ir_up               TYPE REF TO data OPTIONAL
                 i_parent_calculated TYPE string OPTIONAL
                 i_struc_name        TYPE string OPTIONAL
@@ -651,7 +715,7 @@ CLASS zcl_smd_rtti_tree DEFINITION FINAL. " INHERITING FROM zcl_smd_popup.
                 io_type_descr       TYPE REF TO cl_abap_typedescr
                 i_parent_key        TYPE salv_de_node_key
                 i_rel               TYPE salv_de_node_relation
-                is_var              TYPE zcl_smd_appl=>var_table
+                is_var              TYPE lcl_appl=>var_table
                 i_value             TYPE any OPTIONAL
                 i_parent_calculated TYPE string OPTIONAL
       RETURNING VALUE(e_root_key)   TYPE salv_de_node_key.
@@ -660,7 +724,7 @@ CLASS zcl_smd_rtti_tree DEFINITION FINAL. " INHERITING FROM zcl_smd_popup.
       IMPORTING
                 i_parent_key        TYPE salv_de_node_key
                 i_rel               TYPE salv_de_node_relation
-                is_var              TYPE zcl_smd_appl=>var_table
+                is_var              TYPE lcl_appl=>var_table
                 i_value             TYPE any OPTIONAL
                 ir_up               TYPE REF TO data OPTIONAL
                 i_parent_calculated TYPE string OPTIONAL
@@ -671,7 +735,7 @@ CLASS zcl_smd_rtti_tree DEFINITION FINAL. " INHERITING FROM zcl_smd_popup.
                 io_type_descr       TYPE REF TO cl_abap_typedescr
                 i_parent_key        TYPE salv_de_node_key
                 i_rel               TYPE salv_de_node_relation
-                is_var              TYPE zcl_smd_appl=>var_table
+                is_var              TYPE lcl_appl=>var_table
                 ir_up               TYPE REF TO data OPTIONAL
                 i_parent_calculated TYPE string OPTIONAL
       RETURNING VALUE(e_root_key)   TYPE salv_de_node_key.
@@ -694,9 +758,367 @@ CLASS zcl_smd_rtti_tree DEFINITION FINAL. " INHERITING FROM zcl_smd_popup.
 
 ENDCLASS.
 
+CLASS lcl_ai_api DEFINITION.
+
+  PUBLIC SECTION.
+
+    METHODS  call_openai  IMPORTING i_prompt TYPE string RETURNING VALUE(answer) TYPE string.
+  PRIVATE SECTION.
+    DATA: mv_api_key TYPE string.
+
+    METHODS: build_request
+      IMPORTING
+        i_prompt  TYPE string
+      EXPORTING
+        e_payload TYPE string ,
+      send_request
+        IMPORTING
+          i_payload  TYPE string
+        EXPORTING
+          e_response TYPE string,
+      output
+        IMPORTING
+                  i_prompt      TYPE string
+                  i_content     TYPE string
+        RETURNING VALUE(answer) TYPE string.
+
+ENDCLASS.
+
+CLASS lcl_ai_api IMPLEMENTATION.
+
+  METHOD call_openai.
+    DATA: prompt   TYPE string,
+          payload  TYPE string,
+          response TYPE string.
+
+    "Build payload
+    CALL METHOD build_request
+      EXPORTING
+        i_prompt  = i_prompt
+      IMPORTING
+        e_payload = payload.
+
+    CALL METHOD me->send_request
+      EXPORTING
+        i_payload  = payload
+      IMPORTING
+        e_response = response.
+
+    answer = output(
+      EXPORTING
+        i_prompt  = i_prompt
+        i_content = response ).
+
+  ENDMETHOD.
+
+  METHOD build_request.
+
+    DATA: payload TYPE string.
+
+    payload = |{ '{ "model": "mistral-tiny", "messages": [{ "role": "user", "content": "' && i_prompt &&  '" }], "max_tokens": 1000 } ' }|.
+
+    e_payload = payload.
+  ENDMETHOD.
+
+  METHOD send_request.
+
+    DATA: o_http_client TYPE REF TO if_http_client,
+          response_body TYPE string,
+          header        TYPE string.
+
+    CALL METHOD cl_http_client=>create_by_destination
+      EXPORTING
+        destination              = 'Z_LM' "SM59 local config
+      IMPORTING
+        client                   = o_http_client
+      EXCEPTIONS
+        argument_not_found       = 1
+        destination_not_found    = 2
+        destination_no_authority = 3
+        plugin_not_active        = 4
+        internal_error           = 5
+        OTHERS                   = 13.
+    IF sy-subrc <> 0.
+*     Implement suitable error handling here
+    ENDIF.
+
+    mv_api_key = 'lmstudio'. "any name for local LLMs or secret key for external
+    "set request header
+    o_http_client->request->set_header_field( name = 'Content-Type' value = 'application/json' ).
+    o_http_client->request->set_header_field( name = 'Authorization' value = |Bearer { mv_api_key }| ).
+
+    o_http_client->request->set_method('POST').
+
+    "set payload
+    o_http_client->request->set_cdata( i_payload ).
+
+    CALL METHOD o_http_client->send
+      EXCEPTIONS
+        http_communication_failure = 1
+        http_invalid_state         = 2
+        http_processing_failed     = 3
+        http_invalid_timeout       = 4
+        OTHERS                     = 5.
+    IF sy-subrc = 0.
+      CALL METHOD o_http_client->receive
+        EXCEPTIONS
+          http_communication_failure = 1
+          http_invalid_state         = 2
+          http_processing_failed     = 3
+          OTHERS                     = 4.
+      "Get response
+      IF sy-subrc <> 0.
+        response_body = o_http_client->response->get_data( ).
+        e_response = response_body.
+      ELSE.
+        response_body = o_http_client->response->get_data( ).
+        IF response_body IS NOT INITIAL.
+          e_response = response_body.
+        ELSE.
+          e_response = 'Call was succeesful, but got no response'.
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD output.
+
+    DATA: text(1000) TYPE c,
+          string     TYPE string,
+          content    TYPE string,
+          reasoning  TYPE string.
+
+    TYPES: BEGIN OF lty_s_message,
+             role              TYPE string,
+             content           TYPE string,
+             reasoning_content TYPE string,
+           END           OF lty_s_message,
+           lty_t_message TYPE STANDARD TABLE OF lty_s_message WITH NON-UNIQUE DEFAULT KEY,
+           BEGIN OF lty_s_choice,
+             index         TYPE string,
+             message       TYPE lty_s_message,
+             logprobs      TYPE string,
+             finish_reason TYPE string,
+           END      OF lty_s_choice,
+           BEGIN OF lty_s_base_chatgpt_res,
+             id      TYPE string,
+             object  TYPE string,
+             created TYPE string,
+             model   TYPE string,
+             choices TYPE TABLE OF lty_s_choice WITH NON-UNIQUE DEFAULT KEY,
+           END OF lty_s_base_chatgpt_res.
+
+    DATA response TYPE lty_s_base_chatgpt_res.
+
+    DATA: binary TYPE xstring.
+
+    DATA: o_x2c TYPE REF TO cl_abap_conv_in_ce.
+    o_x2c = cl_abap_conv_in_ce=>create( encoding = 'UTF-8' ).
+    binary = i_content.
+    o_x2c->convert( EXPORTING input = binary
+                     IMPORTING data  = string ).
+
+    /ui2/cl_json=>deserialize( EXPORTING json = string CHANGING data = response ).
+
+    IF  response-choices IS NOT INITIAL.
+      content = response-choices[ 1 ]-message-content.
+      reasoning = response-choices[ 1 ]-message-reasoning_content.
+    ELSE.
+      content = string.
+    ENDIF.
+
+    answer = content.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lcl_ai DEFINITION INHERITING FROM lcl_popup.
+
+  PUBLIC SECTION.
+    DATA: mo_ai_box               TYPE REF TO cl_gui_dialogbox_container,
+          mo_ai_splitter          TYPE REF TO cl_gui_splitter_container,
+          mo_ai_toolbar_container TYPE REF TO cl_gui_container,
+          mo_ai_toolbar           TYPE REF TO cl_gui_toolbar,
+          mo_prompt_container     TYPE REF TO cl_gui_container,
+          mo_answer_container     TYPE REF TO cl_gui_container,
+          mo_prompt_text          TYPE REF TO cl_gui_textedit,
+          mo_answer_text          TYPE REF TO cl_gui_textedit,
+          mv_prompt               TYPE string,
+          mv_answer               TYPE string.
+
+    METHODS: constructor IMPORTING io_source TYPE REF TO cl_ci_source_include
+                                   io_parent TYPE REF TO cl_gui_dialogbox_container,
+      add_ai_toolbar_buttons,
+      hnd_ai_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode.
+
+ENDCLASS.
+
+CLASS lcl_ai IMPLEMENTATION.
+
+  METHOD constructor.
+    super->constructor( ).
+
+    mo_ai_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.9' i_width = 1400 i_hight = 400 ).
+    CREATE OBJECT mo_ai_splitter
+      EXPORTING
+        parent  = mo_ai_box
+        rows    = 3
+        columns = 1
+      EXCEPTIONS
+        OTHERS  = 1.
+
+    "save new popup ref
+    APPEND INITIAL LINE TO lcl_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>).
+    <popup>-parent = io_parent.
+    <popup>-child = mo_ai_box.
+
+    SET HANDLER on_box_close FOR mo_ai_box.
+
+    mo_ai_splitter->get_container(
+         EXPORTING
+           row       = 1
+           column    = 1
+         RECEIVING
+           container = mo_ai_toolbar_container ).
+
+    mo_ai_splitter->get_container(
+      EXPORTING
+        row       = 2
+        column    = 1
+      RECEIVING
+        container = mo_prompt_container ).
+
+    mo_ai_splitter->get_container(
+      EXPORTING
+        row       = 3
+        column    = 1
+      RECEIVING
+        container = mo_answer_container  ).
+
+    mo_ai_splitter->set_row_height( id = 1 height = '3' ).
+
+    mo_ai_splitter->set_row_sash( id    = 1
+                                  type  = 0
+                                  value = 0 ).
 
 
-CLASS Zcl_smd_window DEFINITION INHERITING FROM zcl_smd_popup .
+    SET HANDLER on_box_close FOR mo_ai_box.
+
+
+    CREATE OBJECT mo_prompt_text
+      EXPORTING
+        parent                 = mo_prompt_container
+      EXCEPTIONS
+        error_cntl_create      = 1
+        error_cntl_init        = 2
+        error_cntl_link        = 3
+        error_dp_create        = 4
+        gui_type_not_supported = 5
+        OTHERS                 = 6.
+    IF sy-subrc <> 0.
+      on_box_close( mo_box ).
+    ENDIF.
+
+    CREATE OBJECT mo_answer_text
+      EXPORTING
+        parent                 = mo_answer_container
+      EXCEPTIONS
+        error_cntl_create      = 1
+        error_cntl_init        = 2
+        error_cntl_link        = 3
+        error_dp_create        = 4
+        gui_type_not_supported = 5
+        OTHERS                 = 6.
+    IF sy-subrc <> 0.
+      on_box_close( mo_box ).
+    ENDIF.
+
+    mo_answer_text->set_readonly_mode( ).
+
+    CREATE OBJECT mo_ai_toolbar EXPORTING parent = mo_ai_toolbar_container.
+    add_ai_toolbar_buttons( ).
+    mo_ai_toolbar->set_visible( 'X' ).
+
+    "set prompt
+    DATA string TYPE TABLE OF char255.
+
+    APPEND INITIAL LINE TO string ASSIGNING FIELD-SYMBOL(<str>).
+    <str> = 'Explain please the meaning of this ABAP code'.
+    mv_prompt = <str>.
+    APPEND INITIAL LINE TO string ASSIGNING <str>.
+
+
+    LOOP AT io_source->lines INTO DATA(line).
+      APPEND INITIAL LINE TO string ASSIGNING <str>.
+      <str> = line.
+      mv_prompt = mv_prompt && <str>.
+    ENDLOOP.
+
+    mo_prompt_text->set_text_as_r3table( string ).
+    cl_gui_control=>set_focus( mo_ai_box ).
+
+  ENDMETHOD.
+
+  METHOD add_ai_toolbar_buttons.
+
+    DATA: button TYPE ttb_button,
+          events TYPE cntl_simple_events,
+          event  LIKE LINE OF events.
+
+    button  = VALUE #(
+     ( function = 'AI' icon = CONV #( icon_manikin_unknown_gender ) quickinfo = 'Ask AI' text = 'Ask AI' ) ).
+
+    mo_ai_toolbar->add_button_group( button ).
+
+*   Register events
+    event-eventid = cl_gui_toolbar=>m_id_function_selected.
+    event-appl_event = space.
+    APPEND event TO events.
+
+    mo_ai_toolbar->set_registered_events( events = events ).
+    SET HANDLER me->hnd_ai_toolbar FOR mo_ai_toolbar.
+
+  ENDMETHOD.
+
+  METHOD hnd_ai_toolbar.
+
+    DATA: prompt TYPE string.
+
+    CASE fcode.
+
+      WHEN 'AI'.
+
+        cl_gui_cfw=>flush( ).
+        DATA(o_ai) = NEW lcl_ai_api( ).
+
+        DATA text TYPE TABLE OF char255.
+        CALL METHOD mo_prompt_text->get_text_as_stream
+          IMPORTING
+            text = text.
+        CLEAR mv_prompt.
+        LOOP AT text INTO DATA(line).
+          CONCATENATE mv_prompt line
+                      "cl_abap_char_utilities=>newline
+                 INTO mv_prompt.
+        ENDLOOP.
+
+        REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline IN mv_prompt WITH ''.
+        REPLACE ALL OCCURRENCES OF '#' IN mv_prompt WITH ''.
+        REPLACE ALL OCCURRENCES OF REGEX '[[:cntrl:]]' IN mv_prompt WITH ' '.
+
+        mv_answer = o_ai->call_openai( mv_prompt ).
+        mo_answer_text->set_textstream( mv_answer ).
+
+    ENDCASE.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lcl_ace_window DEFINITION INHERITING FROM lcl_popup .
 
   PUBLIC SECTION.
 
@@ -824,7 +1246,7 @@ CLASS Zcl_smd_window DEFINITION INHERITING FROM zcl_smd_popup .
           m_debug_button         LIKE sy-ucomm,
           m_show_step            TYPE xfeld,
           mt_bpoints             TYPE tt_bpoints,
-          mo_debugger            TYPE REF TO zcl_smd_debugger_script,
+          mo_debugger            TYPE REF TO lcl_debugger_script,
           mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
           mo_splitter_var        TYPE REF TO cl_gui_splitter_container,
           mo_splitter_steps      TYPE REF TO cl_gui_splitter_container,
@@ -839,7 +1261,7 @@ CLASS Zcl_smd_window DEFINITION INHERITING FROM zcl_smd_popup .
           mo_stack_container     TYPE REF TO cl_gui_container,
           mo_hist_container      TYPE REF TO cl_gui_container,
           mo_code_viewer         TYPE REF TO cl_gui_abapedit,
-          mt_stack               TYPE TABLE OF zcl_smd_appl=>t_stack,
+          mt_stack               TYPE TABLE OF lcl_appl=>t_stack,
           mo_toolbar             TYPE REF TO cl_gui_toolbar,
           mo_salv_stack          TYPE REF TO cl_salv_table,
           mo_salv_steps          TYPE REF TO cl_salv_table,
@@ -854,7 +1276,7 @@ CLASS Zcl_smd_window DEFINITION INHERITING FROM zcl_smd_popup .
           mt_locals_set          TYPE STANDARD TABLE OF ts_locals,
           mt_globals_set         TYPE STANDARD TABLE OF ts_globals.
 
-    METHODS: constructor IMPORTING i_debugger TYPE REF TO zcl_smd_debugger_script i_additional_name TYPE string OPTIONAL,
+    METHODS: constructor IMPORTING i_debugger TYPE REF TO lcl_debugger_script i_additional_name TYPE string OPTIONAL,
       add_toolbar_buttons,
       hnd_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode,
       on_stack_double_click FOR EVENT double_click OF cl_salv_events_table IMPORTING row column,
@@ -870,7 +1292,7 @@ CLASS Zcl_smd_window DEFINITION INHERITING FROM zcl_smd_popup .
 
 ENDCLASS.
 
-CLASS zcl_smd_debugger_script IMPLEMENTATION.
+CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD prologue.
     super->prologue( ).
@@ -881,11 +1303,11 @@ CLASS zcl_smd_debugger_script IMPLEMENTATION.
     CONSTANTS: c_mask TYPE x VALUE '01'.
 
     is_step = abap_on.
-    zcl_smd_appl=>check_mermaid( ).
-    zcl_smd_appl=>init_lang( ).
-    zcl_smd_appl=>init_icons_table( ).
+    lcl_appl=>check_mermaid( ).
+    lcl_appl=>init_lang( ).
+    lcl_appl=>init_icons_table( ).
 
-    mo_window = NEW Zcl_smd_window( me ).
+    mo_window = NEW lcl_ace_window( me ).
 
     mo_tree_imp = NEW zcl_smd_rtti_tree( i_header   = 'Importing parameters'
                                      i_type     = 'I'
@@ -1867,7 +2289,7 @@ CLASS zcl_smd_debugger_script IMPLEMENTATION.
           ENDIF.
         ENDIF.
       ELSE.
-        zcl_smd_source_parser=>parse_tokens( i_program = mo_window->m_prg-include io_debugger = me ).
+        lcl_source_parser=>parse_tokens( i_program = mo_window->m_prg-include io_debugger = me ).
         READ TABLE mo_window->mt_source WITH KEY include = ms_stack-include INTO source.
       ENDIF.
     ENDIF.
@@ -2990,10 +3412,10 @@ CLASS zcl_smd_debugger_script IMPLEMENTATION.
 
   ENDMETHOD.
 
-ENDCLASS.                    "zcl_smd_debugger_script IMPLEMENTATION
+ENDCLASS.                    "lcl_debugger_script IMPLEMENTATION
 
 
-CLASS Zcl_smd_window IMPLEMENTATION.
+CLASS lcl_ace_window IMPLEMENTATION.
 
   METHOD constructor.
     super->constructor( ).
@@ -3146,7 +3568,7 @@ CLASS Zcl_smd_window IMPLEMENTATION.
      ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear all selected variables' text = 'Clear vars' )
      ( butn_type = 3  )
-     ( COND #( WHEN zcl_smd_appl=>is_mermaid_active = abap_true
+     ( COND #( WHEN lcl_appl=>is_mermaid_active = abap_true
       THEN VALUE #( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = ' Calls Flow' text = 'Diagram' ) ) )
      ( function = 'SMART' icon = CONV #( icon_wizard ) quickinfo = 'Calculations sequence' text = 'Calculations Flow' )
      ( function = 'COVERAGE' icon = CONV #( icon_wizard ) quickinfo = 'Coverage ' text = 'Coverage' )
@@ -3173,7 +3595,7 @@ CLASS Zcl_smd_window IMPLEMENTATION.
 
   METHOD set_program.
 
-    zcl_smd_source_parser=>parse_tokens( i_program = i_program io_debugger = mo_debugger ).
+    lcl_source_parser=>parse_tokens( i_program = i_program io_debugger = mo_debugger ).
     READ TABLE mt_source WITH KEY include = i_program INTO DATA(source).
     IF sy-subrc = 0.
       mo_code_viewer->set_text( table = source-source->lines ).
@@ -3285,7 +3707,7 @@ CLASS Zcl_smd_window IMPLEMENTATION.
         dp_error_send    = 3
         OTHERS           = 4 ).
 
-    "DATA(o_handler) = NEW zcl_smd_event_handler( mo_debugger ).
+    "DATA(o_handler) = NEW lcl_event_handler( mo_debugger ).
 
     event-eventid    = cl_gui_textedit=>event_double_click.
     APPEND event TO events.
@@ -3456,8 +3878,8 @@ CLASS Zcl_smd_window IMPLEMENTATION.
 
       WHEN 'AI'.
 
-*        READ TABLE mo_debugger->mo_window->mt_source INDEX 1 INTO DATA(source).
-*        NEW zcl_smd_ai( io_source = source-source io_parent =  mo_debugger->mo_window->mo_box ).
+        READ TABLE mo_debugger->mo_window->mt_source INDEX 1 INTO DATA(source).
+        NEW lcl_ai( io_source = source-source io_parent =  mo_debugger->mo_window->mo_box ).
 
       WHEN 'ENGINE'.
         m_version = m_version BIT-XOR c_mask.
@@ -3516,10 +3938,10 @@ CLASS Zcl_smd_window IMPLEMENTATION.
         ENDIF.
 
       WHEN 'DIAGRAM'.
-        DATA(o_mermaid) = NEW zcl_smd_mermaid( io_debugger = mo_debugger i_type =  'DIAG' ).
+        DATA(o_mermaid) = NEW lcl_mermaid( io_debugger = mo_debugger i_type =  'DIAG' ).
 
       WHEN 'SMART'.
-        o_mermaid = NEW zcl_smd_mermaid( io_debugger = mo_debugger i_type =  'SMART' ).
+        o_mermaid = NEW lcl_mermaid( io_debugger = mo_debugger i_type =  'SMART' ).
         mo_debugger->show_step( ).
 
       WHEN 'COVERAGE'.
@@ -3557,10 +3979,10 @@ CLASS Zcl_smd_window IMPLEMENTATION.
 
       WHEN 'STEPS'.
 
-        zcl_smd_appl=>open_int_table( i_name = 'Steps' it_tab = mo_debugger->mt_steps io_window = mo_debugger->mo_window ).
+        lcl_appl=>open_int_table( i_name = 'Steps' it_tab = mo_debugger->mt_steps io_window = mo_debugger->mo_window ).
 
       WHEN 'HISTORY'.
-        DATA: vars_hist TYPE TABLE OF zcl_smd_appl=>var_table_temp.
+        DATA: vars_hist TYPE TABLE OF lcl_appl=>var_table_temp.
         LOOP AT  mo_debugger->mt_vars_hist INTO DATA(vars).
           APPEND INITIAL LINE TO vars_hist ASSIGNING FIELD-SYMBOL(<hist>).
           MOVE-CORRESPONDING vars TO <hist>.
@@ -3582,7 +4004,7 @@ CLASS Zcl_smd_window IMPLEMENTATION.
             ENDIF.
           ENDIF.
         ENDLOOP.
-        zcl_smd_appl=>open_int_table( i_name = |mt_vars_hist - History({ lines( vars_hist ) })| it_tab = vars_hist io_window = mo_debugger->mo_window ).
+        lcl_appl=>open_int_table( i_name = |mt_vars_hist - History({ lines( vars_hist ) })| it_tab = vars_hist io_window = mo_debugger->mo_window ).
 
     ENDCASE.
 
@@ -3625,48 +4047,20 @@ CLASS Zcl_smd_window IMPLEMENTATION.
 
 ENDCLASS.
 
-CLASS zcl_smd_sel_opt DEFINITION DEFERRED.
+CLASS lcl_sel_opt DEFINITION DEFERRED.
 
-CLASS zcl_smd_rtti IMPLEMENTATION.
 
-  METHOD create_struc_handle.
-    cl_abap_typedescr=>describe_by_name( EXPORTING  p_name         = i_tname
-                                         RECEIVING  p_descr_ref    = DATA(o_descr)
-                                         EXCEPTIONS type_not_found = 1 ).
-    IF sy-subrc = 0.
-      e_handle ?= o_descr.
-    ELSE.
-      RETURN.
-    ENDIF.
-
-  ENDMETHOD.
-
-  METHOD create_table_by_name.
-
-    DATA: o_new_tab  TYPE REF TO cl_abap_tabledescr,
-          o_new_type TYPE REF TO cl_abap_structdescr.
-
-    create_struc_handle( EXPORTING i_tname = i_tname IMPORTING e_handle = o_new_type ).
-    o_new_tab = cl_abap_tabledescr=>create(
-      p_line_type  = o_new_type
-      p_table_kind = cl_abap_tabledescr=>tablekind_std
-      p_unique     = abap_false ).
-    CREATE DATA c_table TYPE HANDLE o_new_tab.  "Create a New table type
-  ENDMETHOD.
-
-ENDCLASS.
-
-CLASS Zcl_smd_transmitter DEFINITION.
+CLASS lcl_data_transmitter DEFINITION.
 
   PUBLIC SECTION.
-    EVENTS: data_changed EXPORTING VALUE(e_row) TYPE zcl_smd_appl=>t_sel_row,
+    EVENTS: data_changed EXPORTING VALUE(e_row) TYPE lcl_appl=>t_sel_row,
       col_changed EXPORTING VALUE(e_column) TYPE lvc_fname.
-    METHODS: emit IMPORTING e_row TYPE zcl_smd_appl=>t_sel_row,
+    METHODS: emit IMPORTING e_row TYPE lcl_appl=>t_sel_row,
       emit_col IMPORTING e_column TYPE lvc_fname.
 
 ENDCLASS.
 
-CLASS Zcl_smd_transmitter IMPLEMENTATION.
+CLASS lcl_data_transmitter IMPLEMENTATION.
 
   METHOD  emit.
     RAISE EVENT data_changed EXPORTING e_row = e_row.
@@ -3679,23 +4073,23 @@ CLASS Zcl_smd_transmitter IMPLEMENTATION.
 
 ENDCLASS.
 
-CLASS Zcl_smd_receiver DEFINITION.
+CLASS lcl_data_receiver DEFINITION.
 
   PUBLIC SECTION.
-    DATA: mo_transmitter TYPE REF TO Zcl_smd_transmitter,
-          o_tab_from     TYPE REF TO zcl_smd_table_viewer,
-          o_sel_to       TYPE REF TO zcl_smd_sel_opt,
+    DATA: mo_transmitter TYPE REF TO lcl_data_transmitter,
+          o_tab_from     TYPE REF TO lcl_table_viewer,
+          o_sel_to       TYPE REF TO lcl_sel_opt,
           m_from_field   TYPE lvc_fname,
           m_to_field     TYPE lvc_fname.
     METHODS: constructor
-      IMPORTING io_transmitter TYPE REF TO Zcl_smd_transmitter OPTIONAL
-                io_tab_from    TYPE REF TO zcl_smd_table_viewer OPTIONAL
-                io_sel_to      TYPE REF TO zcl_smd_sel_opt OPTIONAL
+      IMPORTING io_transmitter TYPE REF TO lcl_data_transmitter OPTIONAL
+                io_tab_from    TYPE REF TO lcl_table_viewer OPTIONAL
+                io_sel_to      TYPE REF TO lcl_sel_opt OPTIONAL
                 i_from_field   TYPE lvc_fname OPTIONAL
                 i_to_field     TYPE lvc_fname OPTIONAL,
       shut_down,
-      update FOR EVENT data_changed OF Zcl_smd_transmitter IMPORTING e_row,
-      update_col FOR EVENT col_changed OF Zcl_smd_transmitter IMPORTING e_column,
+      update FOR EVENT data_changed OF lcl_data_transmitter IMPORTING e_row,
+      update_col FOR EVENT col_changed OF lcl_data_transmitter IMPORTING e_column,
       on_grid_button_click
         FOR EVENT button_click OF cl_gui_alv_grid
         IMPORTING
@@ -3704,22 +4098,22 @@ CLASS Zcl_smd_receiver DEFINITION.
 
 ENDCLASS.
 
-CLASS zcl_smd_sel_opt DEFINITION.
+CLASS lcl_sel_opt DEFINITION.
 
   PUBLIC SECTION.
-    DATA: mo_debugger TYPE REF TO zcl_smd_table_viewer,
+    DATA: mo_debugger TYPE REF TO lcl_table_viewer,
           mo_sel_alv  TYPE REF TO cl_gui_alv_grid,
           mt_fcat     TYPE lvc_t_fcat,
-          mt_sel_tab  TYPE TABLE OF zcl_smd_appl=>selection_display,
+          mt_sel_tab  TYPE TABLE OF lcl_appl=>selection_display,
           ms_layout   TYPE lvc_s_layo.
 
     EVENTS: selection_done.
     METHODS:
-      constructor IMPORTING io_viewer TYPE REF TO zcl_smd_table_viewer io_container TYPE REF TO cl_gui_container,
+      constructor IMPORTING io_viewer TYPE REF TO lcl_table_viewer io_container TYPE REF TO cl_gui_container,
       raise_selection_done,
       update_sel_tab,
       set_value IMPORTING  i_field TYPE any i_low TYPE any OPTIONAL i_high TYPE any OPTIONAL i_clear TYPE xfeld DEFAULT abap_true ,
-      update_sel_row CHANGING c_sel_row TYPE zcl_smd_appl=>selection_display.
+      update_sel_row CHANGING c_sel_row TYPE lcl_appl=>selection_display.
 
   PRIVATE SECTION.
     METHODS:
@@ -3738,12 +4132,12 @@ CLASS zcl_smd_sel_opt DEFINITION.
 
 ENDCLASS.
 
-CLASS zcl_smd_table_viewer DEFINITION INHERITING FROM zcl_smd_popup.
+CLASS lcl_table_viewer DEFINITION INHERITING FROM lcl_popup.
 
   PUBLIC SECTION.
     TYPES: BEGIN OF t_column_emitter,
              column  TYPE lvc_fname,
-             emitter TYPE REF TO Zcl_smd_transmitter,
+             emitter TYPE REF TO lcl_data_transmitter,
            END OF t_column_emitter,
            BEGIN OF t_elem,
              field TYPE fieldname,
@@ -3753,7 +4147,7 @@ CLASS zcl_smd_table_viewer DEFINITION INHERITING FROM zcl_smd_popup.
     DATA: m_lang             TYPE ddlanguage,
           m_tabname          TYPE tabname,
           mo_alv             TYPE REF TO cl_gui_alv_grid,
-          mo_sel             TYPE REF TO zcl_smd_sel_opt,
+          mo_sel             TYPE REF TO lcl_sel_opt,
           mr_table           TYPE REF TO data,
           mo_sel_parent      TYPE REF TO cl_gui_container,
           mo_alv_parent      TYPE REF TO cl_gui_container,
@@ -3764,14 +4158,14 @@ CLASS zcl_smd_table_viewer DEFINITION INHERITING FROM zcl_smd_popup.
           m_visible,
           m_std_tbar         TYPE x,
           m_show_empty       TYPE i,
-          mo_window          TYPE REF TO Zcl_smd_window.
+          mo_window          TYPE REF TO lcl_ace_window.
 
     METHODS:
       constructor IMPORTING i_tname           TYPE any OPTIONAL
                             i_additional_name TYPE string OPTIONAL
                             ir_tab            TYPE REF TO data OPTIONAL
-                            io_window         TYPE REF TO Zcl_smd_window,
-      refresh_table FOR EVENT selection_done OF zcl_smd_sel_opt.
+                            io_window         TYPE REF TO lcl_ace_window,
+      refresh_table FOR EVENT selection_done OF lcl_sel_opt.
 
   PRIVATE SECTION.
     METHODS:
@@ -3790,14 +4184,14 @@ CLASS zcl_smd_table_viewer DEFINITION INHERITING FROM zcl_smd_popup.
 
 ENDCLASS.
 
-CLASS zcl_smd_text_viewer DEFINITION FINAL INHERITING FROM zcl_smd_popup.
+CLASS lcl_text_viewer DEFINITION FINAL INHERITING FROM lcl_popup.
 
   PUBLIC SECTION.
     DATA: mo_text     TYPE REF TO cl_gui_textedit.
     METHODS: constructor IMPORTING ir_str TYPE REF TO data.
 ENDCLASS.
 
-CLASS zcl_smd_text_viewer IMPLEMENTATION.
+CLASS lcl_text_viewer IMPLEMENTATION.
 
   METHOD constructor.
     super->constructor( ).
@@ -3852,7 +4246,7 @@ CLASS zcl_smd_text_viewer IMPLEMENTATION.
 
 ENDCLASS.
 
-CLASS Zcl_smd_receiver IMPLEMENTATION.
+CLASS lcl_data_receiver IMPLEMENTATION.
 
   METHOD constructor.
 
@@ -3918,7 +4312,7 @@ CLASS Zcl_smd_receiver IMPLEMENTATION.
   METHOD update_col.
 
     DATA: updated,
-          sel_row   TYPE zcl_smd_appl=>t_sel_row.
+          sel_row   TYPE lcl_appl=>t_sel_row.
 
     FIELD-SYMBOLS: <tab>   TYPE STANDARD TABLE,
                    <field> TYPE any.
@@ -3960,7 +4354,7 @@ CLASS Zcl_smd_receiver IMPLEMENTATION.
 ENDCLASS.
 
 
-CLASS zcl_smd_table_viewer IMPLEMENTATION.
+CLASS lcl_table_viewer IMPLEMENTATION.
 
   METHOD constructor.
 
@@ -4096,7 +4490,7 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
 
     mo_box = create( i_width = 800 i_hight = 150 ).
     "save new popup ref
-    APPEND INITIAL LINE TO zcl_smd_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>).
+    APPEND INITIAL LINE TO lcl_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>).
     <popup>-parent = mo_window->mo_box.
     <popup>-child = mo_box.
 
@@ -4150,24 +4544,24 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
     set_header( ).
     layout-cwidth_opt = abap_true.
     layout-sel_mode = 'D'.
-    CREATE OBJECT zcl_smd_appl=>c_dragdropalv.
+    CREATE OBJECT lcl_appl=>c_dragdropalv.
     effect = cl_dragdrop=>move + cl_dragdrop=>copy.
 
-    CALL METHOD zcl_smd_appl=>c_dragdropalv->add
+    CALL METHOD lcl_appl=>c_dragdropalv->add
       EXPORTING
         flavor     = 'Line' ##NO_TEXT
         dragsrc    = abap_true
         droptarget = abap_true
         effect     = effect.
 
-    CALL METHOD zcl_smd_appl=>c_dragdropalv->get_handle IMPORTING handle = DATA(handle_alv).
+    CALL METHOD lcl_appl=>c_dragdropalv->get_handle IMPORTING handle = DATA(handle_alv).
     layout-s_dragdrop-grid_ddid = handle_alv.
 
     SET HANDLER   before_user_command
                   handle_user_command
                   handle_tab_toolbar
                   handle_doubleclick
-                  zcl_smd_dragdrop=>drag
+                  lcl_dragdrop=>drag
                   FOR mo_alv.
 
     CALL METHOD mo_alv->set_table_for_first_display
@@ -4190,7 +4584,7 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
     mo_alv->set_frontend_fieldcatalog( EXPORTING it_fieldcatalog = mt_alv_catalog ).
 
     LOOP AT mt_alv_catalog ASSIGNING FIELD-SYMBOL(<cat>) WHERE scrtext_l IS INITIAL.
-      zcl_smd_common=>translate_field( CHANGING c_fld = <cat> ).
+      lcl_alv_common=>translate_field( CHANGING c_fld = <cat> ).
     ENDLOOP.
 
     mo_alv->set_frontend_fieldcatalog( EXPORTING it_fieldcatalog = mt_alv_catalog ).
@@ -4262,7 +4656,7 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
 
     APPEND VALUE #( function = 'TECH' icon = icon_wd_caption quickinfo = 'Tech names'  butn_type = 0 ) TO toolbar.
 
-    LOOP AT zcl_smd_appl=>mt_lang INTO DATA(lang).
+    LOOP AT lcl_appl=>mt_lang INTO DATA(lang).
       IF sy-tabix > 10.
         EXIT.
       ENDIF.
@@ -4337,7 +4731,7 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
       APPEND INITIAL LINE TO et_catalog ASSIGNING FIELD-SYMBOL(<catalog>).
 
       <catalog>-col_pos = ind.
-      <catalog>-style = zcl_smd_common=>c_white.
+      <catalog>-style = lcl_alv_common=>c_white.
       <catalog>-fieldname = ls-name.
       <catalog>-f4availabl = abap_true.
 
@@ -4366,13 +4760,13 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
         IF sy-subrc = 0.
           IF <val> = 'Table'.
             ASSIGN COMPONENT 'REF'  OF STRUCTURE <row> TO FIELD-SYMBOL(<ref>).
-            zcl_smd_appl=>open_int_table( EXPORTING i_name = CONV #( e_column-fieldname ) it_ref = <ref> io_window = mo_window ).
+            lcl_appl=>open_int_table( EXPORTING i_name = CONV #( e_column-fieldname ) it_ref = <ref> io_window = mo_window ).
           ENDIF.
         ELSE.
           TRY.
               o_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| ).
               table_clone = o_table_descr->elem_clone( ).
-              zcl_smd_appl=>open_int_table( EXPORTING i_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone io_window = mo_window ).
+              lcl_appl=>open_int_table( EXPORTING i_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone io_window = mo_window ).
             CATCH cx_sy_move_cast_error.
           ENDTRY.
         ENDIF.
@@ -4386,7 +4780,7 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
         TRY.
             o_table_descr ?= cl_tpda_script_data_descr=>factory( |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| ).
             table_clone = o_table_descr->elem_clone( ).
-            zcl_smd_appl=>open_int_table( EXPORTING i_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone io_window = mo_window ).
+            lcl_appl=>open_int_table( EXPORTING i_name = |{ m_additional_name }[ { es_row_no-row_id } ]-{ e_column-fieldname }| it_ref = table_clone io_window = mo_window ).
           CATCH cx_sy_move_cast_error.
         ENDTRY.
     ENDCASE.
@@ -4398,7 +4792,7 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
     sender->free( ).
 
     "Free Memory
-    LOOP AT zcl_smd_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>) WHERE alv_viewer IS NOT INITIAL.
+    LOOP AT lcl_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>) WHERE alv_viewer IS NOT INITIAL.
       IF <obj>-alv_viewer->mo_box = sender.
         tabix = sy-tabix.
         EXIT.
@@ -4418,7 +4812,7 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
       ENDIF.
       FREE <obj>-alv_viewer.
       IF tabix NE 0.
-        DELETE zcl_smd_appl=>mt_obj INDEX tabix.
+        DELETE lcl_appl=>mt_obj INDEX tabix.
       ENDIF.
     ENDIF.
   ENDMETHOD.
@@ -4486,7 +4880,7 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
             <fields>-scrtext_l = <fields>-scrtext_m = <fields>-scrtext_s =  <fields>-reptext = <fields>-fieldname.
 
           WHEN OTHERS. "header names translation
-            IF line_exists( zcl_smd_appl=>mt_lang[ spras = e_ucomm ] ).
+            IF line_exists( lcl_appl=>mt_lang[ spras = e_ucomm ] ).
               translate_field( EXPORTING i_lang = CONV #( e_ucomm )  CHANGING c_fld = <fields> ).
               IF mo_sel IS BOUND.
                 READ TABLE mo_sel->mt_sel_tab ASSIGNING FIELD-SYMBOL(<sel>) WITH KEY field_label = <fields>-fieldname.
@@ -4506,7 +4900,7 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
       ENDLOOP.
     ENDIF.
 
-    IF line_exists( zcl_smd_appl=>mt_lang[ spras = e_ucomm ] ).
+    IF line_exists( lcl_appl=>mt_lang[ spras = e_ucomm ] ).
       m_lang = e_ucomm.
       set_header( ).
       mo_sel->set_value( i_field = 'SPRSL' i_low = m_lang ).
@@ -4514,12 +4908,12 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
 
     CALL METHOD mo_alv->set_frontend_fieldcatalog EXPORTING it_fieldcatalog = it_fields[].
 
-    zcl_smd_common=>refresh( mo_alv ).
+    lcl_alv_common=>refresh( mo_alv ).
     IF mo_sel IS BOUND.
       IF  e_ucomm = 'HIDE' OR e_ucomm = 'SHOW' OR e_ucomm = 'UPDATE' .
         mo_sel->update_sel_tab( ).
       ENDIF.
-      zcl_smd_common=>refresh( mo_sel->mo_sel_alv ).
+      lcl_alv_common=>refresh( mo_sel->mo_sel_alv ).
       mo_sel->mo_sel_alv->refresh_table_display(  ).
     ENDIF.
 
@@ -4528,7 +4922,7 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
 
   METHOD refresh_table.
 
-    DATA: row    TYPE zcl_smd_appl=>t_sel_row,
+    DATA: row    TYPE lcl_appl=>t_sel_row,
           filter TYPE lvc_t_filt.
 
     CLEAR filter.
@@ -4552,8 +4946,8 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
       CALL METHOD mo_alv->set_filter_criteria
         EXPORTING
           it_filter = filter.
-      zcl_smd_common=>refresh( mo_sel->mo_sel_alv ).
-      zcl_smd_common=>refresh( mo_alv ).
+      lcl_alv_common=>refresh( mo_sel->mo_sel_alv ).
+      lcl_alv_common=>refresh( mo_alv ).
       mo_sel->mo_debugger->handle_user_command( 'SHOW' ).
       LOOP AT mo_column_emitters INTO DATA(emit).
         emit-emitter->emit_col( emit-column ).
@@ -4562,7 +4956,7 @@ CLASS zcl_smd_table_viewer IMPLEMENTATION.
   ENDMETHOD.
 ENDCLASS.
 
-CLASS zcl_smd_sel_opt IMPLEMENTATION.
+CLASS lcl_sel_opt IMPLEMENTATION.
   METHOD constructor.
     DATA: effect     TYPE i,
           handle_alv TYPE i.
@@ -4570,17 +4964,17 @@ CLASS zcl_smd_sel_opt IMPLEMENTATION.
     mo_debugger = io_viewer.
     mo_sel_alv = NEW #( i_parent = io_container ).
     update_sel_tab( ).
-    CREATE OBJECT zcl_smd_appl=>c_dragdropalv.
+    CREATE OBJECT lcl_appl=>c_dragdropalv.
     effect =  cl_dragdrop=>copy. " + cl_dragdrop=>move.
 
-    CALL METHOD zcl_smd_appl=>c_dragdropalv->add
+    CALL METHOD lcl_appl=>c_dragdropalv->add
       EXPORTING
         flavor     = 'Line'
         dragsrc    = abap_true
         droptarget = abap_true
         effect     = effect.
 
-    CALL METHOD zcl_smd_appl=>c_dragdropalv->get_handle IMPORTING handle = handle_alv.
+    CALL METHOD lcl_appl=>c_dragdropalv->get_handle IMPORTING handle = handle_alv.
     ms_layout-s_dragdrop-col_ddid = handle_alv.
     init_fcat( handle_alv ).
     ms_layout-cwidth_opt = abap_true.
@@ -4599,8 +4993,8 @@ CLASS zcl_smd_sel_opt IMPLEMENTATION.
 
     SET HANDLER handle_user_command
                 handle_sel_toolbar
-                zcl_smd_dragdrop=>drag
-                zcl_smd_dragdrop=>drop
+                lcl_dragdrop=>drag
+                lcl_dragdrop=>drop
                 on_data_changed
                 on_data_changed_finished
                 on_grid_button_click
@@ -4648,9 +5042,9 @@ CLASS zcl_smd_sel_opt IMPLEMENTATION.
 
   METHOD raise_selection_done.
 
-    DATA: row TYPE zcl_smd_appl=>t_sel_row.
+    DATA: row TYPE lcl_appl=>t_sel_row.
 
-    zcl_smd_common=>refresh( mo_sel_alv ).
+    lcl_alv_common=>refresh( mo_sel_alv ).
     RAISE EVENT selection_done.
     LOOP AT mt_sel_tab  ASSIGNING FIELD-SYMBOL(<sel>).
       IF <sel>-transmitter IS NOT INITIAL.
@@ -4687,7 +5081,7 @@ CLASS zcl_smd_sel_opt IMPLEMENTATION.
       <sel_tab>-domain =  catalog-domname.
       <sel_tab>-datatype = catalog-datatype.
       <sel_tab>-length = catalog-outputlen.
-      zcl_smd_common=>translate_field( EXPORTING i_lang = mo_debugger->m_lang CHANGING c_fld = catalog ).
+      lcl_alv_common=>translate_field( EXPORTING i_lang = mo_debugger->m_lang CHANGING c_fld = catalog ).
       <sel_tab>-name = catalog-scrtext_l.
     ENDLOOP.
 
@@ -4724,7 +5118,7 @@ CLASS zcl_smd_sel_opt IMPLEMENTATION.
       update_sel_row( CHANGING c_sel_row = <to> ).
     ENDIF.
     IF <to>-transmitter IS BOUND.
-      DATA: row TYPE zcl_smd_appl=>t_sel_row.
+      DATA: row TYPE lcl_appl=>t_sel_row.
       MOVE-CORRESPONDING <to> TO row.
       <to>-transmitter->emit( EXPORTING e_row = row ).
     ENDIF.
@@ -4793,7 +5187,7 @@ CLASS zcl_smd_sel_opt IMPLEMENTATION.
     ENDIF.
 
     TRY.
-        c_sel_row-option_icon = zcl_smd_appl=>m_option_icons[ sign = c_sel_row-sign option = c_sel_row-opti ]-icon_name.
+        c_sel_row-option_icon = lcl_appl=>m_option_icons[ sign = c_sel_row-sign option = c_sel_row-opti ]-icon_name.
       CATCH cx_sy_itab_line_not_found.                  "#EC NO_HANDLER
     ENDTRY.
 
@@ -4853,7 +5247,7 @@ CLASS zcl_smd_sel_opt IMPLEMENTATION.
     READ TABLE mt_sel_tab ASSIGNING FIELD-SYMBOL(<sel>) INDEX es_row_no-row_id.
     DATA(fname) =  <sel>-field_label.
 
-    zcl_smd_appl=>mt_sel[] = mt_sel_tab[].
+    lcl_appl=>mt_sel[] = mt_sel_tab[].
     IF <sel>-element = 'HROBJID'.
       READ TABLE mt_sel_tab INTO DATA(sel) WITH KEY field_label = 'OTYPE'.
       otype = sel-low.
@@ -5075,7 +5469,7 @@ CLASS zcl_smd_sel_opt IMPLEMENTATION.
     ENDIF.
 
     update_sel_row( CHANGING c_sel_row = <tab> ).
-    zcl_smd_common=>refresh( EXPORTING i_obj = mo_sel_alv i_layout = ms_layout ).
+    lcl_alv_common=>refresh( EXPORTING i_obj = mo_sel_alv i_layout = ms_layout ).
     raise_selection_done( ).
 
   ENDMETHOD.
@@ -5092,7 +5486,7 @@ CLASS zcl_smd_sel_opt IMPLEMENTATION.
     DATA: func  TYPE ui_func,
           funcs TYPE ui_functions.
 
-    DATA(index) = zcl_smd_common=>get_selected( mo_sel_alv ).
+    DATA(index) = lcl_alv_common=>get_selected( mo_sel_alv ).
 
     IF index IS NOT INITIAL.
       READ TABLE mt_sel_tab INTO DATA(sel) INDEX index.
@@ -5171,14 +5565,14 @@ CLASS zcl_smd_sel_opt IMPLEMENTATION.
       RAISE EVENT selection_done.
     ENDIF.
 
-    zcl_smd_common=>refresh( mo_debugger->mo_alv ).
+    lcl_alv_common=>refresh( mo_debugger->mo_alv ).
     RAISE EVENT selection_done.
 
   ENDMETHOD.                           "handle_user_command
 
 ENDCLASS.
 
-CLASS zcl_smd_appl IMPLEMENTATION.
+CLASS lcl_appl IMPLEMENTATION.
 
   METHOD init_icons_table.
 
@@ -5243,7 +5637,7 @@ CLASS zcl_smd_appl IMPLEMENTATION.
     ELSE.
       GET REFERENCE OF it_tab INTO r_tab.
     ENDIF.
-    APPEND INITIAL LINE TO zcl_smd_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
+    APPEND INITIAL LINE TO lcl_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
     <obj>-alv_viewer = NEW #(  i_additional_name = i_name ir_tab = r_tab io_window = io_window ).
     <obj>-alv_viewer->mo_sel->raise_selection_done( ).
 
@@ -6122,9 +6516,9 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
 
       CASE <kind>.
         WHEN cl_abap_datadescr=>typekind_table.
-          zcl_smd_appl=>open_int_table( i_name = <fullname> it_ref = <ref> io_window = mo_debugger->mo_window ).
+          lcl_appl=>open_int_table( i_name = <fullname> it_ref = <ref> io_window = mo_debugger->mo_window ).
         WHEN cl_abap_datadescr=>typekind_string.
-          NEW zcl_smd_text_viewer( <ref> ).
+          NEW lcl_text_viewer( <ref> ).
       ENDCASE.
     ENDIF.
 
@@ -6177,11 +6571,11 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
 
 ENDCLASS.
 
-CLASS zcl_smd_dragdrop IMPLEMENTATION.
+CLASS lcl_dragdrop IMPLEMENTATION.
 
   METHOD drag.
 
-    DATA(dataobj) = NEW zcl_smd_dd_data( ).
+    DATA(dataobj) = NEW lcl_dd_data( ).
     dataobj->m_row = e_row-index.
     dataobj->m_column = e_column.
     e_dragdropobj->object = dataobj.
@@ -6190,10 +6584,10 @@ CLASS zcl_smd_dragdrop IMPLEMENTATION.
 
   METHOD drop."It should be refactored someday...
 
-    DATA: row          TYPE zcl_smd_appl=>t_sel_row,
+    DATA: row          TYPE lcl_appl=>t_sel_row,
           set_receiver.
 
-    LOOP AT zcl_smd_appl=>mt_obj INTO DATA(lo).
+    LOOP AT lcl_appl=>mt_obj INTO DATA(lo).
       "to
       IF lo-alv_viewer->mo_sel IS BOUND.
         IF e_dragdropobj->droptargetctrl = lo-alv_viewer->mo_sel->mo_sel_alv.
@@ -6315,7 +6709,7 @@ CLASS zcl_smd_dragdrop IMPLEMENTATION.
     ENDIF.
 
     DATA(o_alv) = CAST cl_gui_alv_grid( e_dragdropobj->dragsourcectrl ).
-    zcl_smd_common=>refresh( EXPORTING i_obj = o_alv ).
+    lcl_alv_common=>refresh( EXPORTING i_obj = o_alv ).
 
     o_alv ?= e_dragdropobj->droptargetctrl.
     o_to->raise_selection_done( ).
@@ -6324,7 +6718,7 @@ CLASS zcl_smd_dragdrop IMPLEMENTATION.
 
 ENDCLASS.
 
-CLASS zcl_smd_source_parser IMPLEMENTATION.
+CLASS lcl_source_parser IMPLEMENTATION.
 
   METHOD parse_tokens.
 
@@ -6335,19 +6729,19 @@ CLASS zcl_smd_source_parser IMPLEMENTATION.
           o_scan          TYPE REF TO cl_ci_scan,
           o_statement     TYPE REF TO if_ci_kzn_statement_iterator,
           o_procedure     TYPE REF TO if_ci_kzn_statement_iterator,
-          token           TYPE Zcl_smd_window=>ts_kword,
-          calculated_var  TYPE Zcl_smd_window=>calculated_var,
-          composed_var    TYPE Zcl_smd_window=>composed_vars,
-          tokens          TYPE Zcl_smd_window=>tt_kword,
-          calculated_vars TYPE  Zcl_smd_window=>tt_calculated,
-          composed        TYPE Zcl_smd_window=>tt_composed,
-          call            TYPE Zcl_smd_window=>ts_calls,
-          call_line       TYPE Zcl_smd_window=>ts_calls_line,
-          int_table       TYPE Zcl_smd_window=>ts_int_tabs,
-          int_tables      TYPE Zcl_smd_window=>tt_tabs,
+          token           TYPE lcl_ace_window=>ts_kword,
+          calculated_var  TYPE lcl_ace_window=>calculated_var,
+          composed_var    TYPE lcl_ace_window=>composed_vars,
+          tokens          TYPE lcl_ace_window=>tt_kword,
+          calculated_vars TYPE  lcl_ace_window=>tt_calculated,
+          composed        TYPE lcl_ace_window=>tt_composed,
+          call            TYPE lcl_ace_window=>ts_calls,
+          call_line       TYPE lcl_ace_window=>ts_calls_line,
+          int_table       TYPE lcl_ace_window=>ts_int_tabs,
+          int_tables      TYPE lcl_ace_window=>tt_tabs,
           eventtype       TYPE string,
           eventname       TYPE string,
-          param           TYPE Zcl_smd_window=>ts_params,
+          param           TYPE lcl_ace_window=>ts_params,
           par             TYPE char1,
           type            TYPE char1,
           class           TYPE xfeld,
@@ -6900,7 +7294,7 @@ CLASS zcl_smd_source_parser IMPLEMENTATION.
 
 ENDCLASS.
 
-CLASS zcl_smd_mermaid IMPLEMENTATION.
+CLASS lcl_mermaid IMPLEMENTATION.
 
   METHOD constructor.
 
@@ -6911,7 +7305,7 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
     mo_debugger = io_debugger.
     mv_type = i_type.
 
-    CHECK zcl_smd_appl=>is_mermaid_active = abap_true.
+    CHECK lcl_appl=>is_mermaid_active = abap_true.
 
     CASE mv_type.
       WHEN 'DIAG'.
@@ -6923,7 +7317,7 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
     IF mo_box IS INITIAL.
       mo_box = create( i_name = text i_width = 1000 i_hight = 300 ).
       "save new popup ref
-      APPEND INITIAL LINE TO zcl_smd_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>).
+      APPEND INITIAL LINE TO lcl_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>).
       <popup>-parent = mo_debugger->mo_window->mo_box.
       <popup>-child = mo_box.
 
@@ -7607,7 +8001,7 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
     "code execution scanner
     DATA: max       TYPE i,
           step      TYPE i,
-          call_line TYPE Zcl_smd_window=>ts_calls_line.
+          call_line TYPE lcl_ace_window=>ts_calls_line.
 
     READ TABLE mo_debugger->mo_window->mt_source INDEX 1 INTO DATA(source).
 
@@ -7712,7 +8106,7 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
             ref       TYPE REF TO data.
       CALL METHOD mo_diagram->('GET_SOURCE_CODE_STRING') RECEIVING result = mm_string.
       GET REFERENCE OF mm_string INTO ref.
-      NEW zcl_smd_text_viewer( ref ).
+      NEW lcl_text_viewer( ref ).
 
       RETURN.
     ENDIF.
@@ -7729,7 +8123,7 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
 
   METHOD open_mermaid.
 
-    CHECK zcl_smd_appl=>is_mermaid_active = abap_true.
+    CHECK lcl_appl=>is_mermaid_active = abap_true.
 
     TRY.
         IF mo_diagram IS INITIAL.
