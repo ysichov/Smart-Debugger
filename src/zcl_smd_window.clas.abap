@@ -115,6 +115,8 @@ CLASS zcl_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUBL
 
     TYPES tt_table TYPE STANDARD TABLE OF ts_table
           WITH NON-UNIQUE DEFAULT KEY.
+    TYPES tt_html TYPE STANDARD TABLE OF w3html
+          WITH NON-UNIQUE DEFAULT KEY.
 
     DATA: m_version              TYPE x, " 0 - alpha, 01 - beta
           m_history              TYPE x,
@@ -145,7 +147,7 @@ CLASS zcl_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUBL
           mo_hist_container      TYPE REF TO cl_gui_container,
           mo_ai_splitter         TYPE REF TO cl_gui_splitter_container,
           mo_ai_prompt           TYPE REF TO cl_gui_textedit,
-          mo_ai_result           TYPE REF TO cl_gui_textedit,
+          mo_ai_result           TYPE REF TO cl_gui_html_viewer,
           mo_ai_agent            TYPE REF TO zcl_smd_ai_agent,
           ms_ai_pending_action   TYPE zif_smd_ai_agent_types=>ty_action,
           mo_code_viewer         TYPE REF TO cl_gui_abapedit,
@@ -179,6 +181,7 @@ CLASS zcl_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUBL
       create_ai_panel,
       run_ai_agent,
       set_ai_text IMPORTING io_text TYPE REF TO cl_gui_textedit i_text TYPE string,
+      set_ai_result IMPORTING i_text TYPE string,
       create_code_viewer,
       show_stack.
 
@@ -504,15 +507,11 @@ CLASS zcl_smd_window IMPLEMENTATION.
       EXCEPTIONS
         OTHERS = 1.
 
-    mo_ai_result->set_readonly_mode( ).
-
     set_ai_text(
       io_text = mo_ai_prompt
       i_text  = |Find the most likely cause of the bug. Use the current step, stack, variables, and change history.| ).
 
-    set_ai_text(
-      io_text = mo_ai_result
-      i_text  = |AI agent ready. Press AI again to analyze the current debugger state.| ).
+    set_ai_result( |AI agent ready. Press AI again to analyze the current debugger state.| ).
 
     cl_gui_cfw=>flush( ).
 
@@ -540,7 +539,7 @@ CLASS zcl_smd_window IMPLEMENTATION.
       DATA(lv_step_tool) = ms_ai_pending_action-tool.
       CLEAR ms_ai_pending_action.
 
-      set_ai_text( io_text = mo_ai_result i_text = lv_action_result ).
+      set_ai_result( lv_action_result ).
       cl_gui_cfw=>flush( ).
 
       IF lv_step_tool = 'step_debugger' AND lv_step_command IS NOT INITIAL.
@@ -551,7 +550,7 @@ CLASS zcl_smd_window IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    set_ai_text( io_text = mo_ai_result i_text = |AI is analyzing current debug state...| ).
+    set_ai_result( |AI is analyzing current debug state...| ).
     cl_gui_cfw=>flush( ).
 
     DATA lv_result TYPE string.
@@ -563,8 +562,47 @@ CLASS zcl_smd_window IMPLEMENTATION.
         es_action = ms_ai_pending_action
         ev_text   = lv_result ).
 
-    set_ai_text( io_text = mo_ai_result i_text = lv_result ).
+    set_ai_result( lv_result ).
     cl_gui_cfw=>flush( ).
+
+  ENDMETHOD.
+
+  METHOD set_ai_result.
+
+    DATA(lv_html) = zcl_code_html_gen=>markdown_to_html( i_text ).
+    DATA lt_html TYPE tt_html.
+    DATA ls_html TYPE w3html.
+    DATA lv_offset TYPE i.
+    DATA lv_url TYPE c LENGTH 255.
+
+    CHECK mo_ai_result IS BOUND.
+
+    WHILE lv_offset < strlen( lv_html ).
+      CLEAR ls_html.
+      ls_html-line = substring(
+        val = lv_html
+        off = lv_offset
+        len = nmin( val1 = 255 val2 = strlen( lv_html ) - lv_offset ) ).
+      APPEND ls_html TO lt_html.
+      lv_offset = lv_offset + 255.
+    ENDWHILE.
+
+    mo_ai_result->load_data(
+      EXPORTING
+        type         = 'text'
+        subtype      = 'html'
+      IMPORTING
+        assigned_url = lv_url
+      CHANGING
+        data_table   = lt_html
+      EXCEPTIONS
+        OTHERS       = 1 ).
+
+    mo_ai_result->show_url(
+      EXPORTING
+        url = lv_url
+      EXCEPTIONS
+        OTHERS = 1 ).
 
   ENDMETHOD.
 

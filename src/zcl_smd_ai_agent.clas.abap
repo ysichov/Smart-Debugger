@@ -38,6 +38,7 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     DATA mo_debugger TYPE REF TO zcl_smd_debugger_base.
     DATA mv_last_error TYPE string.
     DATA mv_last_tool_result TYPE string.
+    DATA mt_action_log TYPE tt_string.
 
     CLASS-DATA gv_cached_password TYPE string.
 
@@ -77,6 +78,10 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     METHODS execute_plugin_tool
       IMPORTING
         !is_action     TYPE zif_smd_ai_agent_types=>ty_action
+      RETURNING
+        VALUE(rv_text) TYPE string.
+
+    METHODS get_action_log_text
       RETURNING
         VALUE(rv_text) TYPE string.
 
@@ -300,6 +305,8 @@ METHOD execute_action.
     ENDCASE.
 
     mv_last_tool_result = rv_text.
+    APPEND |{ sy-datum } { sy-uzeit } tool={ is_action-tool } command={ is_action-command } variable={ is_action-variable } target={ is_action-include }:{ is_action-line } reason={ is_action-reason } result={ rv_text }|
+      TO mt_action_log.
 
   ENDMETHOD.
 
@@ -326,6 +333,20 @@ METHOD execute_plugin_tool.
       CATCH cx_root INTO DATA(lx_root).
         rv_text = |AI action { is_action-tool } failed: { lx_root->get_text( ) }|.
     ENDTRY.
+
+  ENDMETHOD.
+
+
+METHOD get_action_log_text.
+
+    CHECK mt_action_log IS NOT INITIAL.
+
+    rv_text = `Confirmed AI actions:`.
+    LOOP AT mt_action_log INTO DATA(lv_log_line).
+      rv_text = rv_text &&
+        cl_abap_char_utilities=>newline &&
+        |{ sy-tabix }. { lv_log_line }|.
+    ENDLOOP.
 
   ENDMETHOD.
 
@@ -666,6 +687,14 @@ METHOD run.
             |Intent: { es_action-reason }| &&
             cl_abap_char_utilities=>newline &&
             |Press AI again to confirm this action.|.
+        ELSE.
+          DATA(lv_action_log) = get_action_log_text( ).
+          IF lv_action_log IS NOT INITIAL.
+            ev_text = ev_text &&
+              cl_abap_char_utilities=>newline &&
+              cl_abap_char_utilities=>newline &&
+              lv_action_log.
+          ENDIF.
         ENDIF.
 
       CATCH cx_root INTO DATA(lx_root).
