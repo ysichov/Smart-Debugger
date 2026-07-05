@@ -55,7 +55,8 @@ CLASS zcl_smd_aitool_breakpoint IMPLEMENTATION.
       `### set_breakpoint` && cl_abap_char_utilities=>newline &&
       `Sets, deletes, or toggles an ABAP debugger breakpoint.` && cl_abap_char_utilities=>newline &&
       `Use this tool only when a breakpoint directly supports the user's debugging goal. ` &&
-      `Always state the intent in the reason argument.`.
+      `Always state the intent in the reason argument. ` &&
+      `Use mode=delete when a loop breakpoint has already served its purpose and would stop repeated continue/F8 actions.`.
 
   ENDMETHOD.
 

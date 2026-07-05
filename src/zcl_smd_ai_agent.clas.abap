@@ -97,6 +97,10 @@ TYPES:
       IMPORTING
         !is_action TYPE zif_smd_ai_agent_types=>ty_action.
 
+    METHODS forget_ai_breakpoint
+      IMPORTING
+        !is_action TYPE zif_smd_ai_agent_types=>ty_action.
+
     METHODS is_known_ai_breakpoint
       IMPORTING
         !is_action        TYPE zif_smd_ai_agent_types=>ty_action
@@ -182,7 +186,7 @@ METHOD build_prompt.
             CHANGING
               ct_lines = lt_lines ).
         ENDLOOP.
-        append_line( EXPORTING i_line = `Do not call set_breakpoint again for any known breakpoint. If execution is not there yet, use F8 to continue to it. If execution is already there, verify variables or step once as needed.` CHANGING ct_lines = lt_lines ).
+        append_line( EXPORTING i_line = `Do not call set_breakpoint with mode=set again for any known breakpoint. If execution is not there yet, use F8 to continue to it. If a known breakpoint is inside a loop and would stop execution repeatedly, call set_breakpoint with mode=delete before continuing past it.` CHANGING ct_lines = lt_lines ).
       ENDIF.
 
       IF mo_debugger->mo_window IS BOUND.
@@ -345,7 +349,12 @@ METHOD execute_action.
         AND rv_text CP 'set_breakpoint result:*'
         AND mo_debugger IS BOUND
         AND mo_debugger->mo_window IS BOUND.
-          remember_ai_breakpoint( is_action ).
+          IF rv_text CS 'deleted=X'.
+            forget_ai_breakpoint( is_action ).
+          ENDIF.
+          IF rv_text CS 'set=X'.
+            remember_ai_breakpoint( is_action ).
+          ENDIF.
           mo_debugger->mo_window->set_program_line( mo_debugger->mo_window->m_prg-line ).
         ENDIF.
     ENDCASE.
@@ -372,6 +381,23 @@ METHOD is_known_ai_breakpoint.
     READ TABLE mt_ai_breakpoints TRANSPORTING NO FIELDS
       WITH KEY include = lv_include line = is_action-line.
     rv_known = xsdbool( sy-subrc = 0 ).
+
+  ENDMETHOD.
+
+
+METHOD forget_ai_breakpoint.
+
+    DATA lv_include TYPE string.
+
+    CHECK is_action-tool = 'set_breakpoint'.
+    CHECK is_action-include IS NOT INITIAL.
+    CHECK is_action-line > 0.
+
+    lv_include = is_action-include.
+    TRANSLATE lv_include TO UPPER CASE.
+    CONDENSE lv_include.
+
+    DELETE mt_ai_breakpoints WHERE include = lv_include AND line = is_action-line.
 
   ENDMETHOD.
 
@@ -563,7 +589,8 @@ METHOD get_system_prompt.
       'On follow-up turns after any confirmed AI action, do not repeat the earlier report; show only the new runtime observation, what it proves or disproves, and the next action. ' &&
       'Use read_variable when the exact runtime value of any ABAP variable, field, component, reference, or table expression is needed. ' &&
       'Use set_breakpoint with real TPDA include and 1-based source line numbers when stopping at a specific source line is useful; it still requires user confirmation before execution. ' &&
-      'Never call set_breakpoint for a line listed under Known AI-set breakpoints; treat it as already available and move to reach or verify it. ' &&
+      'Never call set_breakpoint with mode=set for a line listed under Known AI-set breakpoints; treat it as already available and move to reach or verify it. ' &&
+      'If a known breakpoint is inside a loop and has already served its verification purpose, call set_breakpoint with mode=delete before continuing quickly to another breakpoint or to the end. ' &&
       'After a relevant breakpoint has been set and the next goal is to reach it, propose step_debugger F8/continue; do not use F5 to walk toward a known breakpoint. ' &&
       'Use F5/F6/F7 only after reaching the suspicious area, when a single-step observation is needed. ' &&
       'Never call F8/continue unless you explain why it is safe and what breakpoint or guard stop will catch execution. ' &&
@@ -624,6 +651,7 @@ METHOD parse_tool_call.
         program TYPE string,
         include TYPE string,
         line    TYPE i,
+        mode    TYPE string,
         reason  TYPE string,
       END OF ty_break_args,
       BEGIN OF ty_read_args,
@@ -645,6 +673,11 @@ METHOD parse_tool_call.
           DATA ls_break TYPE ty_break_args.
           /ui2/cl_json=>deserialize( EXPORTING json = i_arguments CHANGING data = ls_break ).
           MOVE-CORRESPONDING ls_break TO rs_action.
+          TRANSLATE rs_action-mode TO LOWER CASE.
+          CONDENSE rs_action-mode.
+          IF rs_action-mode IS INITIAL.
+            rs_action-mode = 'set'.
+          ENDIF.
 
         ELSEIF i_name = 'read_variable'.
           DATA ls_read TYPE ty_read_args.
@@ -762,7 +795,8 @@ METHOD run.
             i_name      = ls_call-name
             i_arguments = ls_call-arguments ).
 
-          IF is_known_ai_breakpoint( es_action ) = abap_true.
+          IF is_known_ai_breakpoint( es_action ) = abap_true
+          AND es_action-mode = 'set'.
             IF mo_debugger IS BOUND
             AND mo_debugger->ms_stack-include = es_action-include
             AND mo_debugger->ms_stack-line = es_action-line.
@@ -800,7 +834,7 @@ METHOD run.
           ev_text = ev_text &&
             cl_abap_char_utilities=>newline &&
             cl_abap_char_utilities=>newline &&
-            |Pending AI action: { es_action-tool } { es_action-command } { es_action-variable } { es_action-include }:{ es_action-line }| &&
+            |Pending AI action: { es_action-tool } { es_action-command } { es_action-variable } { es_action-include }:{ es_action-line } mode={ es_action-mode }| &&
             cl_abap_char_utilities=>newline &&
             |Intent: { es_action-reason }| &&
             cl_abap_char_utilities=>newline &&

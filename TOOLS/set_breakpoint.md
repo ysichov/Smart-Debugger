@@ -13,6 +13,8 @@ Arguments:
 - breakpoint_type: `S` for session breakpoint, `E` for external breakpoint.
   Use `S` unless the user explicitly needs an external breakpoint.
 - mode: `set`, `delete`, or `toggle`. Use `set` by default.
+  Use `delete` when a breakpoint inside a loop has already served its purpose
+  and would stop repeated continue/F8 actions.
 - reason: short explanation visible to the user before/after execution.
 
 Safety:
