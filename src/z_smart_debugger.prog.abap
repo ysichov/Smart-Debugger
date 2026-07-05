@@ -3674,67 +3674,6 @@ CLASS lcl_table_viewer DEFINITION INHERITING FROM zcl_smd_popup.
 
 ENDCLASS.
 
-CLASS lcl_text_viewer DEFINITION FINAL INHERITING FROM zcl_smd_popup.
-
-  PUBLIC SECTION.
-    DATA: mo_text     TYPE REF TO cl_gui_textedit.
-    METHODS: constructor IMPORTING ir_str TYPE REF TO data.
-ENDCLASS.
-
-CLASS lcl_text_viewer IMPLEMENTATION.
-
-  METHOD constructor.
-    super->constructor( ).
-    mo_box = create( i_name = 'text' i_width = 700 i_hight = 200 ).
-    CREATE OBJECT mo_splitter
-      EXPORTING
-        parent  = mo_box
-        rows    = 1
-        columns = 1
-      EXCEPTIONS
-        OTHERS  = 1.
-
-    mo_splitter->get_container(
-      EXPORTING
-        row       = 1
-        column    = 1
-      RECEIVING
-        container = mo_variables_container ).
-
-    SET HANDLER on_box_close FOR mo_box.
-
-    CREATE OBJECT mo_text
-      EXPORTING
-        parent                 = mo_variables_container
-      EXCEPTIONS
-        error_cntl_create      = 1
-        error_cntl_init        = 2
-        error_cntl_link        = 3
-        error_dp_create        = 4
-        gui_type_not_supported = 5
-        OTHERS                 = 6.
-    IF sy-subrc <> 0.
-      on_box_close( mo_box ).
-    ENDIF.
-
-    mo_text->set_readonly_mode( ).
-    FIELD-SYMBOLS <str> TYPE string.
-    ASSIGN ir_str->* TO <str>.
-    DATA string TYPE TABLE OF char255.
-
-    WHILE strlen( <str> ) > 255.
-      APPEND <str>+0(255) TO string.
-      SHIFT <str> LEFT BY 255 PLACES.
-    ENDWHILE.
-
-    APPEND <str> TO string.
-    mo_text->set_text_as_r3table( string ).
-    CALL METHOD cl_gui_cfw=>flush.
-    mo_text->set_focus( mo_box ).
-
-  ENDMETHOD.
-
-ENDCLASS.
 
 CLASS lcl_data_receiver IMPLEMENTATION.
 
@@ -6008,7 +5947,7 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
         WHEN cl_abap_datadescr=>typekind_table.
           lcl_appl=>open_int_table( i_name = <fullname> it_ref = <ref> io_window = mo_debugger->mo_window ).
         WHEN cl_abap_datadescr=>typekind_string.
-          NEW lcl_text_viewer( <ref> ).
+          NEW zcl_smd_text_viewer( <ref> ).
       ENDCASE.
     ENDIF.
 
@@ -7596,7 +7535,7 @@ CLASS lcl_mermaid IMPLEMENTATION.
             ref       TYPE REF TO data.
       CALL METHOD mo_diagram->('GET_SOURCE_CODE_STRING') RECEIVING result = mm_string.
       GET REFERENCE OF mm_string INTO ref.
-      NEW lcl_text_viewer( ref ).
+      NEW zcl_smd_text_viewer( ref ).
 
       RETURN.
     ENDIF.
