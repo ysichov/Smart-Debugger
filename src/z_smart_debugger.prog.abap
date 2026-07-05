@@ -56,7 +56,7 @@ REPORT  z_smart_debugger_script.
 
 CLASS zcl_smd_rtti_tree DEFINITION DEFERRED.
 CLASS lcl_ace_window DEFINITION DEFERRED.
-CLASS lcl_table_viewer DEFINITION DEFERRED.
+CLASS zcl_smd_table_viewer DEFINITION DEFERRED.
 CLASS lcl_mermaid DEFINITION DEFERRED.
 CLASS lcl_appl DEFINITION.
 
@@ -164,7 +164,7 @@ CLASS lcl_appl DEFINITION.
 
            BEGIN OF t_obj,
              name       TYPE string,
-             alv_viewer TYPE REF TO lcl_table_viewer,
+             alv_viewer TYPE REF TO zcl_smd_table_viewer,
            END OF t_obj,
 
            BEGIN OF t_popup,
@@ -3516,16 +3516,16 @@ CLASS lcl_ace_window IMPLEMENTATION.
 
 ENDCLASS.
 
-CLASS lcl_sel_opt DEFINITION DEFERRED.
+CLASS zcl_smd_sel_opt DEFINITION DEFERRED.
 
 
 
 
 
-CLASS lcl_sel_opt DEFINITION.
+CLASS zcl_smd_sel_opt DEFINITION.
 
   PUBLIC SECTION.
-    DATA: mo_debugger TYPE REF TO lcl_table_viewer,
+    DATA: mo_debugger TYPE REF TO zcl_smd_table_viewer,
           mo_sel_alv  TYPE REF TO cl_gui_alv_grid,
           mt_fcat     TYPE lvc_t_fcat,
           mt_sel_tab  TYPE TABLE OF lcl_appl=>selection_display,
@@ -3533,7 +3533,7 @@ CLASS lcl_sel_opt DEFINITION.
 
     EVENTS: selection_done.
     METHODS:
-      constructor IMPORTING io_viewer TYPE REF TO lcl_table_viewer io_container TYPE REF TO cl_gui_container,
+      constructor IMPORTING io_viewer TYPE REF TO zcl_smd_table_viewer io_container TYPE REF TO cl_gui_container,
       raise_selection_done,
       update_sel_tab,
       set_value IMPORTING  i_field TYPE any i_low TYPE any OPTIONAL i_high TYPE any OPTIONAL i_clear TYPE xfeld DEFAULT abap_true ,
@@ -3556,7 +3556,7 @@ CLASS lcl_sel_opt DEFINITION.
 
 ENDCLASS.
 
-CLASS lcl_table_viewer DEFINITION INHERITING FROM zcl_smd_popup.
+CLASS zcl_smd_table_viewer DEFINITION INHERITING FROM zcl_smd_popup.
 
   PUBLIC SECTION.
     TYPES:
@@ -3568,7 +3568,7 @@ CLASS lcl_table_viewer DEFINITION INHERITING FROM zcl_smd_popup.
     DATA: m_lang         TYPE ddlanguage,
           m_tabname      TYPE tabname,
           mo_alv         TYPE REF TO cl_gui_alv_grid,
-          mo_sel         TYPE REF TO lcl_sel_opt,
+          mo_sel         TYPE REF TO zcl_smd_sel_opt,
           mr_table       TYPE REF TO data,
           mo_sel_parent  TYPE REF TO cl_gui_container,
           mo_alv_parent  TYPE REF TO cl_gui_container,
@@ -3585,7 +3585,7 @@ CLASS lcl_table_viewer DEFINITION INHERITING FROM zcl_smd_popup.
                             i_additional_name TYPE string OPTIONAL
                             ir_tab            TYPE REF TO data OPTIONAL
                             io_window         TYPE REF TO lcl_ace_window,
-      refresh_table FOR EVENT selection_done OF lcl_sel_opt.
+      refresh_table FOR EVENT selection_done OF zcl_smd_sel_opt.
 
   PRIVATE SECTION.
     METHODS:
@@ -3606,7 +3606,7 @@ ENDCLASS.
 
 
 
-CLASS lcl_table_viewer IMPLEMENTATION.
+CLASS zcl_smd_table_viewer IMPLEMENTATION.
 
   METHOD constructor.
 
@@ -4192,7 +4192,7 @@ CLASS lcl_table_viewer IMPLEMENTATION.
   ENDMETHOD.
 ENDCLASS.
 
-CLASS lcl_sel_opt IMPLEMENTATION.
+CLASS zcl_smd_sel_opt IMPLEMENTATION.
   METHOD constructor.
     DATA: effect     TYPE i,
           handle_alv TYPE i.
