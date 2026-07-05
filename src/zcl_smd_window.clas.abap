@@ -1,4 +1,4 @@
-CLASS zcl_smd_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUBLIC.
+CLASS zcl_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUBLIC.
 
   PUBLIC SECTION.
 
@@ -135,11 +135,19 @@ CLASS zcl_smd_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE 
           mo_locals_container    TYPE REF TO cl_gui_container,
           mo_exporting_container TYPE REF TO cl_gui_container,
           mo_code_container      TYPE REF TO cl_gui_container,
+          mo_ai_container        TYPE REF TO cl_gui_container,
+          mo_ai_prompt_container TYPE REF TO cl_gui_container,
+          mo_ai_result_container TYPE REF TO cl_gui_container,
           mo_imp_exp_container   TYPE REF TO cl_gui_container,
           mo_editor_container    TYPE REF TO cl_gui_container,
           mo_steps_container     TYPE REF TO cl_gui_container,
           mo_stack_container     TYPE REF TO cl_gui_container,
           mo_hist_container      TYPE REF TO cl_gui_container,
+          mo_ai_splitter         TYPE REF TO cl_gui_splitter_container,
+          mo_ai_prompt           TYPE REF TO cl_gui_textedit,
+          mo_ai_result           TYPE REF TO cl_gui_textedit,
+          mo_ai_agent            TYPE REF TO zcl_smd_ai_agent,
+          ms_ai_pending_action   TYPE zcl_smd_ai_agent=>ty_action,
           mo_code_viewer         TYPE REF TO cl_gui_abapedit,
           mt_stack               TYPE TABLE OF zcl_smd_appl=>t_stack,
           mo_toolbar             TYPE REF TO cl_gui_toolbar,
@@ -149,6 +157,7 @@ CLASS zcl_smd_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE 
           mt_breaks              TYPE tpda_bp_persistent_it,
           mt_watch               TYPE tt_watch,
           mt_coverage            TYPE tt_watch,
+          m_ai_open              TYPE xfeld,
           m_hist_depth           TYPE i,
           m_start_stack          TYPE i,
           mt_source              TYPE STANDARD  TABLE OF ts_progs,
@@ -167,12 +176,15 @@ CLASS zcl_smd_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE 
       on_editor_border_click  FOR EVENT border_click OF cl_gui_abapedit IMPORTING line cntrl_pressed_set shift_pressed_set,
 
       set_program_line IMPORTING i_line LIKE sy-index OPTIONAL,
+      create_ai_panel,
+      run_ai_agent,
+      set_ai_text IMPORTING io_text TYPE REF TO cl_gui_textedit i_text TYPE string,
       create_code_viewer,
       show_stack.
 
 ENDCLASS.
 
-CLASS zcl_smd_smd_window IMPLEMENTATION.
+CLASS zcl_smd_window IMPLEMENTATION.
 
   METHOD constructor.
     super->constructor( ).
@@ -229,7 +241,7 @@ CLASS zcl_smd_smd_window IMPLEMENTATION.
       EXPORTING
         parent  = mo_code_container
         rows    = 1
-        columns = 2
+        columns = 3
       EXCEPTIONS
         OTHERS  = 1.
 
@@ -238,16 +250,24 @@ CLASS zcl_smd_smd_window IMPLEMENTATION.
         row       = 1
         column    = 1
       RECEIVING
-        container = mo_editor_container ).
+        container = mo_ai_container ).
 
     mo_splitter_code->get_container(
       EXPORTING
         row       = 1
         column    = 2
       RECEIVING
+        container = mo_editor_container ).
+
+    mo_splitter_code->get_container(
+      EXPORTING
+        row       = 1
+        column    = 3
+      RECEIVING
         container = mo_variables_container ).
 
-    mo_splitter_code->set_column_width( EXPORTING id = 1 width = '60' ).
+    mo_splitter_code->set_column_width( EXPORTING id = 1 width = '0' ).
+    mo_splitter_code->set_column_width( EXPORTING id = 2 width = '60' ).
 
     CREATE OBJECT mo_splitter_var
       EXPORTING
@@ -323,6 +343,7 @@ CLASS zcl_smd_smd_window IMPLEMENTATION.
      ( function = 'DEPTH' icon = CONV #( icon_next_hierarchy_level ) quickinfo = 'History depth level' text = |Depth { m_hist_depth }| )
      ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear all selected variables' text = 'Clear vars' )
+     ( function = 'AI' icon = CONV #( icon_wizard ) quickinfo = 'AI debugger agent' text = 'AI' )
      ( butn_type = 3  )
      ( COND #( WHEN zcl_smd_appl=>is_mermaid_active = abap_true
       THEN VALUE #( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = ' Calls Flow' text = 'Diagram' ) ) )
@@ -440,6 +461,123 @@ CLASS zcl_smd_smd_window IMPLEMENTATION.
 
     mo_code_viewer->clear_line_markers( 'S' ).
     mo_code_viewer->draw( ).
+
+  ENDMETHOD.
+
+  METHOD create_ai_panel.
+
+    CHECK mo_ai_splitter IS INITIAL.
+
+    CREATE OBJECT mo_ai_splitter
+      EXPORTING
+        parent  = mo_ai_container
+        rows    = 2
+        columns = 1
+      EXCEPTIONS
+        OTHERS  = 1.
+
+    mo_ai_splitter->set_row_height( id = 1 height = '35' ).
+
+    mo_ai_splitter->get_container(
+      EXPORTING
+        row       = 1
+        column    = 1
+      RECEIVING
+        container = mo_ai_prompt_container ).
+
+    mo_ai_splitter->get_container(
+      EXPORTING
+        row       = 2
+        column    = 1
+      RECEIVING
+        container = mo_ai_result_container ).
+
+    CREATE OBJECT mo_ai_prompt
+      EXPORTING
+        parent = mo_ai_prompt_container
+      EXCEPTIONS
+        OTHERS = 1.
+
+    CREATE OBJECT mo_ai_result
+      EXPORTING
+        parent = mo_ai_result_container
+      EXCEPTIONS
+        OTHERS = 1.
+
+    mo_ai_result->set_readonly_mode( ).
+
+    set_ai_text(
+      io_text = mo_ai_prompt
+      i_text  = |Найди вероятную причину ошибки. Используй текущий шаг, стек, переменные и историю изменений.| ).
+
+    set_ai_text(
+      io_text = mo_ai_result
+      i_text  = |AI agent ready. Кнопка AI теперь запускает анализ текущего состояния дебага.| ).
+
+    cl_gui_cfw=>flush( ).
+
+  ENDMETHOD.
+
+  METHOD run_ai_agent.
+
+    DATA lv_prompt TYPE string.
+
+    IF mo_ai_prompt IS BOUND.
+      mo_ai_prompt->get_textstream( IMPORTING text = lv_prompt ).
+    ENDIF.
+
+    IF lv_prompt IS INITIAL.
+      lv_prompt = 'Find the most likely bug from the current debugger state.'.
+    ENDIF.
+
+    IF mo_ai_agent IS INITIAL.
+      mo_ai_agent = NEW #( io_debugger = mo_debugger ).
+    ENDIF.
+
+    IF ms_ai_pending_action-tool IS NOT INITIAL.
+      DATA(lv_action_result) = mo_ai_agent->execute_action( ms_ai_pending_action ).
+      DATA(lv_step_command) = ms_ai_pending_action-command.
+      DATA(lv_step_tool) = ms_ai_pending_action-tool.
+      CLEAR ms_ai_pending_action.
+
+      set_ai_text( io_text = mo_ai_result i_text = lv_action_result ).
+      cl_gui_cfw=>flush( ).
+
+      IF lv_step_tool = 'step_debugger' AND lv_step_command IS NOT INITIAL.
+        hnd_toolbar( fcode = lv_step_command ).
+      ENDIF.
+      RETURN.
+    ENDIF.
+
+    set_ai_text( io_text = mo_ai_result i_text = |AI is analyzing current debug state...| ).
+    cl_gui_cfw=>flush( ).
+
+    DATA(lv_result) = mo_ai_agent->run(
+      EXPORTING
+        i_task    = lv_prompt
+      IMPORTING
+        es_action = ms_ai_pending_action ).
+
+    set_ai_text( io_text = mo_ai_result i_text = lv_result ).
+    cl_gui_cfw=>flush( ).
+
+  ENDMETHOD.
+
+  METHOD set_ai_text.
+
+    DATA lt_text TYPE STANDARD TABLE OF char255.
+    DATA lv_text TYPE string.
+
+    CHECK io_text IS BOUND.
+
+    lv_text = i_text.
+    WHILE strlen( lv_text ) > 255.
+      APPEND lv_text+0(255) TO lt_text.
+      SHIFT lv_text LEFT BY 255 PLACES.
+    ENDWHILE.
+    APPEND lv_text TO lt_text.
+
+    io_text->set_text_as_r3table( lt_text ).
 
   ENDMETHOD.
 
@@ -636,6 +774,18 @@ CLASS zcl_smd_smd_window IMPLEMENTATION.
 *
 *        READ TABLE mo_debugger->mo_window->mt_source INDEX 1 INTO DATA(source).
 *        NEW lcl_ai( io_source = source-source io_parent =  mo_debugger->mo_window->mo_box ).
+
+      WHEN 'AI'.
+        IF m_ai_open IS INITIAL.
+          create_ai_panel( ).
+          m_ai_open = abap_true.
+          mo_splitter_code->set_column_width( EXPORTING id = 1 width = '28' ).
+          mo_splitter_code->set_column_width( EXPORTING id = 2 width = '45' ).
+          mo_toolbar->set_button_info( EXPORTING fcode = 'AI' text = 'AI Run' quickinfo = 'Run AI debugger agent' ).
+        ELSE.
+          run_ai_agent( ).
+        ENDIF.
+        RETURN.
 
       WHEN 'ENGINE'.
         m_version = m_version BIT-XOR c_mask.

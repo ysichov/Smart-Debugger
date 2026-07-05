@@ -741,7 +741,7 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
     "code execution scanner
     DATA: max       TYPE i,
           step      TYPE i,
-          call_line TYPE zcl_smd_smd_window=>ts_calls_line.
+          call_line TYPE zcl_smd_window=>ts_calls_line.
 
     READ TABLE mo_debugger->mo_window->mt_source INDEX 1 INTO DATA(source).
 

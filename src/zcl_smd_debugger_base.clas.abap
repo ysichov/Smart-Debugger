@@ -38,7 +38,7 @@ CLASS zcl_smd_debugger_base DEFINITION PUBLIC ABSTRACT INHERITING FROM cl_tpda_s
           mt_state          TYPE STANDARD TABLE OF zcl_smd_appl=>var_table,
           mv_recurse        TYPE i,
           mt_classes_types  TYPE TABLE OF zcl_smd_appl=>t_classes_types,
-          mo_window         TYPE REF TO zcl_smd_smd_window,
+          mo_window         TYPE REF TO zcl_smd_window,
           mv_f7_stop        TYPE xfeld,
           m_f6_level        TYPE i,
           m_target_stack    TYPE i,

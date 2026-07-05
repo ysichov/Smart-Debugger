@@ -128,7 +128,7 @@ CLASS zcl_smd_appl DEFINITION PUBLIC CREATE PUBLIC.
       open_int_table IMPORTING it_tab    TYPE ANY TABLE OPTIONAL
                                it_ref    TYPE REF TO data OPTIONAL
                                i_name    TYPE string
-                               io_window TYPE REF TO zcl_smd_smd_window.
+                               io_window TYPE REF TO zcl_smd_window.
 
 ENDCLASS.
 

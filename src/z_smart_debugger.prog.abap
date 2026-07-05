@@ -81,7 +81,7 @@ CLASS lcl_debugger_script IMPLEMENTATION.
     zcl_smd_appl=>init_lang( ).
     zcl_smd_appl=>init_icons_table( ).
 
-    mo_window = NEW zcl_smd_smd_window( me ).
+    mo_window = NEW zcl_smd_window( me ).
 
     mo_tree_imp = NEW zcl_smd_rtti_tree( i_header   = 'Importing parameters'
                                      i_type     = 'I'

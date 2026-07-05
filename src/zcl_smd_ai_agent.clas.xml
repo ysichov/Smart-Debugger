@@ -3,8 +3,9 @@
  <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
   <asx:values>
    <VSEOCLASS>
-    <CLSNAME>ZCL_SMD_SMD_WINDOW</CLSNAME>
+    <CLSNAME>ZCL_SMD_AI_AGENT</CLSNAME>
     <LANGU>E</LANGU>
+    <DESCRIPT>Smart Debugger AI Agent</DESCRIPT>
     <STATE>1</STATE>
     <CLSCCINCL>X</CLSCCINCL>
     <FIXPT>X</FIXPT>

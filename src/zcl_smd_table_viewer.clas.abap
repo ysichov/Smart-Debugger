@@ -25,14 +25,14 @@ public section.
   data M_VISIBLE type C .
   data M_STD_TBAR type X .
   data M_SHOW_EMPTY type I .
-  data MO_WINDOW type ref to ZCL_SMD_SMD_WINDOW .
+  data MO_WINDOW type ref to ZCL_SMD_WINDOW .
 
   methods CONSTRUCTOR
     importing
       !I_TNAME type ANY optional
       !I_ADDITIONAL_NAME type STRING optional
       !IR_TAB type ref to DATA optional
-      !IO_WINDOW type ref to ZCL_SMD_SMD_WINDOW optional .
+      !IO_WINDOW type ref to ZCL_SMD_WINDOW optional .
   methods REFRESH_TABLE
     for event SELECTION_DONE of ZCL_SMD_SEL_OPT .
 protected section.
