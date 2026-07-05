@@ -471,7 +471,9 @@ METHOD get_system_prompt.
       'If the bug is not yet runtime-confirmed, clearly say which diagnosis you suspect and immediately propose the next debugger action needed to confirm it. ' &&
       'Use read_variable when the exact runtime value of any ABAP variable, field, component, reference, or table expression is needed. ' &&
       'Use set_breakpoint with real TPDA include and 1-based source line numbers when stopping at a specific source line is useful; it still requires user confirmation before execution. ' &&
-      'Never call F8/continue unless you explain why it is safe; prefer F5/F6/F7 for investigation. ' &&
+      'After a relevant breakpoint has been set and the next goal is to reach it, propose step_debugger F8/continue; do not use F5 to walk toward a known breakpoint. ' &&
+      'Use F5/F6/F7 only after reaching the suspicious area, when a single-step observation is needed. ' &&
+      'Never call F8/continue unless you explain why it is safe and what breakpoint or guard stop will catch execution. ' &&
       'Before continuing, assume a guard breakpoint exists at the end of the current include. ' &&
       'Do not reveal hidden chain-of-thought; write a concise analysis summary instead. ' &&
       'Answer in English. Structure the answer as: Intent, Analysis, Findings, Proposed action.'.
@@ -485,10 +487,10 @@ METHOD get_tools_json.
       `[` &&
       `{ "type":"function", "function": {` &&
       `"name":"step_debugger",` &&
-      `"description":"Request one debugger step.",` &&
+      `"description":"Request one debugger movement. Use F8 to continue to the next breakpoint or guard stop.",` &&
       `"parameters": { "type":"object", "properties": {` &&
       `"command": { "type":"string", "enum":["F5","F6","F7","F8"],` &&
-      `"description":"F5 into, F6 over, F7 out, F8 continue" },` &&
+      `"description":"F5 step into, F6 step over, F7 step out, F8 continue to the next breakpoint or guard stop" },` &&
       `"reason": { "type":"string",` &&
       `"description":"Visible intent shown before confirmation" } },` &&
       `"required":["command","reason"],` &&

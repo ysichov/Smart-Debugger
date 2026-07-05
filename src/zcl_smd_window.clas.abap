@@ -569,7 +569,7 @@ CLASS zcl_smd_window IMPLEMENTATION.
 
   METHOD set_ai_result.
 
-    DATA(lv_html) = zcl_code_html_gen=>markdown_to_html( i_text ).
+    DATA(lv_html) = zcl_smd_markdown_html=>to_html( i_text ).
     DATA lt_html TYPE tt_html.
     DATA ls_html TYPE w3html.
     DATA lv_offset TYPE i.
