@@ -255,11 +255,7 @@ CLASS lcl_debugger_base DEFINITION ABSTRACT INHERITING FROM cl_tpda_script_class
           m_quick           TYPE tpda_scr_quick_info,
           mr_statements     TYPE RANGE OF string.
 
-    METHODS: prologue  REDEFINITION,
-      init    REDEFINITION,
-      script  REDEFINITION,
-      end     REDEFINITION,
-
+    METHODS:
       run_script,
       run_script_hist IMPORTING i_step  TYPE i OPTIONAL
                       EXPORTING es_stop TYPE xfeld
@@ -734,40 +730,6 @@ CLASS lcl_smd_window DEFINITION INHERITING FROM zcl_smd_popup .
 ENDCLASS.
 
 CLASS lcl_debugger_base IMPLEMENTATION.
-
-  METHOD prologue.
-    super->prologue( ).
-  ENDMETHOD.                    "prolog
-
-  METHOD init.
-
-    CONSTANTS: c_mask TYPE x VALUE '01'.
-
-    is_step = abap_on.
-    lcl_appl=>check_mermaid( ).
-    lcl_appl=>init_lang( ).
-    lcl_appl=>init_icons_table( ).
-
-    mo_window = NEW lcl_smd_window( CAST lcl_debugger_script( me ) ).
-
-    mo_tree_imp = NEW zcl_smd_rtti_tree( i_header   = 'Importing parameters'
-                                     i_type     = 'I'
-                                     i_cont     = mo_window->mo_importing_container
-                                     i_debugger = CAST lcl_debugger_script( me ) ).
-
-    mo_tree_local = NEW zcl_smd_rtti_tree( i_header   = 'Variables'
-                                       i_type     = 'L'
-                                       i_cont     = mo_window->mo_locals_container
-                                       i_debugger = CAST lcl_debugger_script( me ) ).
-
-    mo_tree_exp = NEW zcl_smd_rtti_tree( i_header   = 'Exporting & Returning parameters'
-                                     i_type     = 'E'
-                                     i_cont     = mo_window->mo_exporting_container
-                                     i_debugger = CAST lcl_debugger_script( me ) ).
-
-    mo_tree_local->m_locals = mo_tree_local->m_locals BIT-XOR c_mask.
-
-  ENDMETHOD.
 
   METHOD create_simple_var.
 
@@ -1438,14 +1400,6 @@ CLASS lcl_debugger_base IMPLEMENTATION.
 
     get_deep_struc( EXPORTING i_name = i_name r_obj = r_data ).
     ASSIGN r_data->* TO FIELD-SYMBOL(<new_deep>).
-
-  ENDMETHOD.
-
-  METHOD script.
-
-    run_script( ).
-    show_step( ).
-    me->break( ).
 
   ENDMETHOD.
 
@@ -2229,9 +2183,6 @@ CLASS lcl_debugger_base IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD end. "dummy method
-  ENDMETHOD.
-
   METHOD f5.
 
     READ TABLE mo_window->mt_stack INTO DATA(stack) INDEX 1.
@@ -2859,18 +2810,47 @@ CLASS lcl_debugger_script IMPLEMENTATION.
 
   METHOD prologue.
     super->prologue( ).
-  ENDMETHOD.
+  ENDMETHOD.                    "prolog
 
   METHOD init.
-    super->init( ).
+
+    CONSTANTS: c_mask TYPE x VALUE '01'.
+
+    is_step = abap_on.
+    lcl_appl=>check_mermaid( ).
+    lcl_appl=>init_lang( ).
+    lcl_appl=>init_icons_table( ).
+
+    mo_window = NEW lcl_smd_window( me ).
+
+    mo_tree_imp = NEW zcl_smd_rtti_tree( i_header   = 'Importing parameters'
+                                     i_type     = 'I'
+                                     i_cont     = mo_window->mo_importing_container
+                                     i_debugger = me ).
+
+    mo_tree_local = NEW zcl_smd_rtti_tree( i_header   = 'Variables'
+                                       i_type     = 'L'
+                                       i_cont     = mo_window->mo_locals_container
+                                       i_debugger = me ).
+
+    mo_tree_exp = NEW zcl_smd_rtti_tree( i_header   = 'Exporting & Returning parameters'
+                                     i_type     = 'E'
+                                     i_cont     = mo_window->mo_exporting_container
+                                     i_debugger = me ).
+
+    mo_tree_local->m_locals = mo_tree_local->m_locals BIT-XOR c_mask.
+
   ENDMETHOD.
 
   METHOD script.
-    super->script( ).
+
+    run_script( ).
+    show_step( ).
+    me->break( ).
+
   ENDMETHOD.
 
-  METHOD end.
-    super->end( ).
+  METHOD end. "dummy method
   ENDMETHOD.
 
 ENDCLASS.                    "lcl_debugger_script IMPLEMENTATION
