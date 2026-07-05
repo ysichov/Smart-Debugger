@@ -192,7 +192,8 @@ CLASS zcl_smd_window IMPLEMENTATION.
   METHOD constructor.
     super->constructor( ).
     mo_debugger = i_debugger.
-    m_history = m_varhist =  m_zcode  = '01'.
+    m_varhist = m_zcode = '01'.
+    CLEAR m_history.
     m_hist_depth = 9.
 
     mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.9' i_width = 1400 i_hight = 400 ).
@@ -337,6 +338,8 @@ CLASS zcl_smd_window IMPLEMENTATION.
      "( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization switch' text = 'Visualization OFF' )
      "( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'Stack History switch' text = 'History On' )
      "( function = 'VARHIST' icon = CONV #( icon_graduate ) quickinfo = 'Variables History switch' text = 'Vars History On' )
+     ( function = 'AI' icon = CONV #( icon_wizard ) quickinfo = 'AI debugger agent' text = 'AI' )
+     ( butn_type = 3  )
      ( function = 'F5' icon = CONV #( icon_debugger_step_into ) quickinfo = 'Step into' text = 'Step into' )
      ( function = 'F6' icon = CONV #( icon_debugger_step_over ) quickinfo = 'Step over' text = 'Step over' )
      ( function = 'F7' icon = CONV #( icon_debugger_step_out ) quickinfo = 'Step out' text = 'Step out' )
@@ -346,7 +349,6 @@ CLASS zcl_smd_window IMPLEMENTATION.
      ( function = 'DEPTH' icon = CONV #( icon_next_hierarchy_level ) quickinfo = 'History depth level' text = |Depth { m_hist_depth }| )
      ( function = 'CODE' icon = CONV #( icon_customer_warehouse ) quickinfo = 'Only Z' text = 'Only Z' )
      ( function = 'CLEARVAR' icon = CONV #( icon_select_detail ) quickinfo = 'Clear all selected variables' text = 'Clear vars' )
-     ( function = 'AI' icon = CONV #( icon_wizard ) quickinfo = 'AI debugger agent' text = 'AI' )
      ( butn_type = 3  )
      ( COND #( WHEN zcl_smd_appl=>is_mermaid_active = abap_true
       THEN VALUE #( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = ' Calls Flow' text = 'Diagram' ) ) )
@@ -539,14 +541,18 @@ CLASS zcl_smd_window IMPLEMENTATION.
       DATA(lv_step_tool) = ms_ai_pending_action-tool.
       CLEAR ms_ai_pending_action.
 
-      set_ai_result( lv_action_result ).
-      cl_gui_cfw=>flush( ).
-
       IF lv_step_tool = 'step_debugger' AND lv_step_command IS NOT INITIAL.
         CLEAR m_direction.
         mo_debugger->m_hist_step = mo_debugger->m_step.
         hnd_toolbar( fcode = CONV ui_func( lv_step_command ) ).
+        lv_action_result = lv_action_result &&
+          cl_abap_char_utilities=>newline &&
+          cl_abap_char_utilities=>newline &&
+          |Current position after { lv_step_command }: { m_prg-include }:{ m_prg-line }|.
       ENDIF.
+
+      set_ai_result( lv_action_result ).
+      cl_gui_cfw=>flush( ).
       RETURN.
     ENDIF.
 
@@ -810,6 +816,7 @@ CLASS zcl_smd_window IMPLEMENTATION.
     CONSTANTS: c_mask TYPE x VALUE '01'.
     FIELD-SYMBOLS: <any> TYPE any.
     m_debug_button = fcode.
+    CLEAR m_history.
     READ TABLE mt_stack INDEX 1 INTO DATA(stack).
     CASE fcode.
 
@@ -871,12 +878,8 @@ CLASS zcl_smd_window IMPLEMENTATION.
         mo_toolbar->set_button_info( EXPORTING fcode = 'DEPTH' text = |Depth { m_hist_depth }| ).
 
       WHEN 'HIST'.
-        m_history = m_history BIT-XOR c_mask.
-        IF m_history IS INITIAL.
-          mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_red_xcircle ) text = 'History OFF' ).
-        ELSE.
-          mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_graduate ) text = 'History ON' ).
-        ENDIF.
+        CLEAR m_history.
+        mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_red_xcircle ) text = 'History OFF' ).
 
       WHEN 'VARHIST'.
         m_varhist = m_varhist BIT-XOR c_mask.

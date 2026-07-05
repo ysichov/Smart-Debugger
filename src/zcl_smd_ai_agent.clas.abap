@@ -34,11 +34,19 @@ CLASS zcl_smd_ai_agent DEFINITION
   PRIVATE SECTION.
 
 TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
+TYPES:
+  BEGIN OF ty_ai_breakpoint,
+    include TYPE string,
+    line    TYPE i,
+    reason  TYPE string,
+  END OF ty_ai_breakpoint,
+  tt_ai_breakpoints TYPE STANDARD TABLE OF ty_ai_breakpoint WITH EMPTY KEY.
 
     DATA mo_debugger TYPE REF TO zcl_smd_debugger_base.
     DATA mv_last_error TYPE string.
     DATA mv_last_tool_result TYPE string.
     DATA mt_action_log TYPE tt_string.
+    DATA mt_ai_breakpoints TYPE tt_ai_breakpoints.
 
     CLASS-DATA gv_cached_password TYPE string.
 
@@ -84,6 +92,16 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     METHODS get_action_log_text
       RETURNING
         VALUE(rv_text) TYPE string.
+
+    METHODS remember_ai_breakpoint
+      IMPORTING
+        !is_action TYPE zif_smd_ai_agent_types=>ty_action.
+
+    METHODS is_known_ai_breakpoint
+      IMPORTING
+        !is_action        TYPE zif_smd_ai_agent_types=>ty_action
+      RETURNING
+        VALUE(rv_known)   TYPE abap_bool.
 
     METHODS read_variable
       IMPORTING
@@ -139,6 +157,32 @@ METHOD build_prompt.
       IF mv_last_tool_result IS NOT INITIAL.
         append_line( EXPORTING i_line = `` CHANGING ct_lines = lt_lines ).
         append_line( EXPORTING i_line = |Last confirmed tool result: { mv_last_tool_result }| CHANGING ct_lines = lt_lines ).
+      ENDIF.
+
+      IF mt_action_log IS NOT INITIAL.
+        append_line( EXPORTING i_line = `` CHANGING ct_lines = lt_lines ).
+        append_line( EXPORTING i_line = `Confirmed AI actions so far:` CHANGING ct_lines = lt_lines ).
+        LOOP AT mt_action_log INTO DATA(lv_action_log_line).
+          append_line(
+            EXPORTING
+              i_line = |{ sy-tabix }. { lv_action_log_line }|
+            CHANGING
+              ct_lines = lt_lines ).
+        ENDLOOP.
+        append_line( EXPORTING i_line = `For the visible answer, do not repeat earlier analysis. Show only the new observation and the next required action.` CHANGING ct_lines = lt_lines ).
+      ENDIF.
+
+      IF mt_ai_breakpoints IS NOT INITIAL.
+        append_line( EXPORTING i_line = `` CHANGING ct_lines = lt_lines ).
+        append_line( EXPORTING i_line = `Known AI-set breakpoints:` CHANGING ct_lines = lt_lines ).
+        LOOP AT mt_ai_breakpoints INTO DATA(ls_ai_breakpoint).
+          append_line(
+            EXPORTING
+              i_line = |{ sy-tabix }. { ls_ai_breakpoint-include }:{ ls_ai_breakpoint-line } reason={ ls_ai_breakpoint-reason }|
+            CHANGING
+              ct_lines = lt_lines ).
+        ENDLOOP.
+        append_line( EXPORTING i_line = `Do not call set_breakpoint again for any known breakpoint. If execution is not there yet, use F8 to continue to it. If execution is already there, verify variables or step once as needed.` CHANGING ct_lines = lt_lines ).
       ENDIF.
 
       IF mo_debugger->mo_window IS BOUND.
@@ -298,8 +342,10 @@ METHOD execute_action.
       WHEN OTHERS.
         rv_text = execute_plugin_tool( is_action ).
         IF is_action-tool = 'set_breakpoint'
+        AND rv_text CP 'set_breakpoint result:*'
         AND mo_debugger IS BOUND
         AND mo_debugger->mo_window IS BOUND.
+          remember_ai_breakpoint( is_action ).
           mo_debugger->mo_window->set_program_line( mo_debugger->mo_window->m_prg-line ).
         ENDIF.
     ENDCASE.
@@ -307,6 +353,51 @@ METHOD execute_action.
     mv_last_tool_result = rv_text.
     APPEND |{ sy-datum } { sy-uzeit } tool={ is_action-tool } command={ is_action-command } variable={ is_action-variable } target={ is_action-include }:{ is_action-line } reason={ is_action-reason } result={ rv_text }|
       TO mt_action_log.
+
+  ENDMETHOD.
+
+
+METHOD is_known_ai_breakpoint.
+
+    DATA lv_include TYPE string.
+
+    CHECK is_action-tool = 'set_breakpoint'.
+    CHECK is_action-include IS NOT INITIAL.
+    CHECK is_action-line > 0.
+
+    lv_include = is_action-include.
+    TRANSLATE lv_include TO UPPER CASE.
+    CONDENSE lv_include.
+
+    READ TABLE mt_ai_breakpoints TRANSPORTING NO FIELDS
+      WITH KEY include = lv_include line = is_action-line.
+    rv_known = xsdbool( sy-subrc = 0 ).
+
+  ENDMETHOD.
+
+
+METHOD remember_ai_breakpoint.
+
+    DATA lv_include TYPE string.
+
+    CHECK is_action-tool = 'set_breakpoint'.
+    CHECK is_action-include IS NOT INITIAL.
+    CHECK is_action-line > 0.
+
+    lv_include = is_action-include.
+    TRANSLATE lv_include TO UPPER CASE.
+    CONDENSE lv_include.
+
+    READ TABLE mt_ai_breakpoints TRANSPORTING NO FIELDS
+      WITH KEY include = lv_include line = is_action-line.
+    IF sy-subrc = 0.
+      RETURN.
+    ENDIF.
+
+    APPEND VALUE #(
+      include = lv_include
+      line    = is_action-line
+      reason  = is_action-reason ) TO mt_ai_breakpoints.
 
   ENDMETHOD.
 
@@ -469,8 +560,10 @@ METHOD get_system_prompt.
       'For a suspected logic bug, first set a breakpoint on the most suspicious executable line, preferably the condition or assignment that can prove the bug, not merely the loop header. ' &&
       'After the breakpoint is confirmed and reached, use step_debugger and read_variable to verify the relevant variables before stating Findings as confirmed. ' &&
       'If the bug is not yet runtime-confirmed, clearly say which diagnosis you suspect and immediately propose the next debugger action needed to confirm it. ' &&
+      'On follow-up turns after any confirmed AI action, do not repeat the earlier report; show only the new runtime observation, what it proves or disproves, and the next action. ' &&
       'Use read_variable when the exact runtime value of any ABAP variable, field, component, reference, or table expression is needed. ' &&
       'Use set_breakpoint with real TPDA include and 1-based source line numbers when stopping at a specific source line is useful; it still requires user confirmation before execution. ' &&
+      'Never call set_breakpoint for a line listed under Known AI-set breakpoints; treat it as already available and move to reach or verify it. ' &&
       'After a relevant breakpoint has been set and the next goal is to reach it, propose step_debugger F8/continue; do not use F5 to walk toward a known breakpoint. ' &&
       'Use F5/F6/F7 only after reaching the suspicious area, when a single-step observation is needed. ' &&
       'Never call F8/continue unless you explain why it is safe and what breakpoint or guard stop will catch execution. ' &&
@@ -668,6 +761,29 @@ METHOD run.
           es_action = parse_tool_call(
             i_name      = ls_call-name
             i_arguments = ls_call-arguments ).
+
+          IF is_known_ai_breakpoint( es_action ) = abap_true.
+            IF mo_debugger IS BOUND
+            AND mo_debugger->ms_stack-include = es_action-include
+            AND mo_debugger->ms_stack-line = es_action-line.
+              lv_answer = lv_answer &&
+                cl_abap_char_utilities=>newline &&
+                cl_abap_char_utilities=>newline &&
+                |The breakpoint { es_action-include }:{ es_action-line } is already set and execution is already there. Do not set it again; verify variables or step once instead.|.
+              CLEAR es_action.
+            ELSE.
+              DATA(lv_known_include) = es_action-include.
+              DATA(lv_known_line) = es_action-line.
+              CLEAR es_action.
+              es_action-tool = 'step_debugger'.
+              es_action-command = 'F8'.
+              es_action-reason = |Continue to the already set breakpoint { lv_known_include }:{ lv_known_line }.|.
+              lv_answer = lv_answer &&
+                cl_abap_char_utilities=>newline &&
+                cl_abap_char_utilities=>newline &&
+                |Breakpoint { lv_known_include }:{ lv_known_line } is already set. The repeated set_breakpoint request was replaced with F8 to reach it.|.
+            ENDIF.
+          ENDIF.
         ENDIF.
 
         ev_text =
