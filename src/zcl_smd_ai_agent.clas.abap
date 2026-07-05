@@ -47,6 +47,14 @@ CLASS zcl_smd_ai_agent DEFINITION PUBLIC CREATE PUBLIC.
         VALUE(rv_prompt) TYPE string.
 
     METHODS get_tools_json
+      IMPORTING
+        !io_llm          TYPE REF TO zcl_abapai_llm_client
+      RETURNING
+        VALUE(rv_json) TYPE string.
+
+    METHODS get_plugin_tools_json
+      IMPORTING
+        !io_llm          TYPE REF TO zcl_abapai_llm_client
       RETURNING
         VALUE(rv_json) TYPE string.
 
@@ -60,7 +68,7 @@ CLASS zcl_smd_ai_agent DEFINITION PUBLIC CREATE PUBLIC.
       RETURNING
         VALUE(rv_text) TYPE string.
 
-    METHODS set_breakpoint
+    METHODS execute_plugin_tool
       IMPORTING
         !is_action     TYPE ty_action
       RETURNING
@@ -112,7 +120,7 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
           EXPORTING
             i_prompt        = build_prompt( i_task )
             i_system_prompt = get_system_prompt( )
-            i_tools_json    = get_tools_json( )
+            i_tools_json    = get_tools_json( io_llm = lo_llm )
           IMPORTING
             et_tool_calls   = lt_tool_calls ).
 
@@ -151,9 +159,6 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
   METHOD execute_action.
 
     CASE is_action-tool.
-      WHEN 'set_breakpoint'.
-        rv_text = set_breakpoint( is_action ).
-
       WHEN 'read_variable'.
         rv_text = read_variable( is_action-variable ).
 
@@ -161,7 +166,7 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
         rv_text = |Confirmed debugger step { is_action-command }. Intent: { is_action-reason }|.
 
       WHEN OTHERS.
-        rv_text = |Unknown AI action: { is_action-tool }|.
+        rv_text = execute_plugin_tool( is_action ).
     ENDCASE.
 
     mv_last_tool_result = rv_text.
@@ -315,12 +320,42 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
 
   METHOD get_tools_json.
 
-    rv_json =
+    DATA(lv_json) =
       `[` &&
       `{ "type":"function", "function": { "name":"step_debugger", "description":"Request one debugger step. The user must confirm before execution.", "parameters": { "type":"object", "properties": { "command": { "type":"string", "enum":["F5","F6","F7","F8"], "description":"F5 step into, F6 step over, F7 step out, F8 continue to breakpoint" }, "reason": { "type":"string", "description":"Visible intent shown to the user before confirmation" } }, "required":["command","reason"], "additionalProperties":false } } },` &&
-      `{ "type":"function", "function": { "name":"read_variable", "description":"Read the exact runtime value or type summary of any variable available in the current ABAP debugger context. The user must confirm before execution.", "parameters": { "type":"object", "properties": { "variable": { "type":"string", "description":"ABAP debugger expression, variable name, field path, component, reference, or table expression to inspect" }, "reason": { "type":"string", "description":"Visible intent shown to the user before confirmation" } }, "required":["variable","reason"], "additionalProperties":false } } },` &&
-      `{ "type":"function", "function": { "name":"set_breakpoint", "description":"Request a session breakpoint. The user must confirm before execution.", "parameters": { "type":"object", "properties": { "program": { "type":"string" }, "include": { "type":"string" }, "line": { "type":"integer" }, "reason": { "type":"string", "description":"Visible intent shown to the user before confirmation" } }, "required":["include","line","reason"], "additionalProperties":false } } }` &&
-      `]`.
+      `{ "type":"function", "function": { "name":"read_variable", "description":"Read the exact runtime value or type summary of any variable available in the current ABAP debugger context. The user must confirm before execution.", "parameters": { "type":"object", "properties": { "variable": { "type":"string", "description":"ABAP debugger expression, variable name, field path, component, reference, or table expression to inspect" }, "reason": { "type":"string", "description":"Visible intent shown to the user before confirmation" } }, "required":["variable","reason"], "additionalProperties":false } } }`.
+
+    DATA(lv_plugin_json) = get_plugin_tools_json( io_llm = io_llm ).
+    IF strlen( lv_plugin_json ) > 2.
+      DATA(lv_len) = strlen( lv_plugin_json ) - 2.
+      DATA(lv_plugin_body) = lv_plugin_json+1(lv_len).
+      IF lv_plugin_body IS NOT INITIAL.
+        lv_json = lv_json && `,` && lv_plugin_body.
+      ENDIF.
+    ENDIF.
+
+    rv_json = lv_json && `]`.
+
+  ENDMETHOD.
+
+  METHOD get_plugin_tools_json.
+
+    rv_json = `[]`.
+
+    TRY.
+        DATA(lo_context) = NEW zcl_ai_tool_context(
+          io_llm        = io_llm
+          i_agents_path = `` ).
+
+        zcl_ai_tool_factory=>initialize( lo_context ).
+
+        DATA lt_tool_names TYPE string_table.
+        APPEND 'set_breakpoint' TO lt_tool_names.
+
+        rv_json = zcl_ai_tool_factory=>build_tools_json( it_tool_names = lt_tool_names ).
+      CATCH cx_root.
+        rv_json = `[]`.
+    ENDTRY.
 
   ENDMETHOD.
 
@@ -343,6 +378,7 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
       END OF ty_read_args.
 
     rs_action-tool = is_call-name.
+    rs_action-arguments = is_call-arguments.
 
     TRY.
         IF is_call-name = 'step_debugger'.
@@ -409,23 +445,24 @@ CLASS zcl_smd_ai_agent IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD set_breakpoint.
+  METHOD execute_plugin_tool.
 
-    DATA(lv_program) = COND program( WHEN is_action-program IS NOT INITIAL THEN is_action-program ELSE is_action-include ).
+    TRY.
+        DATA(lo_tool) = zcl_ai_tool_factory=>get_tool( is_action-tool ).
+        IF lo_tool IS NOT BOUND.
+          rv_text = |Unknown AI action: { is_action-tool }|.
+          RETURN.
+        ENDIF.
 
-    CALL FUNCTION 'RS_SET_BREAKPOINT'
-      EXPORTING
-        index       = is_action-line
-        program     = CONV program( is_action-include )
-        mainprogram = lv_program
-        bp_type     = 'S'
-      EXCEPTIONS
-        not_executed = 1
-        OTHERS       = 2.
-
-    rv_text = COND string(
-      WHEN sy-subrc = 0 THEN |Breakpoint set: { lv_program }/{ is_action-include }:{ is_action-line }. Intent: { is_action-reason }|
-      ELSE |Breakpoint failed: { lv_program }/{ is_action-include }:{ is_action-line }. Intent: { is_action-reason }| ).
+        DATA(ls_result) = lo_tool->execute( i_arguments = is_action-arguments ).
+        IF ls_result-error_text IS NOT INITIAL.
+          rv_text = ls_result-error_text.
+        ELSE.
+          rv_text = ls_result-xml_payload.
+        ENDIF.
+      CATCH cx_root INTO DATA(lx_root).
+        rv_text = |AI action { is_action-tool } failed: { lx_root->get_text( ) }|.
+    ENDTRY.
 
   ENDMETHOD.
 

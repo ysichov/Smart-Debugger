@@ -10,6 +10,7 @@ INTERFACE zif_smd_ai_agent_types
       line     TYPE i,
       variable TYPE string,
       reason   TYPE string,
+      arguments TYPE string,
     END OF ty_action.
 
 ENDINTERFACE.

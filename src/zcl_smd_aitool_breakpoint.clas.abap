@@ -7,6 +7,8 @@ CLASS zcl_smd_aitool_breakpoint DEFINITION
     CONSTANTS c_tool_name TYPE string VALUE 'set_breakpoint'.
 
     METHODS zif_ai_tool~get_tool_name REDEFINITION.
+    METHODS zif_ai_tool~get_schema REDEFINITION.
+    METHODS zif_ai_tool~get_prompt_fragment REDEFINITION.
     METHODS zif_ai_tool~execute       REDEFINITION.
 
   PRIVATE SECTION.
@@ -21,6 +23,23 @@ CLASS zcl_smd_aitool_breakpoint IMPLEMENTATION.
 
   METHOD zif_ai_tool~get_tool_name.
     rv_name = c_tool_name.
+  ENDMETHOD.
+
+  METHOD zif_ai_tool~get_schema.
+
+    rv_schema =
+      `{ "type":"function", "function": { "name":"set_breakpoint", "description":"Set, delete, or toggle an ABAP debugger breakpoint. Use this only after explaining the debugging intent to the user. The caller may require user confirmation before execution.", "parameters": { "type":"object", "properties": { "program": { "type":"string", "description":"Main program, class pool, or report name. If omitted, include is used as the main program." }, "include": { "type":"string", "description":"ABAP include/program where the breakpoint line belongs." }, "line": { "type":"integer", "description":"1-based source line number." }, "breakpoint_type": { "type":"string", "enum":["S","E"], "description":"S = session breakpoint, E = external breakpoint. Default S." }, "mode": { "type":"string", "enum":["set","delete","toggle"], "description":"Breakpoint operation. Default set." }, "reason": { "type":"string", "description":"Short visible intent explaining why this breakpoint is needed." } }, "required":["include","line","reason"], "additionalProperties":false } } }`.
+
+  ENDMETHOD.
+
+  METHOD zif_ai_tool~get_prompt_fragment.
+
+    rv_fragment =
+      `### set_breakpoint` && cl_abap_char_utilities=>newline &&
+      `Sets, deletes, or toggles an ABAP debugger breakpoint.` && cl_abap_char_utilities=>newline &&
+      `Use this tool only when a breakpoint directly supports the user's debugging goal. ` &&
+      `Always state the intent in the reason argument.`.
+
   ENDMETHOD.
 
   METHOD zif_ai_tool~execute.
