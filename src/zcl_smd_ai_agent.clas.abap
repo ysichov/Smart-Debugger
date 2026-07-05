@@ -1,11 +1,11 @@
-class ZCL_SMD_AI_AGENT definition
-  public
-  create private .
+CLASS zcl_smd_ai_agent DEFINITION
+  PUBLIC
+  CREATE PRIVATE .
 
 
-PUBLIC SECTION.
+  PUBLIC SECTION.
     CONSTANTS c_provider TYPE string VALUE 'MISTRAL'.
-    CONSTANTS c_keyname  TYPE string VALUE 'Default'.
+    CONSTANTS c_keyname  TYPE string VALUE 'DEFAULT'.
     CONSTANTS c_model    TYPE text255 VALUE 'mistral-large-latest'.
 
     METHODS constructor
@@ -24,14 +24,22 @@ PUBLIC SECTION.
         !is_action     TYPE zif_smd_ai_agent_types=>ty_action
       RETURNING
         VALUE(rv_text) TYPE string.
-protected section.
-private section.
+
+    CLASS-METHODS create
+      IMPORTING
+        !io_debugger  TYPE REF TO zcl_smd_debugger_base
+      RETURNING
+        VALUE(ro_agent) TYPE REF TO zcl_smd_ai_agent.
+  PROTECTED SECTION.
+  PRIVATE SECTION.
 
 TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
 
     DATA mo_debugger TYPE REF TO zcl_smd_debugger_base.
     DATA mv_last_error TYPE string.
     DATA mv_last_tool_result TYPE string.
+
+    CLASS-DATA gv_cached_password TYPE string.
 
     METHODS get_default_api_key
       RETURNING
@@ -83,6 +91,10 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
         !i_line TYPE string
       CHANGING
         !ct_lines TYPE tt_string.
+
+    METHODS ask_password
+      RETURNING
+        VALUE(rv_password) TYPE string.
 ENDCLASS.
 
 
@@ -285,31 +297,79 @@ METHOD execute_plugin_tool.
   ENDMETHOD.
 
 
-METHOD get_default_api_key.
+  METHOD get_default_api_key.
+
+    " TEMP: hardcoded password while the popup/keyname flow is being finalized.
+    CONSTANTS c_temp_password TYPE string VALUE 'Developer001'.
 
     CLEAR: rv_api_key, mv_last_error.
 
-    SELECT SINGLE secret
+    " 1) Try a key stored for the current user
+    SELECT SINGLE username, secret
       FROM zaicode_apikey
-      INTO @DATA(lv_secret)
+      INTO @DATA(ls_key)
       WHERE username = @sy-uname
         AND provider = @c_provider
         AND keyname  = @c_keyname.
 
-    IF sy-subrc <> 0 OR lv_secret IS INITIAL.
+    IF sy-subrc <> 0.
+      " 2) Fall back to any shared/default key for this provider, regardless of username
+      SELECT SINGLE username, secret
+        FROM zaicode_apikey
+        INTO @ls_key
+        WHERE provider = @c_provider
+          AND keyname  = @c_keyname.
+    ENDIF.
+
+    IF sy-subrc <> 0 OR ls_key-secret IS INITIAL.
       mv_last_error = |No stored key for { c_provider } / { c_keyname } in ZAICODE_APIKEY|.
+      RETURN.
+    ENDIF.
+
+    " Try with the cached/blank password first (works for keys without a password)
+    TRY.
+        rv_api_key = zcl_aicode_crypto=>decrypt(
+          i_username = ls_key-username
+          i_provider = c_provider
+          i_name     = c_keyname
+          i_password = gv_cached_password
+          i_secret   = ls_key-secret ).
+        RETURN.
+      CATCH cx_sec_sxml_encrypt_error.
+        CLEAR rv_api_key.
+    ENDTRY.
+
+    " TEMP: try the hardcoded password before bothering the user with a popup
+    TRY.
+        rv_api_key = zcl_aicode_crypto=>decrypt(
+          i_username = ls_key-username
+          i_provider = c_provider
+          i_name     = c_keyname
+          i_password = c_temp_password
+          i_secret   = ls_key-secret ).
+        gv_cached_password = c_temp_password.
+        RETURN.
+      CATCH cx_sec_sxml_encrypt_error.
+        CLEAR rv_api_key.
+    ENDTRY.
+
+    " Ask for the password once per session and retry
+    DATA(lv_password) = ask_password( ).
+    IF lv_password IS INITIAL.
+      mv_last_error = |Password required to decrypt { c_provider } / { c_keyname }.|.
       RETURN.
     ENDIF.
 
     TRY.
         rv_api_key = zcl_aicode_crypto=>decrypt(
-          i_username = sy-uname
+          i_username = ls_key-username
           i_provider = c_provider
           i_name     = c_keyname
-          i_password = ''
-          i_secret   = lv_secret ).
+          i_password = lv_password
+          i_secret   = ls_key-secret ).
+        gv_cached_password = lv_password.
       CATCH cx_sec_sxml_encrypt_error.
-        mv_last_error = |Cannot decrypt { c_provider } / { c_keyname }. The key probably has a password.|.
+        mv_last_error = |Cannot decrypt { c_provider } / { c_keyname }. Wrong password?|.
     ENDTRY.
 
   ENDMETHOD.
@@ -560,6 +620,35 @@ METHOD run.
       CATCH cx_root INTO DATA(lx_root).
         ev_text = |AI agent failed: { lx_root->get_text( ) }|.
     ENDTRY.
+
+  ENDMETHOD.
+  METHOD create.
+    ro_agent = NEW zcl_smd_ai_agent( io_debugger = io_debugger ).
+  ENDMETHOD.
+  METHOD ask_password.
+
+    DATA lv_answer   TYPE c.
+    DATA lv_valueout TYPE zaicode_apikey-secret.
+
+    CALL FUNCTION 'POPUP_TO_GET_VALUE'
+      EXPORTING
+        fieldname            = 'SECRET'
+        tabname               = 'ZAICODE_APIKEY'
+        titel                 = 'Enter password for the stored AI API key'
+        valuein               = ''
+      IMPORTING
+        answer                = lv_answer
+        valueout              = lv_valueout
+      EXCEPTIONS
+        fieldname_not_found   = 1
+        OTHERS                = 2.
+
+    IF sy-subrc <> 0 OR lv_answer = 'C'.
+      CLEAR rv_password.
+      RETURN.
+    ENDIF.
+
+    rv_password = lv_valueout.
 
   ENDMETHOD.
 ENDCLASS.

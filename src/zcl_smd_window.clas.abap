@@ -531,7 +531,7 @@ CLASS zcl_smd_window IMPLEMENTATION.
     ENDIF.
 
     IF mo_ai_agent IS INITIAL.
-      mo_ai_agent = NEW #( io_debugger = mo_debugger ).
+      mo_ai_agent = zcl_smd_ai_agent=>create( io_debugger = mo_debugger ).
     ENDIF.
 
     IF ms_ai_pending_action-tool IS NOT INITIAL.
@@ -544,7 +544,7 @@ CLASS zcl_smd_window IMPLEMENTATION.
       cl_gui_cfw=>flush( ).
 
       IF lv_step_tool = 'step_debugger' AND lv_step_command IS NOT INITIAL.
-        hnd_toolbar( fcode = lv_step_command ).
+        hnd_toolbar( fcode = CONV ui_func( lv_step_command ) ).
       ENDIF.
       RETURN.
     ENDIF.
