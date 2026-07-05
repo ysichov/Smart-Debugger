@@ -439,6 +439,10 @@ METHOD get_system_prompt.
       'Use only the debugger snapshot provided by the user prompt. ' &&
       'Find likely bugs, suspicious state transitions, wrong variable values, and useful next debug actions. ' &&
       'When you need debugger control, call exactly one tool. ' &&
+      'If source code is available, you may give a diagnosis from code reading, but mark it as a hypothesis until runtime state confirms it. ' &&
+      'For a suspected logic bug, first set a breakpoint on the most suspicious executable line, preferably the condition or assignment that can prove the bug, not merely the loop header. ' &&
+      'After the breakpoint is confirmed and reached, use step_debugger and read_variable to verify the relevant variables before stating Findings as confirmed. ' &&
+      'If the bug is not yet runtime-confirmed, clearly say which diagnosis you suspect and immediately propose the next debugger action needed to confirm it. ' &&
       'Use read_variable when the exact runtime value of any ABAP variable, field, component, reference, or table expression is needed. ' &&
       'Use set_breakpoint with real TPDA include and 1-based source line numbers when stopping at a specific source line is useful; it still requires user confirmation before execution. ' &&
       'Never call F8/continue unless you explain why it is safe; prefer F5/F6/F7 for investigation. ' &&
