@@ -890,30 +890,8 @@ METHOD run.
 
   METHOD ask_password.
 
-    DATA lt_fields TYPE STANDARD TABLE OF sval WITH EMPTY KEY.
-
-    APPEND VALUE #( tabname    = 'ZAICODE_APIKEY'
-                    fieldname  = 'SECRET'
-                    fieldtext  = 'Password'
-                    field_obl   = 'X' ) TO lt_fields.
-
-    CALL FUNCTION 'POPUP_GET_VALUES'
-      EXPORTING
-        popup_title          = 'Enter password for the stored AI API key'
-      TABLES
-        fields                = lt_fields
-      EXCEPTIONS
-        OTHERS                = 2.
-
-    IF sy-subrc <> 0.
-      CLEAR rv_password.
-      RETURN.
-    ENDIF.
-
-    READ TABLE lt_fields INDEX 1 INTO DATA(ls_field).
-    IF sy-subrc = 0.
-      rv_password = ls_field-value.
-    ENDIF.
+    DATA(lo_popup) = NEW zcl_smd_password_popup( ).
+    rv_password = lo_popup->get_password( ).
 
   ENDMETHOD.
 
