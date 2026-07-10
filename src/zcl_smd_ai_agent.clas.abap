@@ -890,8 +890,28 @@ METHOD run.
 
   METHOD ask_password.
 
-    DATA(lo_popup) = NEW zcl_smd_password_popup( ).
-    rv_password = lo_popup->get_password( ).
+    DATA lv_answer   TYPE c.
+    DATA lv_valueout TYPE string.
+
+    CALL FUNCTION 'POPUP_TO_GET_VALUE'
+      EXPORTING
+        fieldname           = 'VALUE'
+        tabname             = 'SVAL'
+        titel               = 'Enter password for the stored AI API key'
+        valuein             = ''
+      IMPORTING
+        answer              = lv_answer
+        valueout            = lv_valueout
+      EXCEPTIONS
+        fieldname_not_found = 1
+        OTHERS              = 2.
+
+    IF sy-subrc <> 0 OR lv_answer = 'C'.
+      CLEAR rv_password.
+      RETURN.
+    ENDIF.
+
+    rv_password = lv_valueout.
 
   ENDMETHOD.
 
