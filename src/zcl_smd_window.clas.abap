@@ -149,7 +149,7 @@ CLASS zcl_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUBL
           mo_ai_prompt           TYPE REF TO cl_gui_textedit,
           mo_ai_result           TYPE REF TO cl_gui_html_viewer,
           mo_ai_agent            TYPE REF TO zcl_smd_ai_agent,
-          mo_ai_log_viewer       TYPE REF TO zcl_smd_text_viewer,
+          mo_ai_log_viewer       TYPE REF TO zcl_smd_html_viewer,
           mt_ai_pending_actions  TYPE zif_smd_ai_agent_types=>tt_action,
           mo_code_viewer         TYPE REF TO cl_gui_abapedit,
           mt_stack               TYPE TABLE OF zcl_smd_appl=>t_stack,
@@ -678,19 +678,18 @@ CLASS zcl_smd_window IMPLEMENTATION.
   METHOD show_ai_log.
 
     DATA lv_log TYPE string.
-    DATA lr_log TYPE REF TO data.
-
     IF mo_ai_agent IS INITIAL.
-      lv_log = `AI log is empty.`.
+      lv_log = `# AI Log` && cl_abap_char_utilities=>newline && cl_abap_char_utilities=>newline && `AI log is empty.`.
     ELSE.
       lv_log = mo_ai_agent->get_action_log_text( ).
       IF lv_log IS INITIAL.
-        lv_log = `AI log is empty.`.
+        lv_log = `# AI Log` && cl_abap_char_utilities=>newline && cl_abap_char_utilities=>newline && `AI log is empty.`.
       ENDIF.
     ENDIF.
 
-    GET REFERENCE OF lv_log INTO lr_log.
-    mo_ai_log_viewer = NEW zcl_smd_text_viewer( lr_log ).
+    mo_ai_log_viewer = NEW zcl_smd_html_viewer(
+      i_markdown = lv_log
+      i_title    = 'AI Log' ).
 
   ENDMETHOD.
 

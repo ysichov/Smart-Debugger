@@ -49,6 +49,8 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     DATA mv_waiting_for_password TYPE xfeld.
     DATA mo_password_popup TYPE REF TO zcl_smd_password_popup.
     DATA mt_action_log TYPE tt_string.
+    DATA mv_log_llm TYPE i.
+    DATA mv_log_tool TYPE i.
     DATA mt_ai_breakpoints TYPE tt_string.
 
     METHODS get_default_api_key
@@ -380,7 +382,12 @@ METHOD ensure_guard_breakpoint.
       mv_last_tool_result = mv_last_tool_result && cl_abap_char_utilities=>newline && rv_text.
     ENDIF.
 
-    APPEND |{ sy-datum } { sy-uzeit } tool={ is_action-tool } command={ is_action-command } variable={ is_action-variable } target={ is_action-include }:{ is_action-line } reason={ is_action-reason } result={ rv_text }|
+    IF mv_log_llm IS INITIAL.
+      mv_log_llm = 1.
+    ENDIF.
+    ADD 1 TO mv_log_tool.
+
+    APPEND |{ mv_log_llm }.{ mv_log_tool } **tool** `{ is_action-tool }` command=`{ is_action-command }` variable=`{ is_action-variable }` target=`{ is_action-include }:{ is_action-line }` reason={ is_action-reason } result={ rv_text }|
       TO mt_action_log.
 
   ENDMETHOD.
@@ -416,11 +423,12 @@ METHOD get_action_log_text.
 
     CHECK mt_action_log IS NOT INITIAL.
 
-    rv_text = `Confirmed AI actions:`.
+    rv_text = `# AI Log`.
     LOOP AT mt_action_log INTO DATA(lv_log_line).
       rv_text = rv_text &&
         cl_abap_char_utilities=>newline &&
-        |{ sy-tabix }. { lv_log_line }|.
+        cl_abap_char_utilities=>newline &&
+        lv_log_line.
     ENDLOOP.
 
   ENDMETHOD.
@@ -887,13 +895,11 @@ METHOD run.
 
         ENDIF.
 
-        APPEND |{ sy-datum } { sy-uzeit } LLM call: task={ i_task } seconds={ lo_llm->get_last_seconds( ) } tokens={ lo_llm->mv_last_tok_in }/{ lo_llm->mv_last_tok_out } actions={ lines( et_actions ) } answer={ lv_answer }|
-          TO mt_action_log.
+        ADD 1 TO mv_log_llm.
+        CLEAR mv_log_tool.
 
-        LOOP AT et_actions INTO DATA(ls_log_action).
-          APPEND |{ sy-datum } { sy-uzeit } pending #{ sy-tabix }: tool={ ls_log_action-tool } command={ ls_log_action-command } variable={ ls_log_action-variable } target={ ls_log_action-include }:{ ls_log_action-line } reason={ ls_log_action-reason }|
-            TO mt_action_log.
-        ENDLOOP.
+        APPEND |{ mv_log_llm }. **LLM call** task={ i_task } seconds={ lo_llm->get_last_seconds( ) } tokens={ lo_llm->mv_last_tok_in }/{ lo_llm->mv_last_tok_out } actions={ lines( et_actions ) } answer={ lv_answer }|
+          TO mt_action_log.
 
       CATCH cx_root INTO DATA(lx_root).
         ev_text = |AI agent failed: { lx_root->get_text( ) }|.
