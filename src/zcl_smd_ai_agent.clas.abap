@@ -41,8 +41,6 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     DATA mt_action_log TYPE tt_string.
     DATA mt_ai_breakpoints TYPE tt_string.
 
-    CLASS-DATA gv_cached_password TYPE string.
-
     METHODS get_default_api_key
       RETURNING
         VALUE(rv_api_key) TYPE string.
@@ -384,10 +382,7 @@ METHOD get_action_log_text.
   ENDMETHOD.
 
 
-  METHOD get_default_api_key.
-
-    " TEMP: hardcoded password while the popup/keyname flow is being finalized.
-    CONSTANTS c_temp_password TYPE string VALUE 'Developer001'.
+METHOD get_default_api_key.
 
     CLEAR: rv_api_key, mv_last_error.
 
@@ -413,34 +408,7 @@ METHOD get_action_log_text.
       RETURN.
     ENDIF.
 
-    " Try with the cached/blank password first (works for keys without a password)
-    TRY.
-        rv_api_key = zcl_aicode_crypto=>decrypt(
-          i_username = ls_key-username
-          i_provider = c_provider
-          i_name     = c_keyname
-          i_password = gv_cached_password
-          i_secret   = ls_key-secret ).
-        RETURN.
-      CATCH cx_sec_sxml_encrypt_error.
-        CLEAR rv_api_key.
-    ENDTRY.
-
-    " TEMP: try the hardcoded password before bothering the user with a popup
-    TRY.
-        rv_api_key = zcl_aicode_crypto=>decrypt(
-          i_username = ls_key-username
-          i_provider = c_provider
-          i_name     = c_keyname
-          i_password = c_temp_password
-          i_secret   = ls_key-secret ).
-        gv_cached_password = c_temp_password.
-        RETURN.
-      CATCH cx_sec_sxml_encrypt_error.
-        CLEAR rv_api_key.
-    ENDTRY.
-
-    " Ask for the password once per session and retry
+    " Ask for the password on every AI request.
     DATA(lv_password) = ask_password( ).
     IF lv_password IS INITIAL.
       mv_last_error = |Password required to decrypt { c_provider } / { c_keyname }.|.
@@ -454,7 +422,6 @@ METHOD get_action_log_text.
           i_name     = c_keyname
           i_password = lv_password
           i_secret   = ls_key-secret ).
-        gv_cached_password = lv_password.
       CATCH cx_sec_sxml_encrypt_error.
         mv_last_error = |Cannot decrypt { c_provider } / { c_keyname }. Wrong password?|.
     ENDTRY.
