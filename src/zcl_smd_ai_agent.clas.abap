@@ -890,10 +890,9 @@ METHOD run.
 
   METHOD ask_password.
 
-    DATA lv_answer   TYPE c.
-    DATA lv_valueout TYPE zaicode_apikey-secret.
+    DATA lt_fields TYPE STANDARD TABLE OF sval WITH EMPTY KEY.
 
-    CALL FUNCTION 'POPUP_TO_GET_VALUE'
+    CALL FUNCTION 'POPUP_GET_VALUES'
       EXPORTING
         fieldname            = 'SECRET'
         tabname               = 'ZAICODE_APIKEY'
