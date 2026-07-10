@@ -39,6 +39,9 @@ CLASS zcl_smd_ai_agent DEFINITION
     METHODS is_at_guard_breakpoint
       RETURNING
         VALUE(rv_at_guard) TYPE abap_bool.
+    METHODS has_confirmed_findings
+      RETURNING
+        VALUE(rv_confirmed) TYPE abap_bool.
   PROTECTED SECTION.
   PRIVATE SECTION.
 
@@ -47,6 +50,7 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     DATA mo_debugger TYPE REF TO zcl_smd_debugger_base.
     DATA mv_last_error TYPE string.
     DATA mv_last_tool_result TYPE string.
+    DATA mv_findings_confirmed TYPE abap_bool.
     DATA mv_api_password TYPE string.
     DATA mv_password_popup_open TYPE xfeld.
     DATA mv_waiting_for_password TYPE xfeld.
@@ -448,6 +452,10 @@ METHOD ensure_guard_breakpoint.
           mo_debugger->mo_window->set_program_line( mo_debugger->mo_window->m_prg-line ).
         ENDIF.
     ENDCASE.
+
+    IF rv_text CS 'FINDINGS CONFIRMED'.
+      mv_findings_confirmed = abap_true.
+    ENDIF.
 
     IF mv_last_tool_result IS INITIAL.
       mv_last_tool_result = rv_text.
@@ -1291,6 +1299,9 @@ METHOD reset_last_tool_result.
   ENDMETHOD.
 METHOD get_last_tool_result.
     rv_text = mv_last_tool_result.
+  ENDMETHOD.
+METHOD has_confirmed_findings.
+    rv_confirmed = mv_findings_confirmed.
   ENDMETHOD.
   METHOD validate_evidence.
 

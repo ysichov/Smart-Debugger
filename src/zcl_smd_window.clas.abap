@@ -616,6 +616,15 @@ CLASS zcl_smd_window IMPLEMENTATION.
 
       CLEAR mt_ai_pending_actions.
 
+      IF mo_ai_agent->has_confirmed_findings( ) = abap_true.
+        set_ai_result( lv_batch_summary &&
+          cl_abap_char_utilities=>newline &&
+          cl_abap_char_utilities=>newline &&
+          |Findings confirmed. AI run stopped.| ).
+        cl_gui_cfw=>flush( ).
+        RETURN.
+      ENDIF.
+
       IF mo_ai_agent->is_at_guard_breakpoint( ) = abap_true.
         set_ai_result( lv_batch_summary &&
           cl_abap_char_utilities=>newline &&
