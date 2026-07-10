@@ -52,6 +52,11 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     DATA mt_action_log TYPE tt_string.
     DATA mv_log_llm TYPE i.
     DATA mv_log_tool TYPE i.
+    DATA mv_total_tok_in TYPE i.
+    DATA mv_total_tok_out TYPE i.
+    DATA mv_source_window_include TYPE string.
+    DATA mv_source_window_from TYPE i.
+    DATA mv_source_window_to TYPE i.
     DATA mt_ai_breakpoints TYPE tt_string.
 
     METHODS get_default_api_key
@@ -90,6 +95,12 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     METHODS cleanup_breakpoints.
 
     METHODS execute_plugin_tool
+      IMPORTING
+        !is_action     TYPE zif_smd_ai_agent_types=>ty_action
+      RETURNING
+        VALUE(rv_text) TYPE string.
+
+    METHODS set_source_window
       IMPORTING
         !is_action     TYPE zif_smd_ai_agent_types=>ty_action
       RETURNING
@@ -151,6 +162,8 @@ METHOD build_prompt.
     DATA lt_lines TYPE tt_string.
     DATA lv_line TYPE string.
     DATA lv_newline TYPE string.
+    DATA lv_current_include TYPE string.
+    DATA lv_window_active TYPE abap_bool.
 
     lv_newline = cl_abap_char_utilities=>newline.
 
@@ -188,15 +201,43 @@ METHOD build_prompt.
       ENDIF.
 
       IF mo_debugger->mo_window IS BOUND.
+        lv_current_include = mo_debugger->mo_window->m_prg-include.
+        TRANSLATE lv_current_include TO UPPER CASE.
+        CONDENSE lv_current_include.
+
+        IF mv_source_window_include IS NOT INITIAL
+        AND lv_current_include = mv_source_window_include
+        AND mo_debugger->mo_window->m_prg-line >= mv_source_window_from
+        AND mo_debugger->mo_window->m_prg-line <= mv_source_window_to.
+          lv_window_active = abap_true.
+        ENDIF.
+
         lv_line = |Screen program: program={ mo_debugger->mo_window->m_prg-program } |.
         lv_line = lv_line && |include={ mo_debugger->mo_window->m_prg-include } |.
         lv_line = lv_line && |line={ mo_debugger->mo_window->m_prg-line }|.
         append_line( EXPORTING i_line = lv_line CHANGING ct_lines = lt_lines ).
 
         append_line( EXPORTING i_line = `` CHANGING ct_lines = lt_lines ).
-        append_line( EXPORTING i_line = `Source code with real line numbers:` CHANGING ct_lines = lt_lines ).
+        IF lv_window_active = abap_true.
+          append_line(
+            EXPORTING
+              i_line = |Source code window with real line numbers: include={ mv_source_window_include } lines={ mv_source_window_from }-{ mv_source_window_to }|
+            CHANGING
+              ct_lines = lt_lines ).
+        ELSE.
+          append_line( EXPORTING i_line = `Full source code with real line numbers:` CHANGING ct_lines = lt_lines ).
+          append_line( EXPORTING i_line = `You must call set_source_window in this turn with the first and last source line needed for further debugging.` CHANGING ct_lines = lt_lines ).
+        ENDIF.
 
         LOOP AT mo_debugger->mo_window->mt_source INTO DATA(ls_source_for_prompt).
+          DATA(lv_source_include) = ls_source_for_prompt-include.
+          TRANSLATE lv_source_include TO UPPER CASE.
+          CONDENSE lv_source_include.
+
+          IF lv_window_active = abap_true AND lv_source_include <> mv_source_window_include.
+            CONTINUE.
+          ENDIF.
+
           append_line(
             EXPORTING
               i_line = |--- include={ ls_source_for_prompt-include } ---|
@@ -209,6 +250,11 @@ METHOD build_prompt.
           ENDIF.
 
           LOOP AT ls_source_for_prompt-source->lines INTO DATA(lv_source_line).
+            IF lv_window_active = abap_true
+            AND ( sy-tabix < mv_source_window_from OR sy-tabix > mv_source_window_to ).
+              CONTINUE.
+            ENDIF.
+
             append_line(
               EXPORTING
                 i_line = |{ sy-tabix }: { lv_source_line }|
@@ -344,6 +390,9 @@ METHOD ensure_guard_breakpoint.
       WHEN 'read_variable'.
         rv_text = read_variable( is_action-variable ).
 
+      WHEN 'set_source_window'.
+        rv_text = set_source_window( is_action ).
+
       WHEN 'step_debugger'.
         rv_text = |Confirmed debugger step { is_action-command }. Intent: { is_action-reason }|.
 
@@ -403,7 +452,7 @@ METHOD ensure_guard_breakpoint.
     ADD 1 TO mv_log_tool.
 
     DATA(lv_log_line) =
-      |{ mv_log_llm }.{ mv_log_tool } **tool** `{ is_action-tool }` command=`{ is_action-command }` variable=`{ is_action-variable }` target=`{ is_action-include }:{ is_action-line }` reason={ is_action-reason } result={ rv_text }|.
+      |{ mv_log_llm }.{ mv_log_tool } **tool** `{ is_action-tool }` command=`{ is_action-command }` variable=`{ is_action-variable }` target=`{ is_action-include }:{ is_action-line }` range=`{ is_action-from_line }-{ is_action-to_line }` reason={ is_action-reason } result={ rv_text }|.
 
     IF is_action-tool = 'set_breakpoint' AND rv_text CS 'deleted=X'.
       lv_log_line = |!DELETE_BP! { lv_log_line }|.
@@ -486,6 +535,37 @@ METHOD cleanup_breakpoints.
     ENDLOOP.
 
     mo_debugger->mo_window->set_program_line( mo_debugger->mo_window->m_prg-line ).
+
+  ENDMETHOD.
+
+
+METHOD set_source_window.
+
+    DATA lv_include TYPE string.
+    DATA lv_from TYPE i.
+    DATA lv_to TYPE i.
+
+    lv_include = is_action-include.
+    TRANSLATE lv_include TO UPPER CASE.
+    CONDENSE lv_include.
+    lv_from = is_action-from_line.
+    lv_to = is_action-to_line.
+
+    IF lv_include IS INITIAL.
+      rv_text = 'set_source_window: include is empty'.
+      RETURN.
+    ENDIF.
+
+    IF lv_from <= 0 OR lv_to <= 0 OR lv_from > lv_to.
+      rv_text = |set_source_window: invalid range { lv_from }-{ lv_to }|.
+      RETURN.
+    ENDIF.
+
+    mv_source_window_include = lv_include.
+    mv_source_window_from = lv_from.
+    mv_source_window_to = lv_to.
+
+    rv_text = |Source window set: { mv_source_window_include }:{ mv_source_window_from }-{ mv_source_window_to }. Reason: { is_action-reason }|.
 
   ENDMETHOD.
 
@@ -617,6 +697,12 @@ METHOD get_plugin_tools_json.
       'Use only the debugger snapshot provided by the user prompt. ' &&
       'Find likely bugs, suspicious state transitions, wrong variable values, ' &&
       'and useful next debug actions. ' &&
+      'When the prompt contains full source code, call set_source_window ' &&
+      'in the same turn with the include, first line, and last line you ' &&
+      'need for further debugging. Keep this window as small as practical ' &&
+      'but large enough to understand the logic. Later prompts may include ' &&
+      'only that window; if execution leaves it, full source will be sent ' &&
+      'again and you must choose a new source window. ' &&
       'In a single turn you may call several tools together when they form ' &&
       'one logical chain, for example set_breakpoint together with ' &&
       'step_debugger F8 to run to it, or a single step_debugger together ' &&
@@ -762,6 +848,20 @@ METHOD get_plugin_tools_json.
       `"required":["variable","reason"],` &&
       `"additionalProperties":false } } },` &&
       `{ "type":"function", "function": {` &&
+      `"name":"set_source_window",` &&
+      `"description":"Choose the source include and first/last line needed for the next debugging steps. Required after receiving full source.",` &&
+      `"parameters": { "type":"object", "properties": {` &&
+      `"include": { "type":"string",` &&
+      `"description":"ABAP include/program containing the relevant code window" },` &&
+      `"from_line": { "type":"integer",` &&
+      `"description":"First 1-based source line needed for analysis" },` &&
+      `"to_line": { "type":"integer",` &&
+      `"description":"Last 1-based source line needed for analysis" },` &&
+      `"reason": { "type":"string",` &&
+      `"description":"Why this source window is sufficient" } },` &&
+      `"required":["include","from_line","to_line","reason"],` &&
+      `"additionalProperties":false } } },` &&
+      `{ "type":"function", "function": {` &&
       `"name":"report_findings",` &&
       `"description":"` && lv_findings_desc && `",` &&
       `"parameters": { "type":"object", "properties": {` &&
@@ -812,6 +912,12 @@ METHOD get_plugin_tools_json.
         variable TYPE string,
         reason   TYPE string,
       END OF ty_read_args,
+      BEGIN OF ty_source_window_args,
+        include   TYPE string,
+        from_line TYPE i,
+        to_line   TYPE i,
+        reason    TYPE string,
+      END OF ty_source_window_args,
       BEGIN OF ty_findings_args,
         status            TYPE string,
         diagnosis         TYPE string,
@@ -845,6 +951,11 @@ METHOD get_plugin_tools_json.
           DATA ls_read TYPE ty_read_args.
           /ui2/cl_json=>deserialize( EXPORTING json = i_arguments CHANGING data = ls_read ).
           MOVE-CORRESPONDING ls_read TO rs_action.
+
+        ELSEIF i_name = 'set_source_window'.
+          DATA ls_source_window TYPE ty_source_window_args.
+          /ui2/cl_json=>deserialize( EXPORTING json = i_arguments CHANGING data = ls_source_window ).
+          MOVE-CORRESPONDING ls_source_window TO rs_action.
 
         ELSEIF i_name = 'report_findings'.
           DATA ls_findings TYPE ty_findings_args.
@@ -1020,17 +1131,25 @@ METHOD run.
             |Pending AI actions ({ lines( et_actions ) }):|.
 
           LOOP AT et_actions INTO DATA(ls_pending_action).
-            ev_text = ev_text &&
-              cl_abap_char_utilities=>newline &&
-              |{ sy-tabix }. { ls_pending_action-tool } { ls_pending_action-command }{ ls_pending_action-variable } { ls_pending_action-include }:{ ls_pending_action-line } - { ls_pending_action-reason }|.
+            IF ls_pending_action-tool = 'set_source_window'.
+              ev_text = ev_text &&
+                cl_abap_char_utilities=>newline &&
+                |{ sy-tabix }. { ls_pending_action-tool } { ls_pending_action-include }:{ ls_pending_action-from_line }-{ ls_pending_action-to_line } - { ls_pending_action-reason }|.
+            ELSE.
+              ev_text = ev_text &&
+                cl_abap_char_utilities=>newline &&
+                |{ sy-tabix }. { ls_pending_action-tool } { ls_pending_action-command }{ ls_pending_action-variable } { ls_pending_action-include }:{ ls_pending_action-line } - { ls_pending_action-reason }|.
+            ENDIF.
           ENDLOOP.
 
         ENDIF.
 
         ADD 1 TO mv_log_llm.
         CLEAR mv_log_tool.
+        mv_total_tok_in = mv_total_tok_in + lo_llm->mv_last_tok_in.
+        mv_total_tok_out = mv_total_tok_out + lo_llm->mv_last_tok_out.
 
-        APPEND |{ mv_log_llm }. **LLM call** task={ i_task } seconds={ lo_llm->get_last_seconds( ) } tokens={ lo_llm->mv_last_tok_in }/{ lo_llm->mv_last_tok_out } actions={ lines( et_actions ) } answer={ lv_answer }|
+        APPEND |{ mv_log_llm }. **LLM call** task={ i_task } seconds={ lo_llm->get_last_seconds( ) } tokens in/out=`{ lo_llm->mv_last_tok_in }/{ lo_llm->mv_last_tok_out }` total in/out=`{ mv_total_tok_in }/{ mv_total_tok_out }` actions={ lines( et_actions ) } answer={ lv_answer }|
           TO mt_action_log.
 
       CATCH cx_root INTO DATA(lx_root).

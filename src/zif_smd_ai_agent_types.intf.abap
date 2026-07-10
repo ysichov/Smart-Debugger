@@ -8,6 +8,8 @@ INTERFACE zif_smd_ai_agent_types
       program           TYPE string,
       include           TYPE string,
       line              TYPE i,
+      from_line         TYPE i,
+      to_line           TYPE i,
       mode              TYPE string,
       variable          TYPE string,
       reason            TYPE string,
