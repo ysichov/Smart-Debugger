@@ -54,6 +54,7 @@ CLASS zcl_smd_markdown_html IMPLEMENTATION.
       `pre{font-family:Consolas,monospace;font-size:12px;line-height:1.3;margin:6px 0;padding:6px;border:1px solid #d1d5db;background:#f9fafb;white-space:pre-wrap;}` &&
       `code{font-family:Consolas,monospace;background:#f3f4f6;border:1px solid #e5e7eb;padding:0 2px;}` &&
       `strong{font-weight:700;}` &&
+      `.deletebp{margin:4px 0 4px 18px;text-indent:-16px;padding:4px 6px;border-left:4px solid #dc2626;background:#fee2e2;color:#7f1d1d;}` &&
       `.rule{border-top:1px solid #d1d5db;margin:8px 0;}` &&
       `</style></head><body>`.
 
@@ -89,6 +90,9 @@ CLASS zcl_smd_markdown_html IMPLEMENTATION.
 
       IF lv_trim = '---' OR lv_trim = '***'.
         rv_html = rv_html && `<div class="rule"></div>`.
+      ELSEIF lv_trim CP '!DELETE_BP!*'.
+        lv_text = lv_trim+11.
+        rv_html = rv_html && `<div class="deletebp">` && inline_markdown( lv_text ) && `</div>`.
       ELSEIF lv_prefix5 = '#### '.
         lv_text = lv_trim+5.
         rv_html = rv_html && `<h4>` && inline_markdown( lv_text ) && `</h4>`.

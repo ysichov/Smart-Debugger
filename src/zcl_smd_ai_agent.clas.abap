@@ -47,6 +47,7 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     DATA mv_api_password TYPE string.
     DATA mv_password_popup_open TYPE xfeld.
     DATA mv_waiting_for_password TYPE xfeld.
+    DATA mv_guard_breakpoint TYPE string.
     DATA mo_password_popup TYPE REF TO zcl_smd_password_popup.
     DATA mt_action_log TYPE tt_string.
     DATA mv_log_llm TYPE i.
@@ -85,6 +86,8 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     METHODS ensure_guard_breakpoint
       RETURNING
         VALUE(rv_text) TYPE string.
+
+    METHODS cleanup_breakpoints.
 
     METHODS execute_plugin_tool
       IMPORTING
@@ -320,6 +323,12 @@ METHOD ensure_guard_breakpoint.
       WHEN sy-subrc = 0 THEN |Guard breakpoint: { lv_include }:{ lv_line }|
       ELSE |Guard breakpoint was not set: { lv_include }:{ lv_line }| ).
 
+    IF sy-subrc = 0.
+      TRANSLATE lv_include TO UPPER CASE.
+      CONDENSE lv_include.
+      mv_guard_breakpoint = |{ lv_include }:{ lv_line }|.
+    ENDIF.
+
   ENDMETHOD.
 
 
@@ -387,8 +396,90 @@ METHOD ensure_guard_breakpoint.
     ENDIF.
     ADD 1 TO mv_log_tool.
 
-    APPEND |{ mv_log_llm }.{ mv_log_tool } **tool** `{ is_action-tool }` command=`{ is_action-command }` variable=`{ is_action-variable }` target=`{ is_action-include }:{ is_action-line }` reason={ is_action-reason } result={ rv_text }|
-      TO mt_action_log.
+    DATA(lv_log_line) =
+      |{ mv_log_llm }.{ mv_log_tool } **tool** `{ is_action-tool }` command=`{ is_action-command }` variable=`{ is_action-variable }` target=`{ is_action-include }:{ is_action-line }` reason={ is_action-reason } result={ rv_text }|.
+
+    IF is_action-tool = 'set_breakpoint' AND rv_text CS 'deleted=X'.
+      lv_log_line = |!DELETE_BP! { lv_log_line }|.
+    ENDIF.
+
+    APPEND lv_log_line TO mt_action_log.
+
+    IF is_action-tool = 'set_breakpoint' AND rv_text CS 'set=X'.
+      cleanup_breakpoints( ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+METHOD cleanup_breakpoints.
+
+    DATA lv_include TYPE string.
+    DATA lv_program TYPE string.
+    DATA lv_key TYPE string.
+    DATA lv_deleted TYPE string.
+    DATA lv_type TYPE char1.
+    DATA lt_seen TYPE tt_string.
+
+    CHECK mo_debugger IS BOUND.
+    CHECK mo_debugger->mo_window IS BOUND.
+
+    LOOP AT mo_debugger->mo_window->mt_bpoints INTO DATA(ls_breakpoint).
+      lv_include = ls_breakpoint-include.
+      IF lv_include IS INITIAL.
+        lv_include = mo_debugger->mo_window->m_prg-include.
+      ENDIF.
+
+      CHECK lv_include IS NOT INITIAL.
+      CHECK ls_breakpoint-line > 0.
+
+      TRANSLATE lv_include TO UPPER CASE.
+      CONDENSE lv_include.
+      lv_key = |{ lv_include }:{ ls_breakpoint-line }|.
+
+      READ TABLE lt_seen TRANSPORTING NO FIELDS WITH KEY table_line = lv_key.
+      IF sy-subrc = 0.
+        CONTINUE.
+      ENDIF.
+      APPEND lv_key TO lt_seen.
+
+      IF lv_key = mv_guard_breakpoint.
+        CONTINUE.
+      ENDIF.
+
+      READ TABLE mt_ai_breakpoints TRANSPORTING NO FIELDS WITH KEY table_line = lv_key.
+      IF sy-subrc = 0.
+        CONTINUE.
+      ENDIF.
+
+      lv_program = ls_breakpoint-program.
+      IF lv_program IS INITIAL.
+        lv_program = lv_include.
+      ENDIF.
+
+      lv_type = ls_breakpoint-type.
+      IF lv_type IS INITIAL.
+        lv_type = 'S'.
+      ENDIF.
+
+      CALL FUNCTION 'RS_DELETE_BREAKPOINT'
+        EXPORTING
+          index        = ls_breakpoint-line
+          mainprog     = CONV progname( lv_program )
+          program      = CONV progname( lv_include )
+          bp_type      = lv_type
+        EXCEPTIONS
+          not_executed = 1
+          OTHERS       = 2.
+
+      IF sy-subrc = 0.
+        ADD 1 TO mv_log_tool.
+        lv_deleted = |!DELETE_BP! { mv_log_llm }.{ mv_log_tool } **auto delete breakpoint** target=`{ lv_key }` type=`{ lv_type }` reason=cleanup: keep only final guard and AI-set breakpoints|.
+        APPEND lv_deleted TO mt_action_log.
+      ENDIF.
+    ENDLOOP.
+
+    mo_debugger->mo_window->set_program_line( mo_debugger->mo_window->m_prg-line ).
 
   ENDMETHOD.
 

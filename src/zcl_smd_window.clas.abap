@@ -393,6 +393,8 @@ CLASS zcl_smd_window IMPLEMENTATION.
     TYPES: lntab TYPE STANDARD TABLE OF i.
     DATA lines TYPE lntab.
 
+    CLEAR mt_bpoints.
+
     mo_code_viewer->remove_all_marker( 2 ).
     mo_code_viewer->remove_all_marker( 4 ).
 
@@ -528,8 +530,9 @@ CLASS zcl_smd_window IMPLEMENTATION.
     DATA: lv_prompt        TYPE string,
           lv_result        TYPE string,
           lv_step_command  TYPE string,
-          lv_batch_summary TYPE string,
-          lv_llm_calls     TYPE i.
+          lv_batch_summary    TYPE string,
+          lv_llm_calls        TYPE i,
+          lv_stop_after_chain TYPE abap_bool.
 
     IF mo_ai_prompt IS BOUND.
       mo_ai_prompt->get_textstream( IMPORTING text = lv_prompt ).
@@ -564,14 +567,7 @@ CLASS zcl_smd_window IMPLEMENTATION.
           RETURN.
         ENDIF.
 
-        IF lv_llm_calls MOD c_llm_stop_interval = 0.
-          set_ai_result( lv_result &&
-            cl_abap_char_utilities=>newline &&
-            cl_abap_char_utilities=>newline &&
-            |Stopped after { lv_llm_calls } LLM calls. Pending actions are waiting.| ).
-          cl_gui_cfw=>flush( ).
-          RETURN.
-        ENDIF.
+        lv_stop_after_chain = xsdbool( lv_llm_calls MOD c_llm_stop_interval = 0 ).
       ENDIF.
 
       mo_ai_agent->reset_last_tool_result( ).
@@ -605,6 +601,15 @@ CLASS zcl_smd_window IMPLEMENTATION.
       ENDIF.
 
       CLEAR mt_ai_pending_actions.
+
+      IF lv_stop_after_chain = abap_true.
+        set_ai_result( lv_batch_summary &&
+          cl_abap_char_utilities=>newline &&
+          cl_abap_char_utilities=>newline &&
+          |Stopped after { lv_llm_calls } LLM calls. Chain executed.| ).
+        cl_gui_cfw=>flush( ).
+        RETURN.
+      ENDIF.
 
       set_ai_result( lv_batch_summary &&
         cl_abap_char_utilities=>newline &&
