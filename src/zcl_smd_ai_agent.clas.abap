@@ -33,6 +33,9 @@ CLASS zcl_smd_ai_agent DEFINITION
     METHODS reset_last_tool_result.
     METHODS get_last_tool_result
       RETURNING VALUE(rv_text) TYPE string.
+    METHODS get_action_log_text
+      RETURNING
+        VALUE(rv_text) TYPE string.
   PROTECTED SECTION.
   PRIVATE SECTION.
 
@@ -84,10 +87,6 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     METHODS execute_plugin_tool
       IMPORTING
         !is_action     TYPE zif_smd_ai_agent_types=>ty_action
-      RETURNING
-        VALUE(rv_text) TYPE string.
-
-    METHODS get_action_log_text
       RETURNING
         VALUE(rv_text) TYPE string.
 
@@ -874,19 +873,15 @@ METHOD run.
               |{ sy-tabix }. { ls_pending_action-tool } { ls_pending_action-command }{ ls_pending_action-variable } { ls_pending_action-include }:{ ls_pending_action-line } - { ls_pending_action-reason }|.
           ENDLOOP.
 
-          ev_text = ev_text &&
-            cl_abap_char_utilities=>newline &&
-            cl_abap_char_utilities=>newline &&
-            |Press AI again to confirm and run this chain.|.
-        ELSE.
-          DATA(lv_action_log) = get_action_log_text( ).
-          IF lv_action_log IS NOT INITIAL.
-            ev_text = ev_text &&
-              cl_abap_char_utilities=>newline &&
-              cl_abap_char_utilities=>newline &&
-              lv_action_log.
-          ENDIF.
         ENDIF.
+
+        APPEND |{ sy-datum } { sy-uzeit } LLM call: task={ i_task } seconds={ lo_llm->get_last_seconds( ) } tokens={ lo_llm->mv_last_tok_in }/{ lo_llm->mv_last_tok_out } actions={ lines( et_actions ) } answer={ lv_answer }|
+          TO mt_action_log.
+
+        LOOP AT et_actions INTO DATA(ls_log_action).
+          APPEND |{ sy-datum } { sy-uzeit } pending #{ sy-tabix }: tool={ ls_log_action-tool } command={ ls_log_action-command } variable={ ls_log_action-variable } target={ ls_log_action-include }:{ ls_log_action-line } reason={ ls_log_action-reason }|
+            TO mt_action_log.
+        ENDLOOP.
 
       CATCH cx_root INTO DATA(lx_root).
         ev_text = |AI agent failed: { lx_root->get_text( ) }|.

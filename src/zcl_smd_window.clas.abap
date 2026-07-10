@@ -149,6 +149,7 @@ CLASS zcl_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUBL
           mo_ai_prompt           TYPE REF TO cl_gui_textedit,
           mo_ai_result           TYPE REF TO cl_gui_html_viewer,
           mo_ai_agent            TYPE REF TO zcl_smd_ai_agent,
+          mo_ai_log_viewer       TYPE REF TO zcl_smd_text_viewer,
           mt_ai_pending_actions  TYPE zif_smd_ai_agent_types=>tt_action,
           mo_code_viewer         TYPE REF TO cl_gui_abapedit,
           mt_stack               TYPE TABLE OF zcl_smd_appl=>t_stack,
@@ -182,6 +183,7 @@ CLASS zcl_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUBL
       run_ai_agent,
       set_ai_text IMPORTING io_text TYPE REF TO cl_gui_textedit i_text TYPE string,
       set_ai_result IMPORTING i_text TYPE string,
+      show_ai_log,
       create_code_viewer,
       show_stack.
 
@@ -339,6 +341,7 @@ CLASS zcl_smd_window IMPLEMENTATION.
      "( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'Stack History switch' text = 'History On' )
      "( function = 'VARHIST' icon = CONV #( icon_graduate ) quickinfo = 'Variables History switch' text = 'Vars History On' )
      ( function = 'AI' icon = CONV #( icon_wizard ) quickinfo = 'AI debugger agent' text = 'AI' )
+     ( function = 'AI_LOG' icon = CONV #( icon_list ) quickinfo = 'AI call/action log' text = 'AI Log' )
      ( butn_type = 3  )
      ( function = 'F5' icon = CONV #( icon_debugger_step_into ) quickinfo = 'Step into' text = 'Step into' )
      ( function = 'F6' icon = CONV #( icon_debugger_step_over ) quickinfo = 'Step over' text = 'Step over' )
@@ -520,10 +523,13 @@ CLASS zcl_smd_window IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD run_ai_agent.
+    CONSTANTS c_llm_stop_interval TYPE i VALUE 5.
+
     DATA: lv_prompt        TYPE string,
           lv_result        TYPE string,
           lv_step_command  TYPE string,
-          lv_batch_summary TYPE string.
+          lv_batch_summary TYPE string,
+          lv_llm_calls     TYPE i.
 
     IF mo_ai_prompt IS BOUND.
       mo_ai_prompt->get_textstream( IMPORTING text = lv_prompt ).
@@ -537,61 +543,76 @@ CLASS zcl_smd_window IMPLEMENTATION.
       mo_ai_agent = zcl_smd_ai_agent=>create( io_debugger = mo_debugger ).
     ENDIF.
 
-    " If a chain is already pending (e.g. from a prior call), keep it as
-    " the starting point; otherwise get the first proposal from the LLM.
-    IF mt_ai_pending_actions IS INITIAL.
-      set_ai_result( |AI is analyzing current debug state...| ).
-      cl_gui_cfw=>flush( ).
+    WHILE abap_true = abap_true.
 
-      mo_ai_agent->run(
-        EXPORTING
-          i_task     = lv_prompt
-        IMPORTING
-          et_actions = mt_ai_pending_actions
-          ev_text    = lv_result ).
+      IF mt_ai_pending_actions IS INITIAL.
+        set_ai_result( |AI is analyzing current debug state...| ).
+        cl_gui_cfw=>flush( ).
 
-      set_ai_result( lv_result ).
-      cl_gui_cfw=>flush( ).
-      RETURN.
-    ENDIF.
+        ADD 1 TO lv_llm_calls.
+        mo_ai_agent->run(
+          EXPORTING
+            i_task     = lv_prompt
+          IMPORTING
+            et_actions = mt_ai_pending_actions
+            ev_text    = lv_result ).
 
-    mo_ai_agent->reset_last_tool_result( ).
-    CLEAR lv_step_command.
+        set_ai_result( lv_result ).
+        cl_gui_cfw=>flush( ).
 
-    LOOP AT mt_ai_pending_actions INTO DATA(ls_break_action) WHERE tool = 'set_breakpoint'.
-      mo_ai_agent->execute_action( ls_break_action ).
-    ENDLOOP.
+        IF mt_ai_pending_actions IS INITIAL.
+          RETURN.
+        ENDIF.
 
-    READ TABLE mt_ai_pending_actions INTO DATA(ls_step_action) WITH KEY tool = 'step_debugger'.
-    IF sy-subrc = 0.
-      mo_ai_agent->execute_action( ls_step_action ).
-      lv_step_command = ls_step_action-command.
-      IF lv_step_command IS NOT INITIAL.
-        CLEAR m_direction.
-        mo_debugger->m_hist_step = mo_debugger->m_step.
-        hnd_toolbar( fcode = CONV ui_func( lv_step_command ) ).
+        IF lv_llm_calls MOD c_llm_stop_interval = 0.
+          set_ai_result( lv_result &&
+            cl_abap_char_utilities=>newline &&
+            cl_abap_char_utilities=>newline &&
+            |Stopped after { lv_llm_calls } LLM calls. Pending actions are waiting.| ).
+          cl_gui_cfw=>flush( ).
+          RETURN.
+        ENDIF.
       ENDIF.
-    ENDIF.
 
-    LOOP AT mt_ai_pending_actions INTO DATA(ls_other_action)
-      WHERE tool <> 'set_breakpoint' AND tool <> 'step_debugger'.
-      mo_ai_agent->execute_action( ls_other_action ).
-    ENDLOOP.
+      mo_ai_agent->reset_last_tool_result( ).
+      CLEAR lv_step_command.
 
-    lv_batch_summary = mo_ai_agent->get_last_tool_result( ).
-    IF lv_step_command IS NOT INITIAL.
-      lv_batch_summary = lv_batch_summary &&
+      LOOP AT mt_ai_pending_actions INTO DATA(ls_break_action) WHERE tool = 'set_breakpoint'.
+        mo_ai_agent->execute_action( ls_break_action ).
+      ENDLOOP.
+
+      READ TABLE mt_ai_pending_actions INTO DATA(ls_step_action) WITH KEY tool = 'step_debugger'.
+      IF sy-subrc = 0.
+        mo_ai_agent->execute_action( ls_step_action ).
+        lv_step_command = ls_step_action-command.
+        IF lv_step_command IS NOT INITIAL.
+          CLEAR m_direction.
+          mo_debugger->m_hist_step = mo_debugger->m_step.
+          hnd_toolbar( fcode = CONV ui_func( lv_step_command ) ).
+        ENDIF.
+      ENDIF.
+
+      LOOP AT mt_ai_pending_actions INTO DATA(ls_other_action)
+        WHERE tool <> 'set_breakpoint' AND tool <> 'step_debugger'.
+        mo_ai_agent->execute_action( ls_other_action ).
+      ENDLOOP.
+
+      lv_batch_summary = mo_ai_agent->get_last_tool_result( ).
+      IF lv_step_command IS NOT INITIAL.
+        lv_batch_summary = lv_batch_summary &&
+          cl_abap_char_utilities=>newline &&
+          |Current position after { lv_step_command }: { m_prg-include }:{ m_prg-line }|.
+      ENDIF.
+
+      CLEAR mt_ai_pending_actions.
+
+      set_ai_result( lv_batch_summary &&
         cl_abap_char_utilities=>newline &&
-        |Current position after { lv_step_command }: { m_prg-include }:{ m_prg-line }|.
-    ENDIF.
+        cl_abap_char_utilities=>newline &&
+        |Chain executed. Asking AI for the next step...| ).
+      cl_gui_cfw=>flush( ).
 
-    CLEAR mt_ai_pending_actions.
-
-    set_ai_result( lv_batch_summary &&
-      cl_abap_char_utilities=>newline &&
-      cl_abap_char_utilities=>newline &&
-      |Chain executed. Press AI Run again to ask AI for the next step.| ).
-    cl_gui_cfw=>flush( ).
+    ENDWHILE.
 
 *   Temporary stop after each LLM/action cycle. Uncomment this block later
 *   to restore automatic LLM continuation.
@@ -652,6 +673,25 @@ CLASS zcl_smd_window IMPLEMENTATION.
 *       lv_result ).
 *     cl_gui_cfw=>flush( ).
 *   ENDWHILE.
+  ENDMETHOD.
+
+  METHOD show_ai_log.
+
+    DATA lv_log TYPE string.
+    DATA lr_log TYPE REF TO data.
+
+    IF mo_ai_agent IS INITIAL.
+      lv_log = `AI log is empty.`.
+    ELSE.
+      lv_log = mo_ai_agent->get_action_log_text( ).
+      IF lv_log IS INITIAL.
+        lv_log = `AI log is empty.`.
+      ENDIF.
+    ENDIF.
+
+    GET REFERENCE OF lv_log INTO lr_log.
+    mo_ai_log_viewer = NEW zcl_smd_text_viewer( lr_log ).
+
   ENDMETHOD.
 
   METHOD set_ai_result.
@@ -916,6 +956,10 @@ CLASS zcl_smd_window IMPLEMENTATION.
         ELSE.
           run_ai_agent( ).
         ENDIF.
+        RETURN.
+
+      WHEN 'AI_LOG'.
+        show_ai_log( ).
         RETURN.
 
       WHEN 'ENGINE'.
