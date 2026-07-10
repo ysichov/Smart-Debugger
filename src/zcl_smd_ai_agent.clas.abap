@@ -36,6 +36,9 @@ CLASS zcl_smd_ai_agent DEFINITION
     METHODS get_action_log_text
       RETURNING
         VALUE(rv_text) TYPE string.
+    METHODS is_at_guard_breakpoint
+      RETURNING
+        VALUE(rv_at_guard) TYPE abap_bool.
   PROTECTED SECTION.
   PRIVATE SECTION.
 
@@ -617,6 +620,25 @@ METHOD get_action_log_text.
         cl_abap_char_utilities=>newline &&
         lv_log_line.
     ENDLOOP.
+
+  ENDMETHOD.
+
+
+METHOD is_at_guard_breakpoint.
+
+    DATA lv_include TYPE string.
+    DATA lv_key TYPE string.
+
+    CHECK mv_guard_breakpoint IS NOT INITIAL.
+    CHECK mo_debugger IS BOUND.
+    CHECK mo_debugger->mo_window IS BOUND.
+
+    lv_include = mo_debugger->mo_window->m_prg-include.
+    TRANSLATE lv_include TO UPPER CASE.
+    CONDENSE lv_include.
+    lv_key = |{ lv_include }:{ mo_debugger->mo_window->m_prg-line }|.
+
+    rv_at_guard = xsdbool( lv_key = mv_guard_breakpoint ).
 
   ENDMETHOD.
 
