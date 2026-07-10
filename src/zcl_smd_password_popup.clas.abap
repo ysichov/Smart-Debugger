@@ -69,8 +69,8 @@ CLASS ZCL_SMD_PASSWORD_POPUP IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    mo_text->set_toolbar_mode( toolbar_mode = cl_gui_textedit=>false ).
-    mo_text->set_statusbar_mode( statusbar_mode = cl_gui_textedit=>false ).
+    mo_text->set_toolbar_mode( toolbar_mode = 0 ).
+    mo_text->set_statusbar_mode( statusbar_mode = 0 ).
     mo_text->set_focus( mo_box ).
     cl_gui_cfw=>flush( ).
 
@@ -89,13 +89,10 @@ CLASS ZCL_SMD_PASSWORD_POPUP IMPLEMENTATION.
         EXCEPTIONS
           OTHERS = 1 ).
 
-      LOOP AT lt_text INTO DATA(lv_line).
-        IF lv_password IS INITIAL.
-          lv_password = lv_line.
-        ELSE.
-          lv_password = lv_password && lv_line.
-        ENDIF.
-      ENDLOOP.
+      READ TABLE lt_text INDEX 1 INTO DATA(lv_line).
+      IF sy-subrc = 0.
+        lv_password = lv_line.
+      ENDIF.
     ENDIF.
 
     IF mr_password IS BOUND.
