@@ -552,6 +552,10 @@ METHOD get_plugin_tools_json.
       'that can prove the bug, not merely the loop header; combine it in ' &&
       'the same turn with step_debugger F8 to run to it, unless another ' &&
       'breakpoint should logically fire first. ' &&
+      'Prefer setting breakpoints after the operation that changes the ' &&
+      'value you need to inspect, so F8 lands where the post-state is ' &&
+      'already visible. Set a breakpoint before an operation only when ' &&
+      'the pre-state itself is needed as evidence. ' &&
       'After the breakpoint is confirmed and reached, combine step_debugger ' &&
       'with the read_variable calls needed to verify the relevant variables ' &&
       'in the same turn, before calling report_findings with status=confirmed. ' &&
@@ -582,12 +586,20 @@ METHOD get_plugin_tools_json.
       'chain still requires user confirmation before it executes. ' &&
       'Do not set a breakpoint again if it is already listed under Known ' &&
       'AI-set breakpoints; continue to it or verify state there instead. ' &&
+      'Use set_breakpoint with mode=delete to remove AI-set temporary ' &&
+      'breakpoints as soon as they have served their purpose, especially ' &&
+      'loop breakpoints that would otherwise catch every F8/continue. ' &&
+      'When deleting a breakpoint, use the same include, line, and ' &&
+      'breakpoint_type that were used to set it. ' &&
       'After a relevant breakpoint has been set and the next goal is to ' &&
       'reach it - including reaching the SAME breakpoint again on a later ' &&
       'loop iteration or a later call - propose step_debugger F8/continue; ' &&
       'do not use F5, F6, or F7 to walk toward a known breakpoint, since ' &&
       'single-stepping only advances one statement at a time and will not ' &&
       'reliably land on the next hit of that breakpoint. ' &&
+      'Prefer F8/continue over F5/F6/F7 whenever a breakpoint or guard ' &&
+      'stop will catch execution; single-step only for a local observation ' &&
+      'that cannot be reached safely with F8. ' &&
       'Use F5/F6/F7 only once you are already at or near the suspicious ' &&
       'area and need a single-step observation, not to travel toward a ' &&
       'breakpoint that has not fired yet. ' &&
