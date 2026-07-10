@@ -737,6 +737,10 @@ METHOD get_plugin_tools_json.
       'Use only the debugger snapshot provided by the user prompt. ' &&
       'Find likely bugs, suspicious state transitions, wrong variable values, ' &&
       'and useful next debug actions. ' &&
+      'Never repeat the same sentence or the same proposed breakpoint ' &&
+      'plan in prose. If you notice that your answer is repeating itself, ' &&
+      'stop writing prose immediately and use the available tools instead. ' &&
+      'Keep Intent and Analysis short: at most one paragraph each. ' &&
       'When the prompt contains full source code, call set_source_window ' &&
       'in the same turn with the include, first line, and last line you ' &&
       'need for further debugging. Keep this window as small as practical ' &&
@@ -847,6 +851,9 @@ METHOD get_plugin_tools_json.
       'Do not reveal hidden chain-of-thought; write a concise analysis ' &&
       'summary instead. ' &&
       'Answer in English. Structure the answer as: Intent, Analysis, then ' &&
+      'tool calls. Do not output long numbered plans when tools are available; ' &&
+      'convert the plan into actual tool calls. End the text immediately ' &&
+      'after the tool calls are chosen. ' &&
       'a report_findings tool call carrying your conclusion, plus any ' &&
       'further debugger tool calls needed this turn.'.
   ENDMETHOD.
@@ -1082,6 +1089,7 @@ METHOD read_variable.
 METHOD run.
 
     CONSTANTS c_max_llm_attempts TYPE i VALUE 3.
+    CONSTANTS c_max_answer_chars TYPE i VALUE 1800.
 
     CLEAR et_actions.
     DATA(lv_api_key) = get_default_api_key( ).
@@ -1103,7 +1111,7 @@ METHOD run.
           i_provider = c_provider ).
 
         lo_llm->set_temperature( '0.1' ).
-        lo_llm->set_max_tokens( 4000 ).
+        lo_llm->set_max_tokens( 1200 ).
 
         DATA(lo_context) = NEW zcl_ai_tool_context(
           io_llm        = lo_llm
@@ -1157,6 +1165,13 @@ METHOD run.
             i_arguments = ls_call-arguments ) TO et_actions.
         ENDLOOP.
 
+        DATA(lv_answer_log) = lv_answer.
+        IF strlen( lv_answer_log ) > c_max_answer_chars.
+          lv_answer_log = lv_answer_log(c_max_answer_chars) &&
+            cl_abap_char_utilities=>newline &&
+            |[AI answer truncated in log/UI: model produced too much prose instead of tool calls.]|.
+        ENDIF.
+
         ev_text =
           |Provider: { c_provider } / { c_model }| &&
           cl_abap_char_utilities=>newline &&
@@ -1165,7 +1180,7 @@ METHOD run.
           lv_guard &&
           cl_abap_char_utilities=>newline &&
           cl_abap_char_utilities=>newline &&
-          lv_answer.
+          lv_answer_log.
 
         IF et_actions IS NOT INITIAL.
           ev_text = ev_text &&
@@ -1201,7 +1216,7 @@ METHOD run.
           | seconds={ lo_llm->get_last_seconds( ) }| &&
           | tokens in/out=`{ lo_llm->mv_last_tok_in }/{ lo_llm->mv_last_tok_out }`| &&
           | total in/out=`{ mv_total_tok_in }/{ mv_total_tok_out }`| &&
-          | actions={ lines( et_actions ) } answer={ lv_answer }|.
+          | actions={ lines( et_actions ) } answer={ lv_answer_log }|.
 
         APPEND lv_llm_log_line TO mt_action_log.
 
