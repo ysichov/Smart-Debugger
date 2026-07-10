@@ -124,6 +124,12 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
         !is_action        TYPE zif_smd_ai_agent_types=>ty_action
       RETURNING
         VALUE(rv_known)   TYPE abap_bool.
+    METHODS evidence_value_matches
+      IMPORTING
+        !i_actual       TYPE string
+        !i_expected     TYPE string
+      RETURNING
+        VALUE(rv_match) TYPE abap_bool.
 METHODS validate_evidence
       IMPORTING is_action TYPE zif_smd_ai_agent_types=>ty_action
       EXPORTING ev_detail TYPE string
@@ -655,6 +661,9 @@ METHOD get_plugin_tools_json.
       'value you need to inspect, so F8 lands where the post-state is ' &&
       'already visible. Set a breakpoint before an operation only when ' &&
       'the pre-state itself is needed as evidence. ' &&
+      'When debugging loops, prefer checking the last relevant operation ' &&
+      'inside the loop body, or the last operation that can prove the ' &&
+      'iteration result, to minimize repeated loop iterations. ' &&
       'After the breakpoint is confirmed and reached, combine step_debugger ' &&
       'with the read_variable calls needed to verify the relevant variables ' &&
       'in the same turn, before calling report_findings with status=confirmed. ' &&
@@ -1125,8 +1134,9 @@ METHOD get_last_tool_result.
       OR ls_hist-path CS is_action-evidence_variable.
 
         IF is_action-evidence_value IS INITIAL
-        OR ls_hist-short CS is_action-evidence_value
-        OR is_action-evidence_value CS ls_hist-short.
+        OR evidence_value_matches(
+             i_actual   = ls_hist-short
+             i_expected = is_action-evidence_value ) = abap_true.
           rv_valid = abap_true.
           ev_detail = |Matched in Variable history: step={ ls_hist-step } { ls_hist-name } = { ls_hist-short }|.
           RETURN.
@@ -1141,8 +1151,9 @@ METHOD get_last_tool_result.
       OR ls_state-path CS is_action-evidence_variable.
 
         IF is_action-evidence_value IS INITIAL
-        OR ls_state-short CS is_action-evidence_value
-        OR is_action-evidence_value CS ls_state-short.
+        OR evidence_value_matches(
+             i_actual   = ls_state-short
+             i_expected = is_action-evidence_value ) = abap_true.
           rv_valid = abap_true.
           ev_detail = |Matched in Current variables/state: { ls_state-name } = { ls_state-short }|.
           RETURN.
@@ -1155,6 +1166,42 @@ METHOD get_last_tool_result.
       COND #( WHEN lv_have_step = abap_true THEN | (step { lv_step })| ELSE `` ) &&
       | or Current variables/state for variable '{ is_action-evidence_variable }'| &&
       | with value '{ is_action-evidence_value }'. This is source-reading, not runtime evidence.|.
+
+  ENDMETHOD.
+
+
+METHOD evidence_value_matches.
+
+    DATA lv_actual TYPE string.
+    DATA lv_expected TYPE string.
+    DATA lv_actual_num TYPE string.
+    DATA lv_expected_num TYPE string.
+    DATA lv_actual_dec TYPE decfloat34.
+    DATA lv_expected_dec TYPE decfloat34.
+
+    lv_actual = i_actual.
+    lv_expected = i_expected.
+    CONDENSE: lv_actual, lv_expected.
+
+    IF lv_actual CS lv_expected OR lv_expected CS lv_actual.
+      rv_match = abap_true.
+      RETURN.
+    ENDIF.
+
+    lv_actual_num = lv_actual.
+    lv_expected_num = lv_expected.
+    REPLACE ALL OCCURRENCES OF ',' IN lv_actual_num WITH ``.
+    REPLACE ALL OCCURRENCES OF ',' IN lv_expected_num WITH ``.
+    CONDENSE: lv_actual_num, lv_expected_num.
+
+    TRY.
+        lv_actual_dec = lv_actual_num.
+        lv_expected_dec = lv_expected_num.
+        IF lv_actual_dec = lv_expected_dec.
+          rv_match = abap_true.
+        ENDIF.
+      CATCH cx_sy_conversion_no_number cx_sy_conversion_overflow.
+    ENDTRY.
 
   ENDMETHOD.
 ENDCLASS.
