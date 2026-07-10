@@ -800,6 +800,10 @@ METHOD get_plugin_tools_json.
       'After the breakpoint is confirmed and reached, combine step_debugger ' &&
       'with the read_variable calls needed to verify the relevant variables ' &&
       'in the same turn, before calling report_findings with status=confirmed. ' &&
+      'If the same turn has just read the evidence_variable with the ' &&
+      'evidence_value you need, call report_findings with status=confirmed ' &&
+      'in that same tool chain; do not call status=hypothesis again for ' &&
+      'the same diagnosis. ' &&
       'If the bug is not yet runtime-confirmed, call report_findings with ' &&
       'status=hypothesis stating which diagnosis you suspect, and in the ' &&
       'same turn propose the next chain of debugger actions needed to ' &&
@@ -1345,7 +1349,22 @@ METHOD has_confirmed_findings.
       lv_have_step = abap_true.
     ENDIF.
 
-    " 1) Variable history - the authoritative, step-tagged evidence source
+    " 1) Last tool result - evidence read earlier in the same action chain
+    IF mv_last_tool_result IS NOT INITIAL.
+      SPLIT mv_last_tool_result AT cl_abap_char_utilities=>newline INTO TABLE DATA(lt_tool_lines).
+
+      LOOP AT lt_tool_lines INTO DATA(lv_tool_line).
+        IF lv_tool_line CS is_action-evidence_variable
+        AND ( is_action-evidence_value IS INITIAL
+           OR lv_tool_line CS is_action-evidence_value ).
+          rv_valid = abap_true.
+          ev_detail = |Matched in Last tool result: { lv_tool_line }|.
+          RETURN.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+
+    " 2) Variable history - the authoritative, step-tagged evidence source
     LOOP AT mo_debugger->mt_vars_hist INTO DATA(ls_hist).
       IF lv_have_step = abap_true AND ls_hist-step <> lv_step.
         CONTINUE.
@@ -1366,7 +1385,7 @@ METHOD has_confirmed_findings.
       ENDIF.
     ENDLOOP.
 
-    " 2) Current variables/state - fallback for "right now" evidence
+    " 3) Current variables/state - fallback for "right now" evidence
     LOOP AT mo_debugger->mt_state INTO DATA(ls_state).
       IF ls_state-name CS is_action-evidence_variable
       OR is_action-evidence_variable CS ls_state-name
@@ -1384,7 +1403,7 @@ METHOD has_confirmed_findings.
     ENDLOOP.
 
     ev_detail =
-      |No matching entry found in Variable history| &&
+      |No matching entry found in Last tool result, Variable history| &&
       COND #( WHEN lv_have_step = abap_true THEN | (step { lv_step })| ELSE `` ) &&
       | or Current variables/state for variable '{ is_action-evidence_variable }'| &&
       | with value '{ is_action-evidence_value }'. This is source-reading, not runtime evidence.|.
