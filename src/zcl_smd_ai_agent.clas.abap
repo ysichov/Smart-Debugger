@@ -42,6 +42,9 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     DATA mv_last_error TYPE string.
     DATA mv_last_tool_result TYPE string.
     DATA mv_api_password TYPE string.
+    DATA mv_password_popup_open TYPE xfeld.
+    DATA mv_waiting_for_password TYPE xfeld.
+    DATA mo_password_popup TYPE REF TO zcl_smd_password_popup.
     DATA mt_action_log TYPE tt_string.
     DATA mt_ai_breakpoints TYPE tt_string.
 
@@ -426,7 +429,7 @@ METHOD get_action_log_text.
 
 METHOD get_default_api_key.
 
-    CLEAR: rv_api_key, mv_last_error.
+    CLEAR: rv_api_key, mv_last_error, mv_waiting_for_password.
 
     " 1) Try a key stored for the current user
     SELECT SINGLE username, secret
@@ -455,7 +458,8 @@ METHOD get_default_api_key.
     ENDIF.
 
     IF mv_api_password IS INITIAL.
-      mv_last_error = |Password required to decrypt { c_provider } / { c_keyname }.|.
+      mv_waiting_for_password = abap_true.
+      mv_last_error = |Enter AI key password in the popup, close it, then press AI Run again.|.
       RETURN.
     ENDIF.
 
@@ -807,7 +811,11 @@ METHOD run.
     CLEAR et_actions.
     DATA(lv_api_key) = get_default_api_key( ).
     IF lv_api_key IS INITIAL.
-      ev_text = |AI agent cannot start: { mv_last_error }|.
+      IF mv_waiting_for_password = abap_true.
+        ev_text = mv_last_error.
+      ELSE.
+        ev_text = |AI agent cannot start: { mv_last_error }|.
+      ENDIF.
       RETURN.
     ENDIF.
 
@@ -894,28 +902,14 @@ METHOD run.
 
   METHOD ask_password.
 
-    DATA lv_answer   TYPE c.
-    DATA lv_valueout TYPE rsyst-bcode.
-
-    CALL FUNCTION 'POPUP_TO_GET_VALUE'
-      EXPORTING
-        fieldname           = 'BCODE'
-        tabname             = 'RSYST'
-        titel               = 'Enter password for the stored AI API key'
-        valuein             = ''
-      IMPORTING
-        answer              = lv_answer
-        valueout            = lv_valueout
-      EXCEPTIONS
-        fieldname_not_found = 1
-        OTHERS              = 2.
-
-    IF sy-subrc <> 0 OR lv_answer = 'C'.
-      CLEAR rv_password.
-      RETURN.
+    IF mv_password_popup_open IS INITIAL.
+      mv_password_popup_open = abap_true.
+      mo_password_popup = NEW zcl_smd_password_popup(
+        ir_password = REF #( mv_api_password )
+        ir_open     = REF #( mv_password_popup_open ) ).
     ENDIF.
 
-    rv_password = lv_valueout.
+    rv_password = mv_api_password.
 
   ENDMETHOD.
 
