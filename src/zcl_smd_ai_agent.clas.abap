@@ -452,7 +452,11 @@ METHOD ensure_guard_breakpoint.
     ADD 1 TO mv_log_tool.
 
     DATA(lv_log_line) =
-      |{ mv_log_llm }.{ mv_log_tool } **tool** `{ is_action-tool }` command=`{ is_action-command }` variable=`{ is_action-variable }` target=`{ is_action-include }:{ is_action-line }` range=`{ is_action-from_line }-{ is_action-to_line }` reason={ is_action-reason } result={ rv_text }|.
+      |{ mv_log_llm }.{ mv_log_tool } **tool** `{ is_action-tool }`| &&
+      | command=`{ is_action-command }` variable=`{ is_action-variable }`| &&
+      | target=`{ is_action-include }:{ is_action-line }`| &&
+      | range=`{ is_action-from_line }-{ is_action-to_line }`| &&
+      | reason={ is_action-reason } result={ rv_text }|.
 
     IF is_action-tool = 'set_breakpoint' AND rv_text CS 'deleted=X'.
       lv_log_line = |!DELETE_BP! { lv_log_line }|.
@@ -1134,11 +1138,15 @@ METHOD run.
             IF ls_pending_action-tool = 'set_source_window'.
               ev_text = ev_text &&
                 cl_abap_char_utilities=>newline &&
-                |{ sy-tabix }. { ls_pending_action-tool } { ls_pending_action-include }:{ ls_pending_action-from_line }-{ ls_pending_action-to_line } - { ls_pending_action-reason }|.
+                |{ sy-tabix }. { ls_pending_action-tool }| &&
+                | { ls_pending_action-include }:{ ls_pending_action-from_line }-{ ls_pending_action-to_line }| &&
+                | - { ls_pending_action-reason }|.
             ELSE.
               ev_text = ev_text &&
                 cl_abap_char_utilities=>newline &&
-                |{ sy-tabix }. { ls_pending_action-tool } { ls_pending_action-command }{ ls_pending_action-variable } { ls_pending_action-include }:{ ls_pending_action-line } - { ls_pending_action-reason }|.
+                |{ sy-tabix }. { ls_pending_action-tool } { ls_pending_action-command }| &&
+                |{ ls_pending_action-variable } { ls_pending_action-include }:{ ls_pending_action-line }| &&
+                | - { ls_pending_action-reason }|.
             ENDIF.
           ENDLOOP.
 
@@ -1149,8 +1157,14 @@ METHOD run.
         mv_total_tok_in = mv_total_tok_in + lo_llm->mv_last_tok_in.
         mv_total_tok_out = mv_total_tok_out + lo_llm->mv_last_tok_out.
 
-        APPEND |{ mv_log_llm }. **LLM call** task={ i_task } seconds={ lo_llm->get_last_seconds( ) } tokens in/out=`{ lo_llm->mv_last_tok_in }/{ lo_llm->mv_last_tok_out }` total in/out=`{ mv_total_tok_in }/{ mv_total_tok_out }` actions={ lines( et_actions ) } answer={ lv_answer }|
-          TO mt_action_log.
+        DATA(lv_llm_log_line) =
+          |{ mv_log_llm }. **LLM call** task={ i_task }| &&
+          | seconds={ lo_llm->get_last_seconds( ) }| &&
+          | tokens in/out=`{ lo_llm->mv_last_tok_in }/{ lo_llm->mv_last_tok_out }`| &&
+          | total in/out=`{ mv_total_tok_in }/{ mv_total_tok_out }`| &&
+          | actions={ lines( et_actions ) } answer={ lv_answer }|.
+
+        APPEND lv_llm_log_line TO mt_action_log.
 
       CATCH cx_root INTO DATA(lx_root).
         ev_text = |AI agent failed: { lx_root->get_text( ) }|.
