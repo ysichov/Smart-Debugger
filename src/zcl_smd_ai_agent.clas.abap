@@ -6,7 +6,7 @@ CLASS zcl_smd_ai_agent DEFINITION
   PUBLIC SECTION.
     CONSTANTS c_provider TYPE string VALUE 'MISTRAL'.
     CONSTANTS c_keyname  TYPE string VALUE 'DEFAULT'.
-    CONSTANTS c_model    TYPE text255 VALUE 'mistral-large-latest'.
+    CONSTANTS c_model    TYPE text255 VALUE 'codestral-latest'.
 
     METHODS constructor
       IMPORTING
