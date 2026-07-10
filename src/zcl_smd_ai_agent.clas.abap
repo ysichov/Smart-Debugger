@@ -206,9 +206,7 @@ METHOD build_prompt.
         CONDENSE lv_current_include.
 
         IF mv_source_window_include IS NOT INITIAL
-        AND lv_current_include = mv_source_window_include
-        AND mo_debugger->mo_window->m_prg-line >= mv_source_window_from
-        AND mo_debugger->mo_window->m_prg-line <= mv_source_window_to.
+        AND lv_current_include = mv_source_window_include.
           lv_window_active = abap_true.
         ENDIF.
 
@@ -224,9 +222,17 @@ METHOD build_prompt.
               i_line = |Source code window with real line numbers: include={ mv_source_window_include } lines={ mv_source_window_from }-{ mv_source_window_to }|
             CHANGING
               ct_lines = lt_lines ).
+          IF mo_debugger->mo_window->m_prg-line < mv_source_window_from
+          OR mo_debugger->mo_window->m_prg-line > mv_source_window_to.
+            append_line(
+              EXPORTING
+                i_line = |Current line { mo_debugger->mo_window->m_prg-line } is outside the chosen source window; call set_source_window together with the next real debugger action if another code range is needed.|
+              CHANGING
+                ct_lines = lt_lines ).
+          ENDIF.
         ELSE.
           append_line( EXPORTING i_line = `Full source code with real line numbers:` CHANGING ct_lines = lt_lines ).
-          append_line( EXPORTING i_line = `You must call set_source_window in this turn with the first and last source line needed for further debugging.` CHANGING ct_lines = lt_lines ).
+          append_line( EXPORTING i_line = `Call set_source_window with the first and last source line needed, together with the real debugger actions for this turn.` CHANGING ct_lines = lt_lines ).
         ENDIF.
 
         LOOP AT mo_debugger->mo_window->mt_source INTO DATA(ls_source_for_prompt).
@@ -706,7 +712,10 @@ METHOD get_plugin_tools_json.
       'need for further debugging. Keep this window as small as practical ' &&
       'but large enough to understand the logic. Later prompts may include ' &&
       'only that window; if execution leaves it, full source will be sent ' &&
-      'again and you must choose a new source window. ' &&
+      'again and you must choose a new source window. Never call only ' &&
+      'set_source_window by itself; pair it with real debugger actions ' &&
+      'such as set_breakpoint, step_debugger, or read_variable unless the ' &&
+      'investigation is already complete. ' &&
       'In a single turn you may call several tools together when they form ' &&
       'one logical chain, for example set_breakpoint together with ' &&
       'step_debugger F8 to run to it, or a single step_debugger together ' &&
@@ -853,7 +862,7 @@ METHOD get_plugin_tools_json.
       `"additionalProperties":false } } },` &&
       `{ "type":"function", "function": {` &&
       `"name":"set_source_window",` &&
-      `"description":"Choose the source include and first/last line needed for the next debugging steps. Required after receiving full source.",` &&
+      `"description":"Choose the source include and first/last line needed for the next debugging steps. Use together with real debugger actions; do not call this as the only action.",` &&
       `"parameters": { "type":"object", "properties": {` &&
       `"include": { "type":"string",` &&
       `"description":"ABAP include/program containing the relevant code window" },` &&

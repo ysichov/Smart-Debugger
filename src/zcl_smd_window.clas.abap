@@ -570,6 +570,14 @@ CLASS zcl_smd_window IMPLEMENTATION.
         lv_stop_after_chain = xsdbool( lv_llm_calls MOD c_llm_stop_interval = 0 ).
       ENDIF.
 
+      IF lines( mt_ai_pending_actions ) = 1
+      AND mt_ai_pending_actions[ 1 ]-tool = 'set_source_window'.
+        mo_ai_agent->reset_last_tool_result( ).
+        mo_ai_agent->execute_action( mt_ai_pending_actions[ 1 ] ).
+        CLEAR mt_ai_pending_actions.
+        CONTINUE.
+      ENDIF.
+
       mo_ai_agent->reset_last_tool_result( ).
       CLEAR lv_step_command.
 
