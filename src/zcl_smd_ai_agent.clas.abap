@@ -927,6 +927,8 @@ METHOD read_variable.
 
 METHOD run.
 
+    CONSTANTS c_max_llm_attempts TYPE i VALUE 3.
+
     CLEAR et_actions.
     DATA(lv_api_key) = get_default_api_key( ).
     IF lv_api_key IS INITIAL.
@@ -956,14 +958,44 @@ METHOD run.
         zcl_ai_tool_factory=>initialize( lo_context ).
 
         DATA lt_tool_calls TYPE zcl_code_ai_api=>tt_tool_calls.
+        DATA lv_answer TYPE string.
+        DATA lv_attempt TYPE i.
+        DATA lv_error_text TYPE string.
+        DATA lv_error_lc TYPE string.
 
-        DATA(lv_answer) = lo_llm->ask_with_tools(
-          EXPORTING
-            i_prompt        = build_prompt( i_task )
-            i_system_prompt = get_system_prompt( )
-            i_tools_json    = get_tools_json( )
-          IMPORTING
-            et_tool_calls   = lt_tool_calls ).
+        WHILE lv_attempt < c_max_llm_attempts.
+          ADD 1 TO lv_attempt.
+          TRY.
+              CLEAR lt_tool_calls.
+              lv_answer = lo_llm->ask_with_tools(
+                EXPORTING
+                  i_prompt        = build_prompt( i_task )
+                  i_system_prompt = get_system_prompt( )
+                  i_tools_json    = get_tools_json( )
+                IMPORTING
+                  et_tool_calls   = lt_tool_calls ).
+              EXIT.
+            CATCH cx_root INTO DATA(lx_llm).
+              lv_error_text = lx_llm->get_text( ).
+              lv_error_lc = lv_error_text.
+              TRANSLATE lv_error_lc TO LOWER CASE.
+
+              IF lv_attempt < c_max_llm_attempts
+              AND ( lv_error_lc CS 'limit'
+                 OR lv_error_lc CS '429'
+                 OR lv_error_lc CS 'quota'
+                 OR lv_error_lc CS 'rate'
+                 OR lv_error_lc CS 'too many requests' ).
+                APPEND |LLM call hit limit on attempt { lv_attempt }: { lv_error_text }. Waiting 5 sec and retrying.|
+                  TO mt_action_log.
+                WAIT UP TO 5 SECONDS.
+                CONTINUE.
+              ENDIF.
+
+              ev_text = |AI agent failed: { lv_error_text }|.
+              RETURN.
+          ENDTRY.
+        ENDWHILE.
 
         LOOP AT lt_tool_calls INTO DATA(ls_call).
           APPEND parse_tool_call(
