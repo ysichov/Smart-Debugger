@@ -1356,66 +1356,40 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD show_variables.
-
     FIELD-SYMBOLS: <hist> TYPE any,
                    <new>  TYPE any.
 
     DATA: rel     TYPE salv_de_node_relation,
           key     TYPE salv_de_node_key,
           o_tree  TYPE REF TO  zcl_smd_rtti_tree,
+          var     TYPE zcl_smd_appl=>var_table,
           is_skip TYPE xfeld.
     ADD 1 TO mv_recurse.
-    IF mo_tree_local->m_clear = abap_true.
-      mo_tree_local->clear( ).
-      CLEAR mo_tree_local->m_clear.
-    ENDIF.
 
-    READ TABLE it_var WITH KEY del = abap_true TRANSPORTING NO FIELDS.
-    IF sy-subrc = 0.
-      mo_tree_local->clear( ).
-      mo_tree_exp->clear( ).
-      mo_tree_imp->clear( ).
-    ENDIF.
+    " Always rebuild the variable trees from scratch instead of diffing
+    " against previously added nodes. The old incremental path looked up
+    " an existing node by name and re-inserted the changed value as its
+    " NEXT_SIBLING using the OLD node's key as related_node. If that key
+    " had already gone stale (tree rebuilt again before the ALV control
+    " fully settled - routine during fast automated AI-agent stepping),
+    " CL_ALV_TREE_BASE=>TREE_ADD_NODE raises a classic (non-class-based)
+    " exception via RAISE that TRY/CATCH cannot intercept, dumping the
+    " whole debug session. A full clear+rebuild never references an old
+    " node key, so that race is structurally impossible.
+    mo_tree_local->clear( ).
+    mo_tree_exp->clear( ).
+    mo_tree_imp->clear( ).
+    CLEAR mo_tree_local->m_clear.
+
+    " Since the trees are now empty, every variable must be retraversed -
+    " reset the incremental "already added" marker on all of them so the
+    " loop below picks everything up again.
+    LOOP AT it_var ASSIGNING FIELD-SYMBOL(<reset>).
+      CLEAR <reset>-done.
+    ENDLOOP.
 
     mo_tree_imp->m_leaf =  'IMP'.
     mo_tree_exp->m_leaf =  'EXP'.
-
-    IF mo_tree_local->m_locals_key IS NOT INITIAL AND mo_tree_local->m_locals IS INITIAL.
-      mo_tree_local->delete_node( mo_tree_local->m_locals_key ).
-      CLEAR mo_tree_local->m_locals_key.
-
-      DELETE mo_tree_local->mt_vars WHERE leaf = 'LOCAL'.
-      DELETE mt_state WHERE leaf = 'LOCAL'.
-    ENDIF.
-
-    IF mo_tree_local->m_globals_key IS NOT INITIAL AND mo_tree_local->m_globals IS INITIAL.
-      mo_tree_local->delete_node( mo_tree_local->m_globals_key ).
-      CLEAR mo_tree_local->m_globals_key.
-      DELETE mo_tree_local->mt_vars WHERE leaf = 'GLOBAL'. "OR leaf = 'SYST'.
-      DELETE mt_state WHERE leaf = 'GLOBAL'. "OR leaf = 'SYST'.
-    ENDIF.
-
-    IF mo_tree_local->m_class_key IS NOT INITIAL AND mo_tree_local->m_class_data IS INITIAL.
-      mo_tree_local->delete_node( mo_tree_local->m_class_key ).
-      DELETE mo_tree_local->mt_vars WHERE leaf = 'CLASS'.
-      DELETE mt_state WHERE leaf = 'CLASS'.
-    ENDIF.
-
-    IF mo_tree_local->m_syst IS INITIAL.
-      READ TABLE mo_tree_local->mt_vars WITH KEY name = 'SYST' INTO DATA(var).
-      IF sy-subrc = 0.
-        mo_tree_local->delete_node( var-key ).
-        DELETE mo_tree_local->mt_vars WHERE leaf =  'SYST'.
-        DELETE mt_state WHERE leaf = 'SYST'.
-      ENDIF.
-    ENDIF.
-
-    IF mo_tree_local->m_ldb_key IS NOT INITIAL AND mo_tree_local->m_ldb IS INITIAL.
-      mo_tree_local->delete_node( mo_tree_local->m_ldb_key ).
-      CLEAR mo_tree_local->m_ldb_key.
-      DELETE mo_tree_local->mt_vars WHERE leaf = 'LDB'.
-      DELETE mt_state WHERE leaf = 'LDB'.
-    ENDIF.
 
     rel = if_salv_c_node_relation=>last_child.
 
@@ -1552,7 +1526,6 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
       ENDIF.
       set_selected_vars( ).
     ENDIF.
-
   ENDMETHOD.
 
   METHOD set_selected_vars.

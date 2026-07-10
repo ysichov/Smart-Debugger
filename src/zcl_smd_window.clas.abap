@@ -149,7 +149,7 @@ CLASS zcl_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUBL
           mo_ai_prompt           TYPE REF TO cl_gui_textedit,
           mo_ai_result           TYPE REF TO cl_gui_html_viewer,
           mo_ai_agent            TYPE REF TO zcl_smd_ai_agent,
-          ms_ai_pending_action   TYPE zif_smd_ai_agent_types=>ty_action,
+          mt_ai_pending_actions  TYPE zif_smd_ai_agent_types=>tt_action,
           mo_code_viewer         TYPE REF TO cl_gui_abapedit,
           mt_stack               TYPE TABLE OF zcl_smd_appl=>t_stack,
           mo_toolbar             TYPE REF TO cl_gui_toolbar,
@@ -520,8 +520,13 @@ CLASS zcl_smd_window IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD run_ai_agent.
+    CONSTANTS c_max_auto_iterations TYPE i VALUE 25.
 
-    DATA lv_prompt TYPE string.
+    DATA: lv_prompt        TYPE string,
+          lv_result        TYPE string,
+          lv_iteration     TYPE i,
+          lv_step_command  TYPE string,
+          lv_batch_summary TYPE string.
 
     IF mo_ai_prompt IS BOUND.
       mo_ai_prompt->get_textstream( IMPORTING text = lv_prompt ).
@@ -535,42 +540,91 @@ CLASS zcl_smd_window IMPLEMENTATION.
       mo_ai_agent = zcl_smd_ai_agent=>create( io_debugger = mo_debugger ).
     ENDIF.
 
-    IF ms_ai_pending_action-tool IS NOT INITIAL.
-      DATA(lv_action_result) = mo_ai_agent->execute_action( ms_ai_pending_action ).
-      DATA(lv_step_command) = ms_ai_pending_action-command.
-      DATA(lv_step_tool) = ms_ai_pending_action-tool.
-      CLEAR ms_ai_pending_action.
+    " If a chain is already pending (e.g. from a prior call), keep it as
+    " the starting point; otherwise get the first proposal from the LLM.
+    IF mt_ai_pending_actions IS INITIAL.
+      set_ai_result( |AI is analyzing current debug state...| ).
+      cl_gui_cfw=>flush( ).
 
-      IF lv_step_tool = 'step_debugger' AND lv_step_command IS NOT INITIAL.
-        CLEAR m_direction.
-        mo_debugger->m_hist_step = mo_debugger->m_step.
-        hnd_toolbar( fcode = CONV ui_func( lv_step_command ) ).
-        lv_action_result = lv_action_result &&
-          cl_abap_char_utilities=>newline &&
+      mo_ai_agent->run(
+        EXPORTING
+          i_task     = lv_prompt
+        IMPORTING
+          et_actions = mt_ai_pending_actions
+          ev_text    = lv_result ).
+
+      set_ai_result( lv_result ).
+      cl_gui_cfw=>flush( ).
+    ENDIF.
+
+    " No confirmation gate: run every proposed chain immediately, then ask
+    " for the next one, and keep spinning until the agent stops proposing
+    " actions (its own stop condition - investigation complete) or the
+    " safety cap below is hit. The cap exists only to prevent a genuine
+    " runaway (LLM never converging, or an infinite loop in the debuggee)
+    " from spinning forever; raise c_max_auto_iterations if needed.
+    WHILE mt_ai_pending_actions IS NOT INITIAL AND lv_iteration < c_max_auto_iterations.
+      ADD 1 TO lv_iteration.
+
+      mo_ai_agent->reset_last_tool_result( ).
+      CLEAR lv_step_command.
+
+      LOOP AT mt_ai_pending_actions INTO DATA(ls_break_action) WHERE tool = 'set_breakpoint'.
+        mo_ai_agent->execute_action( ls_break_action ).
+      ENDLOOP.
+
+      READ TABLE mt_ai_pending_actions INTO DATA(ls_step_action) WITH KEY tool = 'step_debugger'.
+      IF sy-subrc = 0.
+        mo_ai_agent->execute_action( ls_step_action ).
+        lv_step_command = ls_step_action-command.
+        IF lv_step_command IS NOT INITIAL.
+          CLEAR m_direction.
+          mo_debugger->m_hist_step = mo_debugger->m_step.
+          hnd_toolbar( fcode = CONV ui_func( lv_step_command ) ).
+        ENDIF.
+      ENDIF.
+
+      LOOP AT mt_ai_pending_actions INTO DATA(ls_other_action)
+        WHERE tool <> 'set_breakpoint' AND tool <> 'step_debugger'.
+        mo_ai_agent->execute_action( ls_other_action ).
+      ENDLOOP.
+
+      lv_batch_summary = mo_ai_agent->get_last_tool_result( ).
+      IF lv_step_command IS NOT INITIAL.
+        lv_batch_summary = lv_batch_summary &&
           cl_abap_char_utilities=>newline &&
           |Current position after { lv_step_command }: { m_prg-include }:{ m_prg-line }|.
       ENDIF.
 
-      set_ai_result( lv_action_result ).
+      CLEAR mt_ai_pending_actions.
+
+      set_ai_result( lv_batch_summary &&
+        cl_abap_char_utilities=>newline &&
+        cl_abap_char_utilities=>newline &&
+        |Chain executed ({ lv_iteration }/{ c_max_auto_iterations }). Asking AI for the next step...| ).
       cl_gui_cfw=>flush( ).
-      RETURN.
+
+      mo_ai_agent->run(
+        EXPORTING
+          i_task     = lv_prompt
+        IMPORTING
+          et_actions = mt_ai_pending_actions
+          ev_text    = lv_result ).
+
+      set_ai_result( lv_batch_summary &&
+        cl_abap_char_utilities=>newline &&
+        cl_abap_char_utilities=>newline &&
+        lv_result ).
+      cl_gui_cfw=>flush( ).
+    ENDWHILE.
+
+    IF lv_iteration >= c_max_auto_iterations AND mt_ai_pending_actions IS NOT INITIAL.
+      set_ai_result( lv_result &&
+        cl_abap_char_utilities=>newline &&
+        cl_abap_char_utilities=>newline &&
+        |(Stopped after { c_max_auto_iterations } automatic steps without a confirmed finding - press AI again to continue.)| ).
+      cl_gui_cfw=>flush( ).
     ENDIF.
-
-    set_ai_result( |AI is analyzing current debug state...| ).
-    cl_gui_cfw=>flush( ).
-
-    DATA lv_result TYPE string.
-
-    mo_ai_agent->run(
-      EXPORTING
-        i_task    = lv_prompt
-      IMPORTING
-        es_action = ms_ai_pending_action
-        ev_text   = lv_result ).
-
-    set_ai_result( lv_result ).
-    cl_gui_cfw=>flush( ).
-
   ENDMETHOD.
 
   METHOD set_ai_result.
