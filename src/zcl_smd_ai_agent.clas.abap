@@ -41,6 +41,7 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     DATA mo_debugger TYPE REF TO zcl_smd_debugger_base.
     DATA mv_last_error TYPE string.
     DATA mv_last_tool_result TYPE string.
+    DATA mv_api_password TYPE string.
     DATA mt_action_log TYPE tt_string.
     DATA mt_ai_breakpoints TYPE tt_string.
 
@@ -449,9 +450,11 @@ METHOD get_default_api_key.
       RETURN.
     ENDIF.
 
-    " Ask for the password on every AI request.
-    DATA(lv_password) = ask_password( ).
-    IF lv_password IS INITIAL.
+    IF mv_api_password IS INITIAL.
+      mv_api_password = ask_password( ).
+    ENDIF.
+
+    IF mv_api_password IS INITIAL.
       mv_last_error = |Password required to decrypt { c_provider } / { c_keyname }.|.
       RETURN.
     ENDIF.
@@ -461,9 +464,10 @@ METHOD get_default_api_key.
           i_username = ls_key-username
           i_provider = c_provider
           i_name     = c_keyname
-          i_password = lv_password
+          i_password = mv_api_password
           i_secret   = ls_key-secret ).
       CATCH cx_sec_sxml_encrypt_error.
+        CLEAR mv_api_password.
         mv_last_error = |Cannot decrypt { c_provider } / { c_keyname }. Wrong password?|.
     ENDTRY.
 
@@ -891,12 +895,12 @@ METHOD run.
   METHOD ask_password.
 
     DATA lv_answer   TYPE c.
-    DATA lv_valueout TYPE string.
+    DATA lv_valueout TYPE rsyst-bcode.
 
     CALL FUNCTION 'POPUP_TO_GET_VALUE'
       EXPORTING
-        fieldname           = 'VALUE'
-        tabname             = 'SVAL'
+        fieldname           = 'BCODE'
+        tabname             = 'RSYST'
         titel               = 'Enter password for the stored AI API key'
         valuein             = ''
       IMPORTING
