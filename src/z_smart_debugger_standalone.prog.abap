@@ -133,6 +133,7 @@ CLASS lcl_appl DEFINITION.
 
            BEGIN OF var_table_temp,
              step          TYPE i,
+             line          TYPE tpda_sc_line,
              stack         TYPE i,
              eventtype(30) TYPE c,
              eventname(61) TYPE c,
@@ -3652,6 +3653,11 @@ CLASS lcl_ace_window IMPLEMENTATION.
         LOOP AT  mo_debugger->mt_vars_hist INTO DATA(vars).
           APPEND INITIAL LINE TO vars_hist ASSIGNING FIELD-SYMBOL(<hist>).
           MOVE-CORRESPONDING vars TO <hist>.
+          READ TABLE mo_debugger->mt_steps INTO DATA(step_info)
+            WITH KEY step = vars-step.
+          IF sy-subrc = 0.
+            <hist>-line = step_info-line.
+          ENDIF.
 
           IF vars-ref IS BOUND.
             DATA(o_descr) = cl_abap_typedescr=>describe_by_data_ref( vars-ref ).

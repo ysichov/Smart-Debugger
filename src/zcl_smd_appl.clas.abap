@@ -31,6 +31,7 @@ CLASS zcl_smd_appl DEFINITION PUBLIC CREATE PUBLIC.
 
            BEGIN OF var_table_temp,
              step          TYPE i,
+             line          TYPE tpda_sc_line,
              stack         TYPE i,
              eventtype(30) TYPE c,
              eventname(61) TYPE c,
