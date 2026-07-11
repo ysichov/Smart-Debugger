@@ -10,7 +10,8 @@ CLASS zcl_smd_ai_agent DEFINITION
 
     METHODS constructor
       IMPORTING
-        !io_debugger TYPE REF TO zcl_smd_debugger_base.
+        !io_debugger TYPE REF TO zcl_smd_debugger_base
+        !is_config   TYPE zcl_abapai_llm_client=>ty_ai_config OPTIONAL.
 
     METHODS run
       IMPORTING
@@ -28,6 +29,7 @@ CLASS zcl_smd_ai_agent DEFINITION
     CLASS-METHODS create
       IMPORTING
         !io_debugger  TYPE REF TO zcl_smd_debugger_base
+        !is_config    TYPE zcl_abapai_llm_client=>ty_ai_config OPTIONAL
       RETURNING
         VALUE(ro_agent) TYPE REF TO zcl_smd_ai_agent.
     METHODS reset_last_tool_result.
@@ -48,6 +50,7 @@ CLASS zcl_smd_ai_agent DEFINITION
 TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
 
     DATA mo_debugger TYPE REF TO zcl_smd_debugger_base.
+    DATA ms_config TYPE zcl_abapai_llm_client=>ty_ai_config.
     DATA mv_last_error TYPE string.
     DATA mv_last_tool_result TYPE string.
     DATA mv_findings_confirmed TYPE abap_bool.
@@ -157,6 +160,11 @@ ENDCLASS.
 
 
 CLASS ZCL_SMD_AI_AGENT IMPLEMENTATION.
+
+  METHOD constructor.
+    mo_debugger = io_debugger.
+    ms_config = is_config.
+  ENDMETHOD.
 
 
   method APPEND_LINE.
@@ -673,6 +681,11 @@ METHOD get_default_api_key.
 
     CLEAR: rv_api_key, mv_last_error, mv_waiting_for_password.
 
+    IF ms_config-apikey IS NOT INITIAL.
+      rv_api_key = ms_config-apikey.
+      RETURN.
+    ENDIF.
+
     " 1) Try a key stored for the current user
     SELECT SINGLE username, secret
       FROM zaicode_apikey
@@ -1142,9 +1155,9 @@ METHOD run.
         DATA(lv_guard) = ensure_guard_breakpoint( ).
 
         DATA(lo_llm) = NEW zcl_abapai_llm_client(
-          i_model    = c_model
+          i_model    = COND #( WHEN ms_config-model IS INITIAL THEN c_model ELSE ms_config-model )
           i_apikey   = lv_api_key
-          i_provider = c_provider ).
+          i_provider = COND #( WHEN ms_config-provider IS INITIAL THEN c_provider ELSE ms_config-provider ) ).
 
         lo_llm->set_temperature( '0.1' ).
         lo_llm->set_max_tokens( 1200 ).
@@ -1264,7 +1277,9 @@ METHOD run.
 
 
   METHOD create.
-    ro_agent = NEW zcl_smd_ai_agent( io_debugger = io_debugger ).
+    ro_agent = NEW zcl_smd_ai_agent(
+      io_debugger = io_debugger
+      is_config   = is_config ).
   ENDMETHOD.
 
 
