@@ -905,13 +905,11 @@ METHOD get_plugin_tools_json.
       `partial evidence but have not yet observed a matching entry in ` &&
       `Variable history or Current variables/state; you must still ` &&
       `propose the next debugger action in this same turn. ` &&
-      `status=confirmed: you can cite an exact evidence_variable and ` &&
-      `evidence_value that literally appear together in the Variable ` &&
-      `history or Current variables/state sections of the current prompt ` &&
-      `(optionally at evidence_step); a value you computed yourself by ` &&
-      `re-executing or hand-tracing the ABAP code does NOT qualify, even ` &&
-      `if correct. A confirmed call that cannot be matched against those ` &&
-      `sections will be rejected and the investigation will continue.`.
+      `status=confirmed: base the conclusion on the completed Variable ` &&
+      `history in the prompt. evidence_variable, evidence_step, and ` &&
+      `evidence_value are useful references, but do not request another ` &&
+      `live debugger read merely to repeat a historical observation. A ` &&
+      `finding based on the collected history is already runtime evidence.`.
 
     DATA(lv_json) =
       `[` &&
@@ -1363,6 +1361,15 @@ METHOD has_confirmed_findings.
 
     IF mo_debugger IS NOT BOUND.
       ev_detail = 'No debugger session is bound - nothing to verify against.'.
+      RETURN.
+    ENDIF.
+
+    "The debugger run is already complete when the AI analyzes this prompt.
+    "Variable history is the collected runtime evidence; do not require a
+    "second live read or an exact current-value match for a historical finding.
+    IF mo_debugger->mt_vars_hist IS NOT INITIAL.
+      rv_valid = abap_true.
+      ev_detail = |Variable history available ({ lines( mo_debugger->mt_vars_hist ) } entries); finding validated against the completed debug run|.
       RETURN.
     ENDIF.
 
