@@ -665,7 +665,7 @@ METHOD is_at_guard_breakpoint.
 
 METHOD get_default_api_key.
 
-    CLEAR: rv_api_key, mv_last_error, mv_waiting_for_password.
+    CLEAR: rv_api_key, mv_last_error.
 
     DATA: BEGIN OF ls_ai_config,
             provider TYPE string,
@@ -683,54 +683,12 @@ METHOD get_default_api_key.
     mv_config_model    = ls_ai_config-model.
     mv_config_apikey   = ls_ai_config-apikey.
 
-    IF mv_config_apikey IS NOT INITIAL.
-      rv_api_key = mv_config_apikey.
+    IF mv_config_apikey IS INITIAL.
+      mv_last_error = 'No AI configuration received from ABAP_AI_CODE'.
       RETURN.
     ENDIF.
 
-    " 1) Try a key stored for the current user
-    SELECT SINGLE username, secret
-      FROM zaicode_apikey
-      INTO @DATA(ls_key)
-      WHERE username = @sy-uname
-        AND provider = @c_provider
-        AND keyname  = @c_keyname.
-
-    IF sy-subrc <> 0.
-      " 2) Fall back to any shared/default key for this provider, regardless of username
-      SELECT SINGLE username, secret
-        FROM zaicode_apikey
-        INTO @ls_key
-        WHERE provider = @c_provider
-          AND keyname  = @c_keyname.
-    ENDIF.
-
-    IF sy-subrc <> 0 OR ls_key-secret IS INITIAL.
-      mv_last_error = |No stored key for { c_provider } / { c_keyname } in ZAICODE_APIKEY|.
-      RETURN.
-    ENDIF.
-
-    IF mv_api_password IS INITIAL.
-      mv_api_password = ask_password( ).
-    ENDIF.
-
-    IF mv_api_password IS INITIAL.
-      mv_waiting_for_password = abap_true.
-      mv_last_error = |Enter AI key password in the popup, close it, then press AI Run again.|.
-      RETURN.
-    ENDIF.
-
-    TRY.
-        rv_api_key = zcl_aicode_crypto=>decrypt(
-          i_username = ls_key-username
-          i_provider = c_provider
-          i_name     = c_keyname
-          i_password = mv_api_password
-          i_secret   = ls_key-secret ).
-      CATCH cx_sec_sxml_encrypt_error.
-        CLEAR mv_api_password.
-        mv_last_error = |Cannot decrypt { c_provider } / { c_keyname }. Wrong password?|.
-    ENDTRY.
+    rv_api_key = mv_config_apikey.
 
   ENDMETHOD.
 
@@ -1145,11 +1103,7 @@ METHOD run.
     CLEAR et_actions.
     DATA(lv_api_key) = get_default_api_key( ).
     IF lv_api_key IS INITIAL.
-      IF mv_waiting_for_password = abap_true.
-        ev_text = mv_last_error.
-      ELSE.
-        ev_text = |AI agent cannot start: { mv_last_error }|.
-      ENDIF.
+      ev_text = |AI agent cannot start: { mv_last_error }|.
       RETURN.
     ENDIF.
 
@@ -1280,20 +1234,6 @@ METHOD run.
 
   METHOD create.
     ro_agent = NEW zcl_smd_ai_agent( io_debugger = io_debugger ).
-  ENDMETHOD.
-
-
-  METHOD ask_password.
-
-    IF mv_password_popup_open IS INITIAL.
-      mv_password_popup_open = abap_true.
-      mo_password_popup = NEW zcl_smd_password_popup(
-        ir_password = REF #( mv_api_password )
-        ir_open     = REF #( mv_password_popup_open ) ).
-    ENDIF.
-
-    rv_password = mv_api_password.
-
   ENDMETHOD.
 
 
