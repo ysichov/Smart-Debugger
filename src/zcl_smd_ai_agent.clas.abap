@@ -161,11 +161,6 @@ ENDCLASS.
 
 CLASS ZCL_SMD_AI_AGENT IMPLEMENTATION.
 
-  METHOD constructor.
-    mo_debugger = io_debugger.
-  ENDMETHOD.
-
-
   method APPEND_LINE.
     APPEND i_line TO ct_lines.
   endmethod.
