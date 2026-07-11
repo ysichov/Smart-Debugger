@@ -1148,7 +1148,6 @@ METHOD read_variable.
 METHOD run.
 
     CONSTANTS c_max_llm_attempts TYPE i VALUE 3.
-    CONSTANTS c_max_answer_chars TYPE i VALUE 1800.
 
     CLEAR et_actions.
     DATA(lv_api_key) = get_default_api_key( ).
@@ -1221,11 +1220,6 @@ METHOD run.
         ENDLOOP.
 
         DATA(lv_answer_log) = lv_answer.
-        IF strlen( lv_answer_log ) > c_max_answer_chars.
-          lv_answer_log = lv_answer_log(c_max_answer_chars) &&
-            cl_abap_char_utilities=>newline &&
-            |[AI answer truncated in log/UI: model produced too much prose instead of tool calls.]|.
-        ENDIF.
 
         ev_text =
           |Provider: { c_provider } / { c_model }| &&
