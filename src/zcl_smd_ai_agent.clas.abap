@@ -322,9 +322,20 @@ METHOD build_prompt.
           EXIT.
         ENDIF.
 
+        DATA(lv_hist_line) = ``.
+        DATA(lv_hist_program) = ``.
+        DATA(lv_hist_include) = ``.
+        READ TABLE mo_debugger->mt_steps INTO DATA(ls_hist_step)
+          WITH KEY step = ls_hist-step.
+        IF sy-subrc = 0.
+          lv_hist_line = | line={ ls_hist_step-line }|.
+          lv_hist_program = | program={ ls_hist_step-program }|.
+          lv_hist_include = | include={ ls_hist_step-include }|.
+        ENDIF.
+
         append_line(
           EXPORTING
-            i_line = |step={ ls_hist-step } stack={ ls_hist-stack } { ls_hist-leaf } { ls_hist-name } = { ls_hist-short } type={ ls_hist-type } path={ ls_hist-path }|
+            i_line = |step={ ls_hist-step } stack={ ls_hist-stack }{ lv_hist_line }{ lv_hist_program }{ lv_hist_include } { ls_hist-leaf } { ls_hist-name } = { ls_hist-short } type={ ls_hist-type } path={ ls_hist-path }|
           CHANGING
             ct_lines = lt_lines ).
       ENDLOOP.
@@ -769,9 +780,13 @@ METHOD get_plugin_tools_json.
       'the report_findings tool. Do not write your own "Findings" or ' &&
       '"confirmed by runtime evidence" wording in prose; call the tool ' &&
       'instead and let its result stand as the record. ' &&
-      'If source code is available, you may form a diagnosis from code ' &&
-      'reading, but call report_findings with status=hypothesis until ' &&
-      'runtime state confirms it - never status=confirmed at that point. ' &&
+      'Treat Variable history as a primary runtime evidence source. First ' &&
+      'compare the code with the ordered variable transitions in that table ' &&
+      'and look for the first incorrect value or invariant violation. If ' &&
+      'the history already proves the defect, call report_findings with ' &&
+      'status=confirmed immediately; do not request another step merely to ' &&
+      'reconfirm evidence already present in the history. Source-only ' &&
+      'reasoning without supporting history remains a hypothesis. ' &&
       'report_findings with status=confirmed is only valid when ' &&
       'evidence_variable and evidence_value literally appear together, ' &&
       'this turn, in the user prompt sections "Current variables/state:", ' &&
@@ -797,6 +812,12 @@ METHOD get_plugin_tools_json.
       'When debugging loops, prefer checking the last relevant operation ' &&
       'inside the loop body, or the last operation that can prove the ' &&
       'iteration result, to minimize repeated loop iterations. ' &&
+      'A breakpoint on the last executable line of a block is sufficient ' &&
+      'to inspect the block result: never add earlier breakpoints in that ' &&
+      'same block, because execution reaching the final breakpoint already ' &&
+      'passes through them. Add an earlier breakpoint only when a separate ' &&
+      'pre-state or intermediate transition is specifically required and ' &&
+      'cannot be inferred from the variable history. ' &&
       'After the breakpoint is confirmed and reached, combine step_debugger ' &&
       'with the read_variable calls needed to verify the relevant variables ' &&
       'in the same turn, before calling report_findings with status=confirmed. ' &&
@@ -804,10 +825,10 @@ METHOD get_plugin_tools_json.
       'evidence_value you need, call report_findings with status=confirmed ' &&
       'in that same tool chain; do not call status=hypothesis again for ' &&
       'the same diagnosis. ' &&
-      'If the bug is not yet runtime-confirmed, call report_findings with ' &&
-      'status=hypothesis stating which diagnosis you suspect, and in the ' &&
-      'same turn propose the next chain of debugger actions needed to ' &&
-      'confirm it. ' &&
+      'Only if the code and history do not distinguish the possible causes, ' &&
+      'call report_findings with status=hypothesis and request the minimum ' &&
+      'next debugger action needed to resolve that specific uncertainty. ' &&
+      'Prefer one targeted F5, F6, F7, or F8 action over exploratory stepping. ' &&
       'STOP CONDITION - this overrides every other instruction about ' &&
       'proposing actions: once report_findings has been called with ' &&
       'status=confirmed and accepted (its result says FINDINGS CONFIRMED, ' &&
