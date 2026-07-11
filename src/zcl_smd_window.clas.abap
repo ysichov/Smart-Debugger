@@ -194,8 +194,7 @@ CLASS zcl_smd_window IMPLEMENTATION.
   METHOD constructor.
     super->constructor( ).
     mo_debugger = i_debugger.
-    m_varhist = m_zcode = '01'.
-    CLEAR m_history.
+    m_history = m_varhist = m_zcode = '01'.
     m_hist_depth = 9.
 
     mo_box = create( i_name = 'SDDE Simple Debugger Data Explorer beta v. 0.9' i_width = 1400 i_hight = 400 ).
@@ -973,7 +972,6 @@ CLASS zcl_smd_window IMPLEMENTATION.
     CONSTANTS: c_mask TYPE x VALUE '01'.
     FIELD-SYMBOLS: <any> TYPE any.
     m_debug_button = fcode.
-    CLEAR m_history.
     READ TABLE mt_stack INDEX 1 INTO DATA(stack).
     CASE fcode.
 
@@ -1039,8 +1037,12 @@ CLASS zcl_smd_window IMPLEMENTATION.
         mo_toolbar->set_button_info( EXPORTING fcode = 'DEPTH' text = |Depth { m_hist_depth }| ).
 
       WHEN 'HIST'.
-        CLEAR m_history.
-        mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_red_xcircle ) text = 'History OFF' ).
+        m_history = m_history BIT-XOR c_mask.
+        IF m_history IS INITIAL.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_red_xcircle ) text = 'History OFF' ).
+        ELSE.
+          mo_toolbar->set_button_info( EXPORTING fcode =  'HIST' icon = CONV #( icon_graduate ) text = 'History ON' ).
+        ENDIF.
 
       WHEN 'VARHIST'.
         m_varhist = m_varhist BIT-XOR c_mask.
