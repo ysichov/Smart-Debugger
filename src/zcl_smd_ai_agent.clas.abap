@@ -50,6 +50,7 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     DATA mv_config_provider TYPE string.
     DATA mv_config_model TYPE text255.
     DATA mv_config_apikey TYPE string.
+    DATA mv_tools_path TYPE string.
     DATA mv_last_error TYPE string.
     DATA mv_last_tool_result TYPE string.
     DATA mv_findings_confirmed TYPE abap_bool.
@@ -671,6 +672,7 @@ METHOD get_default_api_key.
             provider TYPE string,
             model    TYPE text255,
             apikey   TYPE string,
+            tools_path TYPE string,
           END OF ls_ai_config.
     DATA lv_ai_config_id TYPE indx-srtfd.
     lv_ai_config_id = |ZSMDBG{ sy-uname }|.
@@ -682,6 +684,7 @@ METHOD get_default_api_key.
     mv_config_provider = ls_ai_config-provider.
     mv_config_model    = ls_ai_config-model.
     mv_config_apikey   = ls_ai_config-apikey.
+    mv_tools_path      = ls_ai_config-tools_path.
 
     IF mv_config_apikey IS INITIAL.
       mv_last_error = 'No AI configuration received from ABAP_AI_CODE'.
@@ -723,6 +726,29 @@ METHOD get_plugin_tools_json.
 
 
   METHOD get_system_prompt.
+    IF mv_tools_path IS NOT INITIAL.
+      DATA lt_prompt_file TYPE STANDARD TABLE OF string.
+      DATA lv_prompt_file TYPE string.
+      DATA lv_prompt_path TYPE string.
+      lv_prompt_path = mv_tools_path.
+      DATA lv_prompt_last TYPE i.
+      lv_prompt_last = strlen( lv_prompt_path ) - 1.
+      IF lv_prompt_path+lv_prompt_last(1) <> '\\'
+         AND lv_prompt_path+lv_prompt_last(1) <> '/'.
+        lv_prompt_path = lv_prompt_path && '/'.
+      ENDIF.
+      lv_prompt_path = lv_prompt_path && 'smart_debugger_system_prompt.md'.
+      cl_gui_frontend_services=>gui_upload(
+        EXPORTING filename = lv_prompt_path filetype = 'ASC'
+        CHANGING  data_tab = lt_prompt_file
+        EXCEPTIONS OTHERS = 1 ).
+      IF sy-subrc = 0 AND lt_prompt_file IS NOT INITIAL.
+        CONCATENATE LINES OF lt_prompt_file INTO lv_prompt_file
+          SEPARATED BY cl_abap_char_utilities=>newline.
+        rv_prompt = lv_prompt_file.
+        RETURN.
+      ENDIF.
+    ENDIF.
     rv_prompt =
       'You are the Smart Debugger AI agent for ABAP. ' &&
       'Use only the debugger snapshot provided by the user prompt. ' &&
@@ -871,6 +897,30 @@ METHOD get_plugin_tools_json.
 
 
   METHOD get_tools_json.
+
+    IF mv_tools_path IS NOT INITIAL.
+      DATA lt_tools_file TYPE STANDARD TABLE OF string.
+      DATA lv_tools_file TYPE string.
+      DATA lv_tools_path TYPE string.
+      lv_tools_path = mv_tools_path.
+      DATA lv_tools_last TYPE i.
+      lv_tools_last = strlen( lv_tools_path ) - 1.
+      IF lv_tools_path+lv_tools_last(1) <> '\\'
+         AND lv_tools_path+lv_tools_last(1) <> '/'.
+        lv_tools_path = lv_tools_path && '/'.
+      ENDIF.
+      lv_tools_path = lv_tools_path && 'smart_debugger_tools.json'.
+      cl_gui_frontend_services=>gui_upload(
+        EXPORTING filename = lv_tools_path filetype = 'ASC'
+        CHANGING  data_tab = lt_tools_file
+        EXCEPTIONS OTHERS = 1 ).
+      IF sy-subrc = 0 AND lt_tools_file IS NOT INITIAL.
+        CONCATENATE LINES OF lt_tools_file INTO lv_tools_file
+          SEPARATED BY cl_abap_char_utilities=>newline.
+        rv_json = lv_tools_file.
+        RETURN.
+      ENDIF.
+    ENDIF.
 
     DATA(lv_findings_desc) =
       `The ONLY way to conclude the investigation. ` &&
