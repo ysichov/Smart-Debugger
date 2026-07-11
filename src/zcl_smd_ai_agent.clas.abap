@@ -51,6 +51,8 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     DATA mv_config_model TYPE text255.
     DATA mv_config_apikey TYPE string.
     DATA mv_tools_path TYPE string.
+    DATA mv_max_tokens TYPE i.
+    DATA mv_thinking_budget TYPE i.
     DATA mv_last_error TYPE string.
     DATA mv_last_tool_result TYPE string.
     DATA mv_findings_confirmed TYPE abap_bool.
@@ -673,6 +675,8 @@ METHOD get_default_api_key.
             model    TYPE text255,
             apikey   TYPE string,
             tools_path TYPE string,
+            max_tokens TYPE i,
+            thinking_budget TYPE i,
           END OF ls_ai_config.
     DATA lv_ai_config_id TYPE indx-srtfd.
     lv_ai_config_id = |ZSMDBG{ sy-uname }|.
@@ -685,6 +689,8 @@ METHOD get_default_api_key.
     mv_config_model    = ls_ai_config-model.
     mv_config_apikey   = ls_ai_config-apikey.
     mv_tools_path      = ls_ai_config-tools_path.
+    mv_max_tokens      = ls_ai_config-max_tokens.
+    mv_thinking_budget = ls_ai_config-thinking_budget.
 
     IF mv_config_apikey IS INITIAL.
       mv_last_error = 'No AI configuration received from ABAP_AI_CODE'.
@@ -1165,7 +1171,8 @@ METHOD run.
           i_provider = COND #( WHEN mv_config_provider IS INITIAL THEN c_provider ELSE mv_config_provider ) ).
 
         lo_llm->set_temperature( '0.1' ).
-        lo_llm->set_max_tokens( 1200 ).
+        lo_llm->set_max_tokens( mv_max_tokens ).
+        lo_llm->set_thinking_budget( mv_thinking_budget ).
 
         DATA(lo_context) = NEW zcl_ai_tool_context(
           io_llm        = lo_llm
