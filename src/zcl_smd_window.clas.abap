@@ -545,12 +545,6 @@ CLASS zcl_smd_window IMPLEMENTATION.
       mo_ai_agent = zcl_smd_ai_agent=>create( io_debugger = mo_debugger ).
     ENDIF.
 
-    IF mo_ai_agent->is_at_guard_breakpoint( ) = abap_true.
-      set_ai_result( |Guard breakpoint reached. AI run stopped.| ).
-      cl_gui_cfw=>flush( ).
-      RETURN.
-    ENDIF.
-
     WHILE abap_true = abap_true.
 
       IF mt_ai_pending_actions IS INITIAL.

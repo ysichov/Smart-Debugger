@@ -175,6 +175,7 @@ METHOD build_prompt.
     lv_newline = cl_abap_char_utilities=>newline.
 
     append_line( EXPORTING i_line = |Task: { i_task }| CHANGING ct_lines = lt_lines ).
+    append_line( EXPORTING i_line = `MANDATORY FIRST ACTION: analyze Variable history against the source before proposing any breakpoint or step. If the history proves the defect, report it as confirmed immediately; do not set a breakpoint.` CHANGING ct_lines = lt_lines ).
     append_line( EXPORTING i_line = `` CHANGING ct_lines = lt_lines ).
 
     IF mo_debugger IS BOUND.
@@ -787,6 +788,11 @@ METHOD get_plugin_tools_json.
       'status=confirmed immediately; do not request another step merely to ' &&
       'reconfirm evidence already present in the history. Source-only ' &&
       'reasoning without supporting history remains a hypothesis. ' &&
+      'This history-first analysis is mandatory before every breakpoint ' &&
+      'or step proposal. Never set a breakpoint above the current position ' &&
+      'just to rediscover a transition that is already recorded in Variable ' &&
+      'history. If history is sufficient, the only tool call should be ' &&
+      'report_findings with status=confirmed. ' &&
       'report_findings with status=confirmed is only valid when ' &&
       'evidence_variable and evidence_value literally appear together, ' &&
       'this turn, in the user prompt sections "Current variables/state:", ' &&
@@ -800,7 +806,8 @@ METHOD get_plugin_tools_json.
       'rejected automatically and the investigation continues; if that ' &&
       'happens, propose the next debugger action that would produce the ' &&
       'missing evidence instead of repeating the same confirmed claim. ' &&
-      'For a suspected logic bug, first set a breakpoint on the most ' &&
+      'Only when Variable history lacks the decisive transition, set a ' &&
+      'breakpoint on the most ' &&
       'suspicious executable line, preferably the condition or assignment ' &&
       'that can prove the bug, not merely the loop header; combine it in ' &&
       'the same turn with step_debugger F8 to run to it, unless another ' &&
