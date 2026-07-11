@@ -202,8 +202,9 @@ CLASS zcl_smd_window IMPLEMENTATION.
             model    TYPE text255,
             apikey   TYPE string,
           END OF ls_ai_config.
-    BREAK-POINT. " Temporary: inspect AI configuration before IMPORT
-    IMPORT ai_config = ls_ai_config FROM MEMORY ID 'Z_SMART_DEBUGGER_AI'.
+    DATA lv_ai_config_id TYPE indx-srtfd.
+    lv_ai_config_id = |ZSMDBG{ sy-uname }|.
+    IMPORT ai_config = ls_ai_config FROM DATABASE indx(st) ID lv_ai_config_id.
     mv_ai_provider = ls_ai_config-provider.
     mv_ai_model    = ls_ai_config-model.
     mv_ai_apikey   = ls_ai_config-apikey.

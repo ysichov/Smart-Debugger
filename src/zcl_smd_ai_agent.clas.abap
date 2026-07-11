@@ -680,7 +680,13 @@ METHOD get_default_api_key.
             model    TYPE text255,
             apikey   TYPE string,
           END OF ls_ai_config.
-    IMPORT ai_config = ls_ai_config FROM MEMORY ID 'Z_SMART_DEBUGGER_AI'.
+    DATA lv_ai_config_id TYPE indx-srtfd.
+    lv_ai_config_id = |ZSMDBG{ sy-uname }|.
+    IMPORT ai_config = ls_ai_config FROM DATABASE indx(st) ID lv_ai_config_id.
+    IF sy-subrc = 0.
+      DELETE FROM DATABASE indx(st) ID lv_ai_config_id.
+      COMMIT WORK AND WAIT.
+    ENDIF.
     mv_config_provider = ls_ai_config-provider.
     mv_config_model    = ls_ai_config-model.
     mv_config_apikey   = ls_ai_config-apikey.
