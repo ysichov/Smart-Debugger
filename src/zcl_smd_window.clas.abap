@@ -202,6 +202,8 @@ CLASS zcl_smd_window IMPLEMENTATION.
             model    TYPE text255,
             apikey   TYPE string,
             tools_path TYPE string,
+            max_tokens TYPE i,
+            thinking_budget TYPE i,
           END OF ls_ai_config.
     DATA lv_ai_config_id TYPE indx-srtfd.
     lv_ai_config_id = |ZSMDBG{ sy-uname }|.
