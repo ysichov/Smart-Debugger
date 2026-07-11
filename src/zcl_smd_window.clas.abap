@@ -195,7 +195,7 @@ CLASS zcl_smd_window IMPLEMENTATION.
   METHOD constructor.
     super->constructor( ).
     mo_debugger = i_debugger.
-    IMPORT ms_ai_config FROM MEMORY ID 'Z_SMART_DEBUGGER_AI'.
+    IMPORT ai_config = ms_ai_config FROM MEMORY ID 'Z_SMART_DEBUGGER_AI'.
     m_history = m_varhist = m_zcode = '01'.
     m_hist_depth = 9.
 
