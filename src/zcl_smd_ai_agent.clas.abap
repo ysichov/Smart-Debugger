@@ -171,11 +171,17 @@ METHOD build_prompt.
     DATA lv_newline TYPE string.
     DATA lv_current_include TYPE string.
     DATA lv_window_active TYPE abap_bool.
+    DATA lv_history_instruction TYPE string.
 
     lv_newline = cl_abap_char_utilities=>newline.
+    lv_history_instruction = `MANDATORY FIRST ACTION: analyze Variable history against the source before proposing any breakpoint or step. If the history proves the defect, report it as confirmed immediately; do not set a breakpoint.`.
 
     append_line( EXPORTING i_line = |Task: { i_task }| CHANGING ct_lines = lt_lines ).
-    append_line( EXPORTING i_line = `MANDATORY FIRST ACTION: analyze Variable history against the source before proposing any breakpoint or step. If the history proves the defect, report it as confirmed immediately; do not set a breakpoint.` CHANGING ct_lines = lt_lines ).
+    append_line(
+      EXPORTING
+        i_line = lv_history_instruction
+      CHANGING
+        ct_lines = lt_lines ).
     append_line( EXPORTING i_line = `` CHANGING ct_lines = lt_lines ).
 
     IF mo_debugger IS BOUND.
