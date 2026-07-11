@@ -160,7 +160,9 @@ CLASS zcl_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUBL
           mt_breaks              TYPE tpda_bp_persistent_it,
           mt_watch               TYPE tt_watch,
           mt_coverage            TYPE tt_watch,
-          ms_ai_config           TYPE zcl_smd_ai_agent=>ty_ai_config,
+          mv_ai_provider         TYPE string,
+          mv_ai_model            TYPE text255,
+          mv_ai_apikey           TYPE string,
           m_ai_open              TYPE xfeld,
           m_hist_depth           TYPE i,
           m_start_stack          TYPE i,
@@ -195,7 +197,15 @@ CLASS zcl_smd_window IMPLEMENTATION.
   METHOD constructor.
     super->constructor( ).
     mo_debugger = i_debugger.
-    IMPORT ai_config = ms_ai_config FROM MEMORY ID 'Z_SMART_DEBUGGER_AI'.
+    DATA: BEGIN OF ls_ai_config,
+            provider TYPE string,
+            model    TYPE text255,
+            apikey   TYPE string,
+          END OF ls_ai_config.
+    IMPORT ai_config = ls_ai_config FROM MEMORY ID 'Z_SMART_DEBUGGER_AI'.
+    mv_ai_provider = ls_ai_config-provider.
+    mv_ai_model    = ls_ai_config-model.
+    mv_ai_apikey   = ls_ai_config-apikey.
     m_history = m_varhist = m_zcode = '01'.
     m_hist_depth = 9.
 
@@ -366,9 +376,9 @@ CLASS zcl_smd_window IMPLEMENTATION.
      ( function = 'DEBUG' icon = CONV #( icon_tools ) quickinfo = 'Debug' text = 'Debug' )
      ( function = 'INFO' icon = CONV #( icon_bw_gis ) quickinfo = 'Documentation' text = '' )
                     ).
-    IF ms_ai_config-provider IS INITIAL
-       OR ms_ai_config-model IS INITIAL
-       OR ms_ai_config-apikey IS INITIAL.
+    IF mv_ai_provider IS INITIAL
+       OR mv_ai_model IS INITIAL
+       OR mv_ai_apikey IS INITIAL.
       DELETE button WHERE function = 'AI'.
     ENDIF.
 
@@ -549,9 +559,7 @@ CLASS zcl_smd_window IMPLEMENTATION.
     ENDIF.
 
     IF mo_ai_agent IS INITIAL.
-      mo_ai_agent = zcl_smd_ai_agent=>create(
-        io_debugger = mo_debugger
-        is_config   = ms_ai_config ).
+      mo_ai_agent = zcl_smd_ai_agent=>create( io_debugger = mo_debugger ).
     ENDIF.
 
     WHILE abap_true = abap_true.

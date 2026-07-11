@@ -4,21 +4,13 @@ CLASS zcl_smd_ai_agent DEFINITION
 
 
   PUBLIC SECTION.
-    TYPES:
-      BEGIN OF ty_ai_config,
-        provider TYPE string,
-        model    TYPE text255,
-        apikey   TYPE string,
-      END OF ty_ai_config.
-
     CONSTANTS c_provider TYPE string VALUE 'MISTRAL'.
     CONSTANTS c_keyname  TYPE string VALUE 'DEFAULT'.
     CONSTANTS c_model    TYPE text255 VALUE 'codestral-latest'.
 
     METHODS constructor
       IMPORTING
-        !io_debugger TYPE REF TO zcl_smd_debugger_base
-        !is_config   TYPE ty_ai_config OPTIONAL.
+        !io_debugger TYPE REF TO zcl_smd_debugger_base.
 
     METHODS run
       IMPORTING
@@ -36,7 +28,6 @@ CLASS zcl_smd_ai_agent DEFINITION
     CLASS-METHODS create
       IMPORTING
         !io_debugger  TYPE REF TO zcl_smd_debugger_base
-        !is_config    TYPE ty_ai_config OPTIONAL
       RETURNING
         VALUE(ro_agent) TYPE REF TO zcl_smd_ai_agent.
     METHODS reset_last_tool_result.
@@ -57,7 +48,9 @@ CLASS zcl_smd_ai_agent DEFINITION
 TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
 
     DATA mo_debugger TYPE REF TO zcl_smd_debugger_base.
-    DATA ms_config TYPE ty_ai_config.
+    DATA mv_config_provider TYPE string.
+    DATA mv_config_model TYPE text255.
+    DATA mv_config_apikey TYPE string.
     DATA mv_last_error TYPE string.
     DATA mv_last_tool_result TYPE string.
     DATA mv_findings_confirmed TYPE abap_bool.
@@ -170,7 +163,6 @@ CLASS ZCL_SMD_AI_AGENT IMPLEMENTATION.
 
   METHOD constructor.
     mo_debugger = io_debugger.
-    ms_config = is_config.
   ENDMETHOD.
 
 
@@ -688,8 +680,18 @@ METHOD get_default_api_key.
 
     CLEAR: rv_api_key, mv_last_error, mv_waiting_for_password.
 
-    IF ms_config-apikey IS NOT INITIAL.
-      rv_api_key = ms_config-apikey.
+    DATA: BEGIN OF ls_ai_config,
+            provider TYPE string,
+            model    TYPE text255,
+            apikey   TYPE string,
+          END OF ls_ai_config.
+    IMPORT ai_config = ls_ai_config FROM MEMORY ID 'Z_SMART_DEBUGGER_AI'.
+    mv_config_provider = ls_ai_config-provider.
+    mv_config_model    = ls_ai_config-model.
+    mv_config_apikey   = ls_ai_config-apikey.
+
+    IF mv_config_apikey IS NOT INITIAL.
+      rv_api_key = mv_config_apikey.
       RETURN.
     ENDIF.
 
@@ -1162,9 +1164,9 @@ METHOD run.
         DATA(lv_guard) = ensure_guard_breakpoint( ).
 
         DATA(lo_llm) = NEW zcl_abapai_llm_client(
-          i_model    = COND #( WHEN ms_config-model IS INITIAL THEN c_model ELSE ms_config-model )
+          i_model    = COND #( WHEN mv_config_model IS INITIAL THEN c_model ELSE mv_config_model )
           i_apikey   = lv_api_key
-          i_provider = COND #( WHEN ms_config-provider IS INITIAL THEN c_provider ELSE ms_config-provider ) ).
+          i_provider = COND #( WHEN mv_config_provider IS INITIAL THEN c_provider ELSE mv_config_provider ) ).
 
         lo_llm->set_temperature( '0.1' ).
         lo_llm->set_max_tokens( 1200 ).
@@ -1284,9 +1286,7 @@ METHOD run.
 
 
   METHOD create.
-    ro_agent = NEW zcl_smd_ai_agent(
-      io_debugger = io_debugger
-      is_config   = is_config ).
+    ro_agent = NEW zcl_smd_ai_agent( io_debugger = io_debugger ).
   ENDMETHOD.
 
 
