@@ -632,7 +632,7 @@ CLASS zcl_smd_window IMPLEMENTATION.
       CLEAR mt_ai_pending_actions.
 
       IF mo_ai_agent->has_confirmed_findings( ) = abap_true.
-        set_ai_result( lv_batch_summary &&
+        set_ai_result( lv_result &&
           cl_abap_char_utilities=>newline &&
           cl_abap_char_utilities=>newline &&
           |Findings confirmed. AI run stopped.| ).
