@@ -5,7 +5,6 @@ CLASS zcl_smd_ai_agent DEFINITION
 
   PUBLIC SECTION.
     CONSTANTS c_provider TYPE string VALUE 'MISTRAL'.
-    CONSTANTS c_keyname  TYPE string VALUE 'DEFAULT'.
     CONSTANTS c_model    TYPE text255 VALUE 'codestral-latest'.
 
     METHODS constructor
@@ -54,11 +53,7 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
     DATA mv_last_error TYPE string.
     DATA mv_last_tool_result TYPE string.
     DATA mv_findings_confirmed TYPE abap_bool.
-    DATA mv_api_password TYPE string.
-    DATA mv_password_popup_open TYPE xfeld.
-    DATA mv_waiting_for_password TYPE xfeld.
     DATA mv_guard_breakpoint TYPE string.
-    DATA mo_password_popup TYPE REF TO zcl_smd_password_popup.
     DATA mt_action_log TYPE tt_string.
     DATA mv_log_llm TYPE i.
     DATA mv_log_tool TYPE i.
@@ -128,9 +123,6 @@ TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
       CHANGING
         !ct_lines TYPE tt_string.
 
-    METHODS ask_password
-      RETURNING
-        VALUE(rv_password) TYPE string.
 
     METHODS remember_ai_breakpoint
       IMPORTING
