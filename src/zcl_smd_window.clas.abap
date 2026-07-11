@@ -160,7 +160,7 @@ CLASS zcl_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUBL
           mt_breaks              TYPE tpda_bp_persistent_it,
           mt_watch               TYPE tt_watch,
           mt_coverage            TYPE tt_watch,
-          ms_ai_config           TYPE zcl_abapai_llm_client=>ty_ai_config,
+          ms_ai_config           TYPE zcl_smd_ai_agent=>ty_ai_config,
           m_ai_open              TYPE xfeld,
           m_hist_depth           TYPE i,
           m_start_stack          TYPE i,

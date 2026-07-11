@@ -4,6 +4,13 @@ CLASS zcl_smd_ai_agent DEFINITION
 
 
   PUBLIC SECTION.
+    TYPES:
+      BEGIN OF ty_ai_config,
+        provider TYPE string,
+        model    TYPE text255,
+        apikey   TYPE string,
+      END OF ty_ai_config.
+
     CONSTANTS c_provider TYPE string VALUE 'MISTRAL'.
     CONSTANTS c_keyname  TYPE string VALUE 'DEFAULT'.
     CONSTANTS c_model    TYPE text255 VALUE 'codestral-latest'.
@@ -11,7 +18,7 @@ CLASS zcl_smd_ai_agent DEFINITION
     METHODS constructor
       IMPORTING
         !io_debugger TYPE REF TO zcl_smd_debugger_base
-        !is_config   TYPE zcl_abapai_llm_client=>ty_ai_config OPTIONAL.
+        !is_config   TYPE ty_ai_config OPTIONAL.
 
     METHODS run
       IMPORTING
@@ -29,7 +36,7 @@ CLASS zcl_smd_ai_agent DEFINITION
     CLASS-METHODS create
       IMPORTING
         !io_debugger  TYPE REF TO zcl_smd_debugger_base
-        !is_config    TYPE zcl_abapai_llm_client=>ty_ai_config OPTIONAL
+        !is_config    TYPE ty_ai_config OPTIONAL
       RETURNING
         VALUE(ro_agent) TYPE REF TO zcl_smd_ai_agent.
     METHODS reset_last_tool_result.
@@ -50,7 +57,7 @@ CLASS zcl_smd_ai_agent DEFINITION
 TYPES tt_string TYPE STANDARD TABLE OF string WITH EMPTY KEY.
 
     DATA mo_debugger TYPE REF TO zcl_smd_debugger_base.
-    DATA ms_config TYPE zcl_abapai_llm_client=>ty_ai_config.
+    DATA ms_config TYPE ty_ai_config.
     DATA mv_last_error TYPE string.
     DATA mv_last_tool_result TYPE string.
     DATA mv_findings_confirmed TYPE abap_bool.
