@@ -774,7 +774,13 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
           FIELD-SYMBOLS: <old_value> TYPE any.
           ASSIGN var-ref->* TO <old_value>.
           IF sy-subrc = 0.
-            IF <old_value> NE <new_value>.
+            IF var-type IS NOT INITIAL AND var-type <> o_table_descr->absolute_name.
+              "same name but another table type (variable of another block) -
+              "comparing the values would dump, just replace the node
+              key = var-key.
+              rel = if_salv_c_node_relation=>next_sibling.
+              DELETE mt_vars WHERE name = is_var-name.
+            ELSEIF <old_value> NE <new_value>.
               key = var-key.
               rel = if_salv_c_node_relation=>next_sibling.
               DELETE mt_vars WHERE name = is_var-name.
@@ -860,6 +866,7 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
       <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
       <vars>-cl_leaf = is_var-cl_leaf.
       <vars>-path = is_var-path.
+      <vars>-type = o_table_descr->absolute_name.
 
       IF rel = if_salv_c_node_relation=>next_sibling AND o_node IS NOT INITIAL.
         "purge also removes subtree keys from the tables

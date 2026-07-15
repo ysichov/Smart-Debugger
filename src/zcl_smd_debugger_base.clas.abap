@@ -103,6 +103,12 @@ CLASS zcl_smd_debugger_base DEFINITION PUBLIC ABSTRACT INHERITING FROM cl_tpda_s
       build_tab_delta IMPORTING ir_old  TYPE REF TO data
                       CHANGING  cs_hist TYPE zcl_smd_appl=>var_table,
 
+      "type-safe value comparison: same-named variables can have different
+      "types in different blocks - comparing those directly dumps
+      hist_value_changed IMPORTING ir_old           TYPE REF TO data
+                                   ir_new           TYPE REF TO data
+                         RETURNING VALUE(r_changed) TYPE xfeld,
+
       restore_tab_hist IMPORTING is_hist       TYPE zcl_smd_appl=>var_table
                        RETURNING VALUE(rr_tab) TYPE REF TO data.
 
@@ -1967,35 +1973,32 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
 
       IF name2+0(2) NE '{O'.
 
+        "program is part of the identity: same-named variables of different
+        "programs/methods are different variables and must never be compared
         IF <state>-leaf NE 'GLOBAL' AND <state>-leaf NE 'CLASS'.
           READ TABLE mt_vars_hist_view
            WITH KEY stack = <state>-stack
                     name = i_fullname
+                    program = <state>-program
                     eventtype = <state>-eventtype
                     eventname = <state>-eventname
                     INTO DATA(hist).
         ELSE.
           READ TABLE mt_vars_hist_view
            WITH KEY name = i_fullname
+                    program = <state>-program
                     INTO hist.
         ENDIF.
 
         IF sy-subrc NE 0.
           add_hist = add = abap_on.
         ELSE.
-          ASSIGN hist-ref->* TO FIELD-SYMBOL(<hist>).
-
-          IF <hist> NE <ir_up>.
-            add_hist = add = abap_on.
-          ENDIF.
+          add_hist = add = hist_value_changed( ir_old = hist-ref ir_new = <state>-ref ).
         ENDIF.
       ELSE.
         READ TABLE mt_vars_hist_view WITH KEY name = <state>-name INTO hist.
         IF sy-subrc = 0.
-          ASSIGN hist-ref->* TO <hist>.
-          IF <hist> NE <ir_up>.
-            add_hist = add = abap_on.
-          ENDIF.
+          add_hist = add = hist_value_changed( ir_old = hist-ref ir_new = <state>-ref ).
         ELSE.
           add_hist = add = abap_on.
         ENDIF.
@@ -2006,9 +2009,9 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
       ENDIF.
 
       o_elem = cl_abap_typedescr=>describe_by_data_ref( <state>-ref ).
-      IF <state>-type IS INITIAL.
-        <state>-type = o_elem->absolute_name.
-      ENDIF.
+      "always refresh: mt_state rows are reused by name, so a re-appearing
+      "same-named variable of another block would otherwise keep the old type
+      <state>-type = o_elem->absolute_name.
 
       IF add = abap_on.
 
@@ -2026,10 +2029,12 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
         IF <state>-leaf NE 'GLOBAL' AND <state>-leaf NE 'CLASS'.
           DELETE mt_vars_hist_view WHERE name      = <state>-name
                                      AND stack     = <state>-stack
+                                     AND program   = <state>-program
                                      AND eventtype = <state>-eventtype
                                      AND eventname = <state>-eventname.
         ELSE.
-          DELETE mt_vars_hist_view WHERE name = <state>-name.
+          DELETE mt_vars_hist_view WHERE name    = <state>-name
+                                     AND program = <state>-program.
         ENDIF.
         INSERT <state> INTO mt_vars_hist_view INDEX 1.
 
@@ -2077,6 +2082,15 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
     "stack frame/event - otherwise delta chains of different frames get mixed
     r_same = abap_true.
     IF is_a-name(3) = '{O:'.
+      RETURN. "object instance handles are globally unique
+    ENDIF.
+    IF is_a-program <> is_b-program.
+      CLEAR r_same. "same name in another program = another variable
+      RETURN.
+    ENDIF.
+    IF is_a-type IS NOT INITIAL AND is_b-type IS NOT INITIAL
+    AND is_a-type <> is_b-type.
+      CLEAR r_same. "same name but different type = another variable
       RETURN.
     ENDIF.
     IF is_a-leaf = 'GLOBAL' OR is_a-leaf = 'CLASS'.
@@ -2087,6 +2101,37 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
     OR is_a-eventname <> is_b-eventname.
       CLEAR r_same.
     ENDIF.
+
+  ENDMETHOD.
+
+  METHOD hist_value_changed.
+
+    FIELD-SYMBOLS: <old> TYPE any,
+                   <new> TYPE any.
+
+    IF ir_old IS INITIAL OR ir_new IS INITIAL.
+      r_changed = abap_true.
+      RETURN.
+    ENDIF.
+
+    TRY.
+        "different actual types = different variable incarnation = changed;
+        "never compare the values themselves in that case (dump!)
+        IF cl_abap_typedescr=>describe_by_data_ref( ir_old )->absolute_name
+        <> cl_abap_typedescr=>describe_by_data_ref( ir_new )->absolute_name.
+          r_changed = abap_true.
+          RETURN.
+        ENDIF.
+
+        ASSIGN ir_old->* TO <old>.
+        ASSIGN ir_new->* TO <new>.
+        IF <old> NE <new>.
+          r_changed = abap_true.
+        ENDIF.
+      CATCH cx_root.
+        "comparison not possible - treat as changed, correctness over dumps
+        r_changed = abap_true.
+    ENDTRY.
 
   ENDMETHOD.
 
@@ -2109,6 +2154,11 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
         DATA(o_old_descr) = cl_abap_typedescr=>describe_by_data_ref( ir_old ).
         IF o_new_descr->kind <> cl_abap_typedescr=>kind_table
         OR o_old_descr->kind <> cl_abap_typedescr=>kind_table.
+          RETURN.
+        ENDIF.
+        "different table types (same-named variable of another block) -
+        "row-wise comparison would dump, keep the full copy
+        IF o_new_descr->absolute_name <> o_old_descr->absolute_name.
           RETURN.
         ENDIF.
         DATA(o_tab_descr) = CAST cl_abap_tabledescr( o_new_descr ).
