@@ -1,152 +1,133 @@
-# Smart Debugger — ревизия кода (2026-07-15)
+# Smart Debugger — Code Review (2026-07-15)
 
-Полный проход по `src/*.clas.abap` (кроме `z_smart_debugger_standalone.prog.abap` —
-старая версия до рефакторинга, не трогаем). Здесь зафиксировано: что исправлено
-в этой сессии, что найдено и исправлено при ревизии, и что замечено, но
-сознательно НЕ исправлено (кандидаты на потом).
+Complete pass through `src/*.clas.abap` (excluding `z_smart_debugger_standalone.prog.abap` —
+legacy pre-refactor version, left untouched). This document records: what was fixed in this session,
+what was discovered and fixed during review, and architectural decisions made.
 
 ---
 
-## 1. Исправлено: синхронизация ключей нод дерева (`zcl_smd_rtti_tree`)
+## 1. Fixed: Tree node key synchronization (`zcl_smd_rtti_tree`)
 
-**Симптом:** после удаления/замены нод в таблицах `mt_vars` / `mt_classes_leaf`
-оставались ключи уже удалённых нод → `get_node( )` / `add_node( related_node = ... )`
-падали в дамп.
+**Symptom:** after deleting/replacing nodes, stale keys remained in `mt_vars` / `mt_classes_leaf`
+tables → `get_node( )` / `add_node( related_node = ... )` calls crashed with dumps.
 
-**Причины и фиксы:**
+**Root causes and fixes:**
 
-- `traverse_elem`: переменная `o_node` перезаписывалась через `RECEIVING node = o_node`
-  при `add_node`, из-за чего при замене узла удалялся **новый** узел, а его ключ
-  оставался в `mt_vars`. Теперь старый узел сохраняется в `o_old_node` и удаляется он.
-- Введён приватный метод **`purge_node`**: перед удалением узла собирает через
-  `get_subtree( )` ключи всего поддерева и вычищает их из `mt_vars` и
-  `mt_classes_leaf` (само удаление под `TRY`). Применён во всех точках удаления:
-  `traverse_struct`, `traverse_elem`, `traverse_table`, `traverse_obj`,
-  `del_variable`, `delete_node`.
-- `traverse_obj`: `get_node( var-key )` обёрнут в `TRY` (устаревший ключ чистится
-  из таблиц вместо дампа); старая запись `mt_vars` удаляется перед `APPEND`
-  (раньше копились дубликаты, `READ TABLE` находил запись с мёртвым ключом).
-- `delete_node`: чистит `mt_vars`/`mt_classes_leaf` по ключу и поддереву
-  (раньше `mt_classes_leaf` не чистил вообще никто, кроме `clear`).
+- `traverse_elem`: variable `o_node` was overwritten by `RECEIVING node = o_node` in `add_node`,
+  so when replacing a node, the **new** node was deleted instead of the old one, leaving its key
+  stale in `mt_vars`. Now the old node is saved to `o_old_node` and that is deleted.
+- Introduced private method **`purge_node`**: before deleting a node, collects all subtree node keys
+  via `get_subtree( )` and cleans them from `mt_vars` and `mt_classes_leaf` (deletion itself under
+  `TRY`). Applied at all deletion points: `traverse_struct`, `traverse_elem`, `traverse_table`,
+  `traverse_obj`, `del_variable`, `delete_node`.
+- `traverse_obj`: `get_node( var-key )` wrapped in `TRY` (stale key is cleaned from tables instead
+  of crashing); old `mt_vars` entry deleted before `APPEND` (was accumulating duplicates, with
+  `READ TABLE` finding the dead one).
+- `delete_node`: now cleans `mt_vars`/`mt_classes_leaf` by key and subtree (previously
+  `mt_classes_leaf` was never cleaned except by full `clear`).
 
-## 2. Исправлено: дельта-хранение истории таблиц (память)
+## 2. Fixed: Delta compression for table history (memory)
 
-**Было:** каждое изменение внутренней таблицы клало её полную копию в
-`mt_vars_hist` и `mt_vars_hist_view` → память росла линейно по шагам.
+**Was:** every internal table change stored a full copy in `mt_vars_hist` and `mt_vars_hist_view`
+→ memory grew linearly with step count.
 
-**Стало (`zcl_smd_debugger_base`):**
+**Now** (`zcl_smd_debugger_base`):
 
-- `mt_vars_hist_view` держит только **последнюю** полную копию на переменную
-  (используется лишь для детекции изменений) — старые записи удаляются перед вставкой.
-- В `mt_vars_hist` для standard-таблиц пишется **дельта**: общий префикс/суффикс
-  старой и новой версии, сохраняется только заменённый блок
-  (`is_delta`, `delta_from`, `delta_del` — новые поля в `zcl_smd_appl=>var_table`).
-  Методы: `build_tab_delta` (построение), `restore_tab_hist` (раскрутка при реплее),
-  `hist_same_var` (идентичность переменной в цепочке).
-- Контрольная точка: каждые 20 дельт — полный снапшот (константа `c_max_chain`).
-  Полная копия также остаётся, если: дельта не меньше таблицы, тип не
-  standard-таблица, типы старой/новой различаются, или произошло любое исключение.
-- Реплей (`run_script_hist`): дельта раскручивается один раз на отображаемую
-  переменную (после отбора), а не на каждую запись истории; для ветки `m_hide`
-  (скрытие пустых) — на месте, т.к. нужно реальное значение.
-- При битой цепочке (нет базового снапшота) переменная скрывается, а не дампит.
+- `mt_vars_hist_view` holds only the **latest** full copy per variable (used only for change
+  detection) — old records deleted before insert.
+- In `mt_vars_hist` for standard tables, a **delta** is stored: common prefix/suffix are identified,
+  only the replaced block is saved (`is_delta`, `delta_from`, `delta_del` — new fields in
+  `zcl_smd_appl=>var_table`). Methods: `build_tab_delta` (construct), `restore_tab_hist` (unroll on
+  replay), `hist_same_var` (variable identity in chain).
+- Checkpoint: full snapshot every 20 deltas (constant `c_max_chain`). Full copy also preserved if:
+  delta ≥ table size, type is not standard table, old/new types differ, or any exception occurs.
+- Replay (`run_script_hist`): delta unrolled once per displayed variable (after filtering), not per
+  history record; for `m_hide` branch (hide empty) — in-place because real values needed.
+- Broken chain (missing base snapshot) → variable hidden, not dumped.
 
-**Идентичность переменной в цепочке дельт** (`hist_same_var`) повторяет lookup
-из `save_hist`: объекты `{O:...}` — глобально по имени; иначе программа обязана
-совпадать; `GLOBAL`/`CLASS` — по имени в пределах программы; остальные — ещё и
-`stack + eventtype + eventname`. Плюс тип (`type`) обязан совпадать.
+**Variable identity in delta chain** (`hist_same_var`) mirrors `save_hist` lookup: objects `{O:...}`
+globally by name; otherwise program must match; `GLOBAL`/`CLASS` by name within program; others —
+plus `stack + eventtype + eventname`. Type (`type` field) must also match.
 
-## 3. Исправлено: сравнение одноимённых переменных разных типов
+## 3. Fixed: Same-named variables with different types
 
-**Симптом:** одноимённые переменные с разными типами в разных блоках (методах,
-программах) сравнивались напрямую → дамп на несовместимых типах.
+**Symptom:** same-named variables with different types in different blocks (methods, programs)
+compared directly → dump on incompatible types.
 
-- `save_hist`: lookup в `mt_vars_hist_view` включает `program` (глобальные
-  переменные программы сравниваются только с историей этой программы; локальные —
-  только своего фрейма своей программы). Сравнение значений — через новый метод
-  **`hist_value_changed`**: сначала сверка фактических типов
-  (`describe_by_data_ref( )->absolute_name`), разные типы = «изменилось» без
-  сравнения значений; одинаковые — сравнение под `TRY`.
-- `mt_state`: поле `type` теперь обновляется всегда (раньше — только если пустое;
-  строка `mt_state` переиспользуется по имени, и у одноимённой переменной другого
-  блока оставался чужой тип).
-- `zcl_smd_rtti_tree=>traverse_table`: перед сравнением значений сверяется
-  `absolute_name` (раньше проверки типа не было вовсе, и тип в `mt_vars` для
-  таблиц не сохранялся — добавлено `<vars>-type`).
-- `build_tab_delta`: при разных типах таблиц — полный снапшот, без построчного
-  сравнения.
+- `save_hist`: lookup in `mt_vars_hist_view` includes `program` (global variables compared only
+  within same program; locals only within their frame+program). Value comparison via new method
+  **`hist_value_changed`**: checks actual types first (`describe_by_data_ref( )->absolute_name`),
+  different types = "changed" without comparing values; same types → comparison under `TRY`.
+- `mt_state`: `type` field now always updated (was only if empty; `mt_state` row reused by name,
+  and same-named variable in another block kept wrong type).
+- `zcl_smd_rtti_tree=>traverse_table`: `absolute_name` checked before value comparison (type not
+  saved in `mt_vars` for tables before — added `<vars>-type`).
+- `build_tab_delta`: different table types → full snapshot, no row-by-row comparison.
 
-## 4. Исправлено при полной ревизии (эта сессия)
+## 4. Fixed during full review (this session)
 
-| # | Файл | Проблема | Фикс |
-|---|------|----------|------|
-| 4.1 | `zcl_smd_text_viewer` | Просмотр строки **разрушал значение переменной**: `SHIFT <str> LEFT` выполнялся по ссылке на хранимую строку — после просмотра в дереве/истории оставался хвост ≤255 символов. Плюс при ошибке создания `cl_gui_textedit` не было `RETURN` → обращение к несвязанному `mo_text`. | Работа с локальной копией; добавлен `RETURN`. |
-| 4.2 | `zcl_smd_table_viewer` | **Утечка памяти:** `on_table_close` (освобождает копию таблицы и запись в `zcl_smd_appl=>mt_obj`) нигде не регистрировался — вместо него дважды регистрировался базовый `on_box_close`. Каждая открытая таблица жила в памяти до конца сессии. | `SET HANDLER on_table_close FOR mo_box` (одна регистрация, дубль убран). |
-| 4.3 | `zcl_smd_debugger_base=>read_class_globals` | `describe_by_name` без проверки `sy-subrc`/начальной ссылки → `refc->attributes` на несвязанной ссылке = дамп, если класс не описывается. Плюс `READ TABLE mt_obj WITH KEY name = class` — переменная `class` всегда пустая (никогда не заполнялась), должен быть `prog-name`. | Guard + `TRY` на каст + `prog-name`. |
-| 4.4 | `zcl_smd_source_parser=>parse_tokens` | Риск **вечного цикла**: `cx_scan_iterator_reached_end` ловился, но цикл продолжался; если конец итератора процедур наступает раньше последнего стейтмента (`statement_index` < `max` навсегда), `DO` бесконечно добавлял один и тот же токен. | `EXIT` в `CATCH`. |
-| 4.5 | `zcl_smd_sel_opt=>update_sel_row` | Опечатка: `CLEAR: c_sel_row-low, c_sel_row-low.` — `high` не очищался. | `low, high`. |
+| # | File | Problem | Fix |
+|---|------|---------|-----|
+| 4.1 | `zcl_smd_text_viewer` | Viewing a string **corrupted the variable value**: `SHIFT <str> LEFT` executed on stored string reference — after viewing, tree/history showed truncated value ≤255 chars. Plus no `RETURN` on `cl_gui_textedit` creation error → crash on unbound `mo_text`. | Work with local copy; added `RETURN`. |
+| 4.2 | `zcl_smd_table_viewer` | **Memory leak:** `on_table_close` (frees table copy and `mt_obj` entry) never registered — `on_box_close` registered twice instead. Every opened table lived in memory until session end. | `SET HANDLER on_table_close FOR mo_box` (one registration, duplicate removed). |
+| 4.3 | `zcl_smd_debugger_base=>read_class_globals` | `describe_by_name` used without checking `sy-subrc`/initial ref → `refc->attributes` on unbound ref = crash if class not describable. Plus `READ TABLE mt_obj WITH KEY name = class` compared against never-filled variable — should be `prog-name`. | Guard + `TRY` on cast + `prog-name`. |
+| 4.4 | `zcl_smd_source_parser=>parse_tokens` | Risk of **infinite loop**: `cx_scan_iterator_reached_end` caught but loop continued; if end-of-iterator reached before last statement (`statement_index` < `max` forever), `DO` appended same token endlessly. | `EXIT` in `CATCH`. |
+| 4.5 | `zcl_smd_sel_opt=>update_sel_row` | Typo: `CLEAR: c_sel_row-low, c_sel_row-low.` — `high` not cleared. | `low, high`. |
 
-## 5. Вторая волна фиксов (та же дата, по запросу «исправляй»)
+## 5. Second wave of fixes (same date, by request)
 
-Все пункты бывшего раздела «Замечено, но не исправлено» устранены:
+All former "noted but not fixed" items eliminated:
 
-| # | Файл | Проблема | Фикс |
-|---|------|----------|------|
-| 5.1 | `zcl_smd_debugger_base=>traverse` | Мёртвая ветка «копирования» таблиц: `DESCRIBE FIELD` для `REF TO data` всегда `'l'`; будь ветка достижима — дамп на `GET REFERENCE OF` unassigned FS. Реальные копии приходят из `elem_clone`/`create_simple_var`. | Блок заменён на `m_variable = ir_up.` с поясняющим комментарием. |
-| 5.2 | `zcl_smd_debugger_base` | `mt_new_string` рос всю сессию (строка на каждый показ строковой переменной), в т.ч. для значений, не попавших в историю. | Строки создаются `CREATE DATA ... TYPE string` (heap, refcounting — освобождаются, когда история не держит ссылку). Атрибут `mt_new_string` удалён. |
-| 5.3 | `show_coverage` + читатели `mt_stack[ 1 ]` | COVERAGE подменяет `mo_window->mt_stack` псевдо-стеком; дерево и `save_hist` читали `mt_stack[ 1 ]` как реальный стек (+дамп на пустой таблице). | Все чтения переведены на `ms_stack` (4 места в `zcl_smd_rtti_tree`, 3 в `save_hist`). `mt_stack` остался чисто отображением. |
-| 5.4 | `zcl_smd_window=>set_program_line` | Маркер 7 (стрелка текущей строки) получал заодно все строки сессионных брейкпоинтов; маркер 2 (брейкпоинты) перезатирался вторым `set_marker` со списком watch/coverage. | Стрелка — отдельная таблица только с текущей строкой; маркер 2 ставится один раз объединённым списком (bp + watch + coverage, сортировка + дедупликация). |
-| 5.5 | `zcl_smd_mermaid=>magic_search` | `<if>` использовался без проверки присвоения (`ENDIF`/`WHEN`/`ELSE` без открытого `IF/CASE` в отфильтрованных шагах → дамп); `mt_if`/`ms_if` накапливались между вызовами кнопки SMART. | `IS ASSIGNED`-guard'ы во всех 3 местах + `UNASSIGN` после закрытия блока + fallback `pre_stack = line`; `CLEAR mt_if, ms_if` в начале метода. |
-| 5.6 | `zcl_smd_sel_opt` | `on_grid_button_click` / `on_f4`: `READ ... INDEX es_row_no-row_id ASSIGNING` без проверки `sy-subrc` → дамп при клике вне строки данных. | Ранний `RETURN` при `sy-subrc <> 0` (для F4 — отдаёт стандартную помощь). |
-| 5.7 | `zcl_smd_appl=>init_lang` | `ORDER BY` по не выбранным полям — не проходит строгий синтакс-чек новых релизов. | `ladatum`/`lauzeit` добавлены в список выборки (`CORRESPONDING FIELDS` их игнорирует). |
-| 5.8 | `zcl_smd_popup=>on_box_close` | Очистка дочерних попапов закомментирована: дети оставались висеть, `mt_popups` рос бесконечно. | Дочерние окна закрываются (`free` с `EXCEPTIONS`, классические исключения не дампят), записи удаляются (`child = sender OR child IS INITIAL`). `on_table_close` вьюера дополнительно чистит свою запись в `mt_popups`. |
+| # | File | Problem | Fix |
+|---|------|---------|-----|
+| 5.1 | `zcl_smd_debugger_base=>traverse` | Dead branch for table "copying": `DESCRIBE FIELD` on `REF TO data` always returns `'l'`; if reachable, `GET REFERENCE OF` unassigned FS would crash. Actual copies come from `elem_clone`/`create_simple_var`. | Block replaced with `m_variable = ir_up.` and clarifying comment. |
+| 5.2 | `zcl_smd_debugger_base` | `mt_new_string` grew all session (one string per string variable display), even for values not in history. | Strings created via `CREATE DATA ... TYPE string` (heap, refcounted — freed when history no longer holds ref). Attribute `mt_new_string` removed. |
+| 5.3 | `show_coverage` + `mt_stack[ 1 ]` readers | COVERAGE replaced `mo_window->mt_stack` with pseudo-stack; tree and `save_hist` read `mt_stack[ 1 ]` as real stack (+ crash on empty table). | All reads switched to `ms_stack` (4 places in `zcl_smd_rtti_tree`, 3 in `save_hist`). `mt_stack` now display-only. |
+| 5.4 | `zcl_smd_window=>set_program_line` | Marker 7 (current-line arrow) got all session breakpoint lines; marker 2 (breakpoints) overwritten by second `set_marker` with watch/coverage list. | Arrow uses separate table with only current line; marker 2 set once with merged list (breakpoints + watch + coverage, sorted + deduplicated). |
+| 5.5 | `zcl_smd_mermaid=>magic_search` | `<if>` used without assignment check (`ENDIF`/`WHEN`/`ELSE` without recorded `IF/CASE` in filtered steps → crash); `mt_if`/`ms_if` accumulated between SMART button clicks. | `IS ASSIGNED` guards at all 3 points + `UNASSIGN` after block closes + fallback `pre_stack = line`; `CLEAR mt_if, ms_if` at method start. |
+| 5.6 | `zcl_smd_sel_opt` | `on_grid_button_click` / `on_f4`: `READ ... INDEX es_row_no-row_id ASSIGNING` without `sy-subrc` check → crash on click outside data rows. | Early `RETURN` on `sy-subrc <> 0` (F4 delegates to standard help). |
+| 5.7 | `zcl_smd_appl=>init_lang` | `ORDER BY` on unselected fields — fails strict syntax check on newer releases. | `ladatum`/`lauzeit` added to SELECT list (`CORRESPONDING FIELDS` ignores them). |
+| 5.8 | `zcl_smd_popup=>on_box_close` | Child popup cleanup commented out: children hung around, `mt_popups` grew unbounded. | Child windows closed (`free` with `EXCEPTIONS`, standard GUI exceptions don't dump), entries deleted (`child = sender OR child IS INITIAL`). `on_table_close` viewer additionally cleans its `mt_popups` entry. |
 
-Осталось вне скоупа: **`z_smart_debugger_standalone.prog.abap`** — старая версия
-до рефакторинга, все перечисленные баги в ней тоже присутствуют
-(не править по договорённости).
+Out of scope: **`z_smart_debugger_standalone.prog.abap`** — legacy pre-refactor version,
+all listed bugs present in it too (not modified by agreement).
 
-## 6. Дополнение: автообновление открытых окон таблиц
+## 6. Feature: Auto-refresh for open table windows
 
-Открытые окна таблиц (`zcl_smd_table_viewer`) раньше показывали снапшот на момент
-открытия — при навигации приходилось закрывать/открывать заново.
+Open table windows (`zcl_smd_table_viewer`) previously showed a snapshot from open time — navigating
+required closing and reopening.
 
-Реализовано через событие:
+Implemented via event:
 
-- `zcl_smd_window`: событие **`navigated`** + метод `raise_navigated`. Поднимается
-  после каждого отображения нового состояния: `show_step` (живой шаг),
-  ветка истории в `hnd_toolbar`, кнопка REFRESH дерева.
-- `zcl_smd_table_viewer`: подписывается в конструкторе (`on_navigated`),
-  отписывается в `on_table_close`. По событию ищет актуальную ссылку своей
-  переменной (по `m_additional_name` = fullname) в `mt_vars` трёх деревьев,
-  затем в `mt_state`; найденную таблицу прогоняет через вынесенный из
-  конструктора **`prepare_table`** и перепривязывает ALV (`update_table`,
-  полный rebind — переживает смену типа переменной между блоками; фильтр
-  select-options переприменяется, панель обновляется).
-- Не обновляются (сознательно): drill-down окна (`NAME[ n ]-COMP`),
-  служебные HISTORY/Steps — их имён нет в `mt_vars`; они хранят снапшот.
-- Весь `update_table` под `TRY`: навигация никогда не дампит из-за открытого окна.
+- `zcl_smd_window`: event **`navigated`** + method `raise_navigated`. Raised after every state
+  display: `show_step` (live step), history branch in `hnd_toolbar`, tree REFRESH button.
+- `zcl_smd_table_viewer`: subscribes in constructor (`on_navigated`), unsubscribes in `on_table_close`.
+  On event, finds current reference of its variable (by `m_additional_name` = fullname) in `mt_vars`
+  of three trees, then `mt_state`; if found and is table, calls `update_table` with change detection:
+  (1) same snapshot object? skip; (2) different type? treat as changed; (3) same type, different
+  content? full rebind ALV (survives variable type change between blocks, re-applies select-options
+  filter, refreshes panel); (4) unchanged content? skip.
+- Not refreshed (intentional): drill-down windows (`NAME[ n ]-COMP`), service windows HISTORY/Steps —
+  no `mt_vars` entries for these; they keep snapshots.
+- Entire `update_table` under `TRY` — navigation never crashes due to open window.
 
-## 7. Как проверить (сценарии)
+## 7. Verification scenarios
 
-1. **Дерево:** переменная-структура/таблица меняет тип между блоками (одно имя) —
-   шаги через оба блока, затем история назад/вперёд. Раньше: дамп на `get_node`/
-   сравнении. Теперь: узел заменяется.
-2. **Дельты:** таблица, растущая в цикле (APPEND на каждом шаге), >20 шагов.
-   Назад/вперёд по истории — значения совпадают с живым прогоном; память не растёт
-   линейно от размера таблицы.
-3. **Одноимённые переменные:** `FORM A` / `FORM B` с локальной `lt_data` разных
-   типов + глобальная с тем же именем в вызываемой программе.
-4. **Утечка вьюеров:** открыть/закрыть много таблиц двойным кликом — `mt_obj`
-   и `mt_popups` не растут (проверять в отладчике отладчика, кнопка DEBUG).
-5. **Текстовый вьюер:** двойной клик по строковой переменной >255 символов,
-   закрыть, снова открыть — значение целое.
-6. **Маркеры редактора:** поставить сессионный брейкпоинт, нажать SMART/COVERAGE —
-   отметка брейкпоинта в редакторе не исчезает; стрелка текущей строки одна.
-7. **COVERAGE:** после кнопки COVERAGE сделать шаг — записи `mt_vars`/`mt_state`
-   получают реальный stacklevel (из `ms_stack`), дерево строится корректно.
-8. **Mermaid SMART:** запустить дважды подряд и на шагах, начинающихся внутри
-   IF/CASE-блока — без дампов, диаграмма строится.
-9. **Автообновление окон таблиц:** открыть таблицу двойным кликом, шагать
-   вперёд/назад по истории — содержимое окна меняется вместе с шагом
-   (включая случай, когда таблица растёт в цикле); фильтр из select-options
-   сохраняется; закрыть окно — навигация работает дальше без ошибок.
+1. **Tree:** variable (struct/table) changes type between blocks (same name) — step through both,
+   then navigate history back/forth. Before: crash on `get_node`/compare. Now: node replaced.
+2. **Deltas:** table growing in loop (APPEND each step), >20 steps. Back/forward history — values match
+   live run; memory doesn't grow linearly with table size.
+3. **Same-named variables:** `FORM A` / `FORM B` with local `lt_data` of different types + global with
+   same name in called program.
+4. **Popup leak:** open/close many tables via double-click — `mt_obj` and `mt_popups` don't grow
+   (check in debugger-of-debugger, DEBUG button).
+5. **Text viewer:** double-click string variable >255 chars, close, reopen — value intact.
+6. **Editor markers:** set session breakpoint, hit SMART/COVERAGE — breakpoint mark stays; only one
+   arrow for current line.
+7. **COVERAGE:** after COVERAGE button, step — `mt_vars`/`mt_state` records get real stacklevel
+   (from `ms_stack`), tree builds correctly.
+8. **Mermaid SMART:** run twice in row, on steps starting inside IF/CASE block — no crashes,
+   diagram builds.
+9. **Table popup auto-refresh:** open table via double-click, step forward/backward through history —
+   popup content updates with each step (table growing in loop case included); select-options filter
+   persists; close popup — navigation continues without error.
