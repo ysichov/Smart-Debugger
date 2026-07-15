@@ -1028,6 +1028,7 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
         m_refresh = abap_true.
         mo_debugger->run_script_hist( mo_debugger->m_hist_step ).
         mo_debugger->mo_tree_local->display( ).
+        mo_debugger->mo_window->raise_navigated( ). "refresh open table popups too
         RETURN.
 
       WHEN 'INITIALS'."Show/hide empty variables

@@ -26,6 +26,8 @@ public section.
   data M_STD_TBAR type X .
   data M_SHOW_EMPTY type I .
   data MO_WINDOW type ref to ZCL_SMD_WINDOW .
+  "last displayed source snapshot - to skip refresh when nothing changed
+  data MR_SOURCE type ref to DATA .
 
   methods CONSTRUCTOR
     importing
@@ -35,9 +37,17 @@ public section.
       !IO_WINDOW type ref to ZCL_SMD_WINDOW optional .
   methods REFRESH_TABLE
     for event SELECTION_DONE of ZCL_SMD_SEL_OPT .
+  methods ON_NAVIGATED
+    for event NAVIGATED of ZCL_SMD_WINDOW .
 protected section.
 private section.
 
+  methods PREPARE_TABLE
+    importing
+      !IR_TAB type ref to DATA .
+  methods UPDATE_TABLE
+    importing
+      !IR_TAB type ref to DATA .
   methods CREATE_POPUP .
   methods CREATE_ALV .
   methods CREATE_SEL_ALV .
@@ -96,6 +106,37 @@ CLASS ZCL_SMD_TABLE_VIEWER IMPLEMENTATION.
   method CONSTRUCTOR.
 
 
+    super->constructor( i_additional_name = i_additional_name ).
+    mo_window = io_window.
+    m_lang = sy-langu.
+    mo_sel_width = 0.
+    m_tabname = i_tname.
+    create_popup( ).
+
+    IF ir_tab IS NOT BOUND.
+      zcl_smd_rtti=>create_table_by_name( EXPORTING i_tname = m_tabname CHANGING c_table = mr_table ).
+    ELSE.
+      prepare_table( ir_tab ).
+      mr_source = ir_tab.
+    ENDIF.
+
+    create_alv( ).
+    create_sel_alv( ).
+    mo_alv->set_focus( mo_alv ).
+
+    "follow debugger navigation: refresh the popup on every step
+    IF mo_window IS BOUND.
+      SET HANDLER on_navigated FOR mo_window.
+    ENDIF.
+
+
+  endmethod.
+
+
+  method PREPARE_TABLE.
+    "builds mr_table from ir_tab: nested table columns are replaced by a
+    "text + hidden _REF column pair; used by the constructor and on refresh
+
     DATA: comp_descr   TYPE abap_componentdescr,
           comp_notab   TYPE abap_component_tab,
           comp_tab2str TYPE abap_component_tab,
@@ -115,112 +156,97 @@ CLASS ZCL_SMD_TABLE_VIEWER IMPLEMENTATION.
                    <any_tab> TYPE ANY TABLE,
                    <temptab> TYPE ANY TABLE.
 
-    super->constructor( i_additional_name = i_additional_name ).
-    mo_window = io_window.
-    m_lang = sy-langu.
-    mo_sel_width = 0.
-    m_tabname = i_tname.
-    create_popup( ).
+    FIELD-SYMBOLS:<any> TYPE any.
+    ASSIGN ir_tab->* TO <any>.
+    DATA o_tabl  TYPE REF TO cl_abap_tabledescr.
+    DATA o_struc TYPE REF TO cl_abap_structdescr.
+    o_tabl ?= cl_abap_typedescr=>describe_by_data( <any> ).
+    TRY.
+        o_struc ?= o_tabl->get_table_line_type( ).
+        ASSIGN ir_tab->* TO <any_tab>.
+        TRY.
+            LOOP AT o_struc->components INTO DATA(comp).
 
-    IF ir_tab IS NOT BOUND.
-      zcl_smd_rtti=>create_table_by_name( EXPORTING i_tname = m_tabname CHANGING c_table = mr_table ).
-    ELSE.
-      FIELD-SYMBOLS:<any> TYPE any.
-      ASSIGN ir_tab->* TO <any>.
-      DATA o_tabl  TYPE REF TO cl_abap_tabledescr.
-      DATA o_struc TYPE REF TO cl_abap_structdescr.
-      o_tabl ?= cl_abap_typedescr=>describe_by_data( <any> ).
-      TRY.
-          o_struc ?= o_tabl->get_table_line_type( ).
-          ASSIGN ir_tab->* TO <any_tab>.
-          TRY.
-              LOOP AT o_struc->components INTO DATA(comp).
+              IF comp-type_kind NE 'h'.
+                comp_descr-name = comp-name.
+                comp_descr-type ?= o_struc->get_component_type( comp-name ).
+                APPEND comp_descr TO comp_notab.
+                APPEND comp_descr TO comp_tab2str.
+              ELSE.
+                comp_descr-name = comp-name.
+                comp_descr-type ?= cl_abap_typedescr=>describe_by_data( s ).
+                APPEND comp_descr TO comp_tab2str.
+                APPEND comp_descr TO comp_str.
 
-                IF comp-type_kind NE 'h'.
-                  comp_descr-name = comp-name.
-                  comp_descr-type ?= o_struc->get_component_type( comp-name ).
-                  APPEND comp_descr TO comp_notab.
-                  APPEND comp_descr TO comp_tab2str.
-                ELSE.
-                  comp_descr-name = comp-name.
-                  comp_descr-type ?= cl_abap_typedescr=>describe_by_data( s ).
-                  APPEND comp_descr TO comp_tab2str.
-                  APPEND comp_descr TO comp_str.
+                comp_descr-name = comp-name && '_REF'.
+                comp_descr-type ?= cl_abap_typedescr=>describe_by_data( data ).
+                APPEND comp_descr TO comp_tab2str.
+              ENDIF.
+            ENDLOOP.
+          CATCH cx_sy_move_cast_error.
+        ENDTRY.
 
-                  comp_descr-name = comp-name && '_REF'.
-                  comp_descr-type ?= cl_abap_typedescr=>describe_by_data( data ).
-                  APPEND comp_descr TO comp_tab2str.
-                ENDIF.
+        TRY.
+            handle_notab  = cl_abap_structdescr=>create( comp_notab ).
+            handle_tab2str  = cl_abap_structdescr=>create( comp_tab2str ).
+
+            o_new_tab = cl_abap_tabledescr=>create(
+              p_line_type  = handle_notab
+              p_table_kind = cl_abap_tabledescr=>tablekind_std
+              p_unique     = abap_false ).
+
+            CREATE DATA notab TYPE HANDLE o_new_tab.
+
+            o_new_tab = cl_abap_tabledescr=>create(
+              p_line_type  = handle_tab2str
+              p_table_kind = cl_abap_tabledescr=>tablekind_std
+              p_unique     = abap_false ).
+
+            CREATE DATA tab2str TYPE HANDLE o_new_tab.
+
+            ASSIGN notab->* TO <notab>.
+            MOVE-CORRESPONDING <any_tab> TO <notab>.
+            ASSIGN tab2str->* TO <tab2str>.
+            MOVE-CORRESPONDING <notab> TO <tab2str>.
+
+            LOOP AT <any_tab> ASSIGNING FIELD-SYMBOL(<old_struc>).
+              READ TABLE <tab2str> ASSIGNING FIELD-SYMBOL(<new_struc>) INDEX sy-tabix.
+              LOOP AT comp_str INTO comp_descr.
+                ASSIGN COMPONENT comp_descr-name OF STRUCTURE <new_struc> TO FIELD-SYMBOL(<field>).
+                ASSIGN COMPONENT comp_descr-name OF STRUCTURE <old_struc> TO <temptab>.
+                <field> = | { icon_view_table } [{ lines( <temptab> ) }] |.
+                ASSIGN COMPONENT comp_descr-name  OF STRUCTURE <old_struc> TO <field>.
+                ASSIGN COMPONENT |{ comp_descr-name }_REF| OF STRUCTURE <new_struc> TO FIELD-SYMBOL(<ref>).
+                GET REFERENCE OF <field> INTO <ref>.
               ENDLOOP.
-            CATCH cx_sy_move_cast_error.
-          ENDTRY.
+            ENDLOOP.
 
-          TRY.
-              handle_notab  = cl_abap_structdescr=>create( comp_notab ).
-              handle_tab2str  = cl_abap_structdescr=>create( comp_tab2str ).
+            GET REFERENCE OF <tab2str> INTO mr_table.
+          CATCH cx_root.
+            mr_table = ir_tab.
+        ENDTRY.
+      CATCH cx_sy_move_cast_error.  "no structure
+        comp_descr-name = 'FIELD'.
+        comp_descr-type ?= cl_abap_typedescr=>describe_by_data( s ).
+        APPEND comp_descr TO comp_tab2str.
 
-              o_new_tab = cl_abap_tabledescr=>create(
-                p_line_type  = handle_notab
-                p_table_kind = cl_abap_tabledescr=>tablekind_std
-                p_unique     = abap_false ).
+        handle_tab2str  = cl_abap_structdescr=>create( comp_tab2str ).
+        o_new_tab = cl_abap_tabledescr=>create(
+          p_line_type  = handle_tab2str
+          p_table_kind = cl_abap_tabledescr=>tablekind_std
+          p_unique     = abap_false ).
 
-              CREATE DATA notab TYPE HANDLE o_new_tab.
+        CREATE DATA tab2str TYPE HANDLE o_new_tab.
+        ASSIGN tab2str->* TO <tab2str>.
+        ASSIGN ir_tab->* TO <any_tab>.
 
-              o_new_tab = cl_abap_tabledescr=>create(
-                p_line_type  = handle_tab2str
-                p_table_kind = cl_abap_tabledescr=>tablekind_std
-                p_unique     = abap_false ).
-
-              CREATE DATA tab2str TYPE HANDLE o_new_tab.
-
-              ASSIGN notab->* TO <notab>.
-              MOVE-CORRESPONDING <any_tab> TO <notab>.
-              ASSIGN tab2str->* TO <tab2str>.
-              MOVE-CORRESPONDING <notab> TO <tab2str>.
-
-              LOOP AT <any_tab> ASSIGNING FIELD-SYMBOL(<old_struc>).
-                READ TABLE <tab2str> ASSIGNING FIELD-SYMBOL(<new_struc>) INDEX sy-tabix.
-                LOOP AT comp_str INTO comp_descr.
-                  ASSIGN COMPONENT comp_descr-name OF STRUCTURE <new_struc> TO FIELD-SYMBOL(<field>).
-                  ASSIGN COMPONENT comp_descr-name OF STRUCTURE <old_struc> TO <temptab>.
-                  <field> = | { icon_view_table } [{ lines( <temptab> ) }] |.
-                  ASSIGN COMPONENT comp_descr-name  OF STRUCTURE <old_struc> TO <field>.
-                  ASSIGN COMPONENT |{ comp_descr-name }_REF| OF STRUCTURE <new_struc> TO FIELD-SYMBOL(<ref>).
-                  GET REFERENCE OF <field> INTO <ref>.
-                ENDLOOP.
-              ENDLOOP.
-
-              GET REFERENCE OF <tab2str> INTO mr_table.
-            CATCH cx_root.
-              mr_table = ir_tab.
-          ENDTRY.
-        CATCH cx_sy_move_cast_error.  "no structure
-          comp_descr-name = 'FIELD'.
-          comp_descr-type ?= cl_abap_typedescr=>describe_by_data( s ).
-          APPEND comp_descr TO comp_tab2str.
-
-          handle_tab2str  = cl_abap_structdescr=>create( comp_tab2str ).
-          o_new_tab = cl_abap_tabledescr=>create(
-            p_line_type  = handle_tab2str
-            p_table_kind = cl_abap_tabledescr=>tablekind_std
-            p_unique     = abap_false ).
-
-          CREATE DATA tab2str TYPE HANDLE o_new_tab.
-          ASSIGN tab2str->* TO <tab2str>.
-          ASSIGN ir_tab->* TO <any_tab>.
-
-          LOOP AT <any_tab> ASSIGNING <old_struc>.
-            APPEND INITIAL LINE TO <tab2str> ASSIGNING <new_struc>.
-            ASSIGN COMPONENT 'FIELD' OF STRUCTURE <new_struc> TO <field>.
-            <field> = <old_struc>.
-          ENDLOOP.
-          GET REFERENCE OF <tab2str> INTO mr_table.
-      ENDTRY.
-    ENDIF.
-
-    create_alv( ).
-    create_sel_alv( ).
-    mo_alv->set_focus( mo_alv ).
+        LOOP AT <any_tab> ASSIGNING <old_struc>.
+          APPEND INITIAL LINE TO <tab2str> ASSIGNING <new_struc>.
+          ASSIGN COMPONENT 'FIELD' OF STRUCTURE <new_struc> TO <field>.
+          <field> = <old_struc>.
+        ENDLOOP.
+        GET REFERENCE OF <tab2str> INTO mr_table.
+    ENDTRY.
 
 
   endmethod.
@@ -302,6 +328,8 @@ CLASS ZCL_SMD_TABLE_VIEWER IMPLEMENTATION.
     FIELD-SYMBOLS: <tab>   TYPE STANDARD TABLE,
                    <struc> TYPE any,
                    <field> TYPE any.
+
+    CLEAR mt_fields. "rebuilt together with the catalog on every (re)bind
 
     ASSIGN mr_table->* TO <tab>.
     CREATE DATA lr_temp LIKE LINE OF <tab>.
@@ -591,9 +619,156 @@ CLASS ZCL_SMD_TABLE_VIEWER IMPLEMENTATION.
   endmethod.
 
 
+  method ON_NAVIGATED.
+
+    DATA lr_ref TYPE REF TO data.
+    DATA lt_trees TYPE STANDARD TABLE OF REF TO zcl_smd_rtti_tree WITH EMPTY KEY.
+
+    IF mo_window IS NOT BOUND OR mo_window->mo_debugger IS NOT BOUND OR mo_alv IS NOT BOUND.
+      RETURN.
+    ENDIF.
+    DATA(o_debugger) = mo_window->mo_debugger.
+
+    "current value of the variable this popup was opened for; drill-down
+    "popups (NAME[ n ]-COMP) and debugger-internal tables are not in mt_vars
+    "and keep their snapshot
+    APPEND o_debugger->mo_tree_local TO lt_trees.
+    APPEND o_debugger->mo_tree_imp   TO lt_trees.
+    APPEND o_debugger->mo_tree_exp   TO lt_trees.
+
+    LOOP AT lt_trees INTO DATA(o_tree).
+      IF o_tree IS NOT BOUND.
+        CONTINUE.
+      ENDIF.
+      READ TABLE o_tree->mt_vars INTO DATA(var) WITH KEY name = m_additional_name.
+      IF sy-subrc = 0 AND var-ref IS BOUND.
+        lr_ref = var-ref.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+
+    IF lr_ref IS INITIAL.
+      READ TABLE o_debugger->mt_state INTO DATA(state) WITH KEY name = m_additional_name.
+      IF sy-subrc = 0 AND state-ref IS BOUND.
+        lr_ref = state-ref.
+      ENDIF.
+    ENDIF.
+
+    IF lr_ref IS INITIAL.
+      RETURN. "variable not visible at this step - keep the old snapshot
+    ENDIF.
+
+    TRY.
+        IF cl_abap_typedescr=>describe_by_data_ref( lr_ref )->kind <> cl_abap_typedescr=>kind_table.
+          RETURN.
+        ENDIF.
+      CATCH cx_root.
+        RETURN.
+    ENDTRY.
+
+    update_table( lr_ref ).
+
+  endmethod.
+
+
+  method UPDATE_TABLE.
+
+    DATA filter TYPE lvc_t_filt.
+    FIELD-SYMBOLS: <table> TYPE STANDARD TABLE,
+                   <old>   TYPE ANY TABLE,
+                   <new>   TYPE ANY TABLE.
+
+    CHECK ir_tab IS BOUND AND mo_alv IS BOUND.
+
+    "refresh only on a real change: rebinding resets sorting and flickers,
+    "so identical content must leave the grid untouched
+    IF ir_tab = mr_source.
+      RETURN. "same snapshot object (typical during history navigation)
+    ENDIF.
+    TRY.
+        IF mr_source IS BOUND
+        AND cl_abap_typedescr=>describe_by_data_ref( mr_source )->absolute_name
+          = cl_abap_typedescr=>describe_by_data_ref( ir_tab )->absolute_name.
+          ASSIGN mr_source->* TO <old>.
+          ASSIGN ir_tab->* TO <new>.
+          IF <old> = <new>.
+            mr_source = ir_tab. "remember the newest snapshot for the next diff
+            RETURN.
+          ENDIF.
+        ENDIF.
+      CATCH cx_root.
+        "comparison not possible (e.g. type changed) - treat as changed
+    ENDTRY.
+
+    TRY.
+        prepare_table( ir_tab ).
+
+        DATA(catalog) = create_field_cat( m_tabname ).
+        IF catalog IS INITIAL.
+          RETURN.
+        ENDIF.
+        mt_alv_catalog = catalog.
+
+        ASSIGN mr_table->* TO <table>.
+        IF sy-subrc <> 0.
+          RETURN.
+        ENDIF.
+
+        "full rebind: survives a type change of the variable between blocks
+        DATA(layout) = VALUE lvc_s_layo( cwidth_opt = abap_true sel_mode = 'D' ).
+        mo_alv->set_table_for_first_display(
+          EXPORTING
+            i_save          = abap_true
+            i_default       = abap_true
+            is_layout       = layout
+          CHANGING
+            it_fieldcatalog = mt_alv_catalog
+            it_outtab       = <table>
+          EXCEPTIONS
+            OTHERS          = 1 ).
+        IF sy-subrc <> 0.
+          RETURN.
+        ENDIF.
+
+        mo_alv->set_toolbar_interactive( ).
+        set_header( ).
+
+        "keep the select-options panel consistent and re-apply its filter
+        IF mo_sel IS BOUND.
+          mo_sel->update_sel_tab( ).
+          LOOP AT mo_sel->mt_sel_tab ASSIGNING FIELD-SYMBOL(<sel>).
+            LOOP AT <sel>-range INTO DATA(range).
+              APPEND VALUE #( fieldname = <sel>-field_label
+                                    low = range-low
+                                   high = range-high
+                                   sign = range-sign
+                                 option = range-opti ) TO filter.
+            ENDLOOP.
+          ENDLOOP.
+          IF filter IS NOT INITIAL.
+            mo_alv->set_filter_criteria( EXPORTING it_filter = filter EXCEPTIONS OTHERS = 1 ).
+          ENDIF.
+          zcl_smd_common=>refresh( mo_sel->mo_sel_alv ).
+        ENDIF.
+
+        zcl_smd_common=>refresh( mo_alv ).
+        mr_source = ir_tab. "the displayed snapshot - baseline for the next diff
+      CATCH cx_root.
+        "navigation must never dump because of an open popup - keep old content
+    ENDTRY.
+
+  endmethod.
+
+
   method ON_TABLE_CLOSE.
 
     DATA: tabix LIKE sy-tabix.
+
+    "stop following navigation - the controls are about to be freed
+    IF mo_window IS BOUND.
+      SET HANDLER on_navigated FOR mo_window ACTIVATION space.
+    ENDIF.
+
     sender->free( EXCEPTIONS cntl_error        = 1
                              cntl_system_error = 2
                              OTHERS            = 3 ).

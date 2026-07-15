@@ -1805,6 +1805,7 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
     IF mo_window->m_debug_button NE 'F5'.
       mo_window->m_show_step = abap_true.
     ENDIF.
+    mo_window->raise_navigated( ). "let open table popups refresh their content
 
   ENDMETHOD.
 

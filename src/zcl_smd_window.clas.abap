@@ -171,7 +171,12 @@ CLASS zcl_smd_window DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUBL
           mt_locals_set          TYPE STANDARD TABLE OF ts_locals,
           mt_globals_set         TYPE STANDARD TABLE OF ts_globals.
 
+    "raised after every debugger step or history navigation once the new state
+    "is displayed - open table popups refresh their content on it
+    EVENTS navigated.
+
     METHODS: constructor IMPORTING i_debugger TYPE REF TO zcl_smd_debugger_base i_additional_name TYPE string OPTIONAL,
+      raise_navigated,
       add_toolbar_buttons,
       hnd_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode,
       on_stack_double_click FOR EVENT double_click OF cl_salv_events_table IMPORTING row column,
@@ -344,6 +349,10 @@ CLASS zcl_smd_window IMPLEMENTATION.
     mo_toolbar->set_visible( 'X' ).
     create_code_viewer( ).
 
+  ENDMETHOD.
+
+  METHOD raise_navigated.
+    RAISE EVENT navigated.
   ENDMETHOD.
 
   METHOD add_toolbar_buttons.
@@ -1176,6 +1185,7 @@ CLASS zcl_smd_window IMPLEMENTATION.
               mo_debugger->mo_tree_imp->display( ).
               mo_debugger->mo_tree_local->display( ).
               mo_debugger->mo_tree_exp->display( ).
+              raise_navigated( ). "history navigation - refresh open table popups
               RETURN.
             ENDIF.
           ENDDO.
