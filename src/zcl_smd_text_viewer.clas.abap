@@ -53,6 +53,7 @@ CLASS ZCL_SMD_TEXT_VIEWER IMPLEMENTATION.
         OTHERS                 = 6.
     IF sy-subrc <> 0.
       on_box_close( mo_box ).
+      RETURN.
     ENDIF.
 
     mo_text->set_readonly_mode( ).
@@ -60,12 +61,15 @@ CLASS ZCL_SMD_TEXT_VIEWER IMPLEMENTATION.
     ASSIGN ir_str->* TO <str>.
     DATA string TYPE TABLE OF char255.
 
-    WHILE strlen( <str> ) > 255.
-      APPEND <str>+0(255) TO string.
-      SHIFT <str> LEFT BY 255 PLACES.
+    "work on a copy: shifting the referenced string directly would truncate
+    "the debugger-held value of the variable being displayed
+    DATA(text) = <str>.
+    WHILE strlen( text ) > 255.
+      APPEND text+0(255) TO string.
+      SHIFT text LEFT BY 255 PLACES.
     ENDWHILE.
 
-    APPEND <str> TO string.
+    APPEND text TO string.
     mo_text->set_text_as_r3table( string ).
     CALL METHOD cl_gui_cfw=>flush.
     mo_text->set_focus( mo_box ).

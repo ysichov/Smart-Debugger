@@ -67,6 +67,9 @@ CLASS zcl_smd_source_parser IMPLEMENTATION.
         TRY.
             o_procedure->next( ).
           CATCH cx_scan_iterator_reached_end.
+            "iterator exhausted: statement_index stops moving, so without
+            "EXIT the loop would append the same token forever
+            EXIT.
         ENDTRY.
 
         kw = o_procedure->get_keyword( ).

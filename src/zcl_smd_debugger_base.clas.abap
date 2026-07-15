@@ -1832,13 +1832,20 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
           EXCEPTIONS
             type_not_found = 1
             OTHERS         = 2.
+        IF sy-subrc <> 0 OR ref IS INITIAL.
+          CONTINUE. "class not describable - accessing attributes would dump
+        ENDIF.
 
-        refc ?= ref.
+        TRY.
+            refc ?= ref.
+          CATCH cx_sy_move_cast_error.
+            CONTINUE.
+        ENDTRY.
 
-        READ TABLE mt_obj WITH KEY name = class TRANSPORTING NO FIELDS.
+        READ TABLE mt_obj WITH KEY name = prog-name TRANSPORTING NO FIELDS.
         IF sy-subrc NE 0.
           APPEND INITIAL LINE TO mt_obj ASSIGNING FIELD-SYMBOL(<obj>).
-          <obj>-name = class.
+          <obj>-name = prog-name.
         ENDIF.
 
         save_hist( EXPORTING i_fullname    = CONV #( prog-name )

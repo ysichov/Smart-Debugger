@@ -368,7 +368,9 @@ CLASS ZCL_SMD_TABLE_VIEWER IMPLEMENTATION.
       <popup>-child = mo_box.
     ENDIF.
 
-    SET HANDLER on_box_close FOR mo_box.
+    "on_table_close also drops the viewer and its table copy from
+    "zcl_smd_appl=>mt_obj - otherwise every opened table stays in memory
+    SET HANDLER on_table_close FOR mo_box.
 
     CREATE OBJECT mo_splitter
       EXPORTING
@@ -394,8 +396,6 @@ CLASS ZCL_SMD_TABLE_VIEWER IMPLEMENTATION.
         column    = 2
        RECEIVING
         container = mo_alv_parent.
-
-    SET HANDLER on_box_close FOR mo_box.
 
 
   endmethod.

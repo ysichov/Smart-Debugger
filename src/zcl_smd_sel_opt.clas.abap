@@ -645,7 +645,7 @@ CLASS ZCL_SMD_SEL_OPT IMPLEMENTATION.
     ENDIF.
 
     IF c_sel_row-sign IS INITIAL AND c_sel_row-opti IS INITIAL.
-      CLEAR: c_sel_row-low, c_sel_row-low.
+      CLEAR: c_sel_row-low, c_sel_row-high.
     ENDIF.
 
     IF c_sel_row-low CA  '*%+&' AND c_sel_row-opti <> 'NP'.
