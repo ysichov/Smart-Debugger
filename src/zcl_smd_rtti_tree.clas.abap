@@ -130,6 +130,9 @@ CLASS zcl_smd_rtti_tree DEFINITION PUBLIC FINAL CREATE PUBLIC. " INHERITING FROM
 
     DATA: tree_table TYPE tt_table.
 
+    "deletes a node with its whole subtree and removes all their keys
+    "from mt_vars/mt_classes_leaf so no stale node keys are left behind
+    METHODS purge_node IMPORTING io_node TYPE REF TO cl_salv_node.
 
     METHODS: hndl_double_click FOR EVENT double_click OF cl_salv_events_tree IMPORTING node_key,
       hndl_user_command FOR EVENT added_function OF cl_salv_events IMPORTING e_salv_function.
@@ -438,10 +441,8 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
     ENDIF.
 
     IF rel = if_salv_c_node_relation=>next_sibling AND o_node IS NOT INITIAL.
-      IF o_node IS NOT INITIAL.
-
-        o_node->delete( ).
-      ENDIF.
+      "purge also removes subtree keys (components, class leafs) from the tables
+      purge_node( o_node ).
     ENDIF.
   ENDMETHOD.
 
@@ -562,6 +563,10 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
 
     DATA(o_nodes) = m_tree->get_nodes( ).
 
+    "o_node is overwritten by RECEIVING below - keep the old node to delete it,
+    "otherwise the fresh node gets deleted and its key stays in mt_vars (stale key -> dump)
+    DATA(o_old_node) = o_node.
+
     TRY.
         CALL METHOD o_nodes->add_node
           EXPORTING
@@ -593,10 +598,8 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
           <vars>-type = o_elem_descr->absolute_name.
           <vars>-path = is_var-path.
 
-          IF rel = if_salv_c_node_relation=>next_sibling AND o_node IS NOT INITIAL.
-            IF o_node IS NOT INITIAL.
-              o_node->delete( ).
-            ENDIF.
+          IF rel = if_salv_c_node_relation=>next_sibling AND o_old_node IS NOT INITIAL.
+            purge_node( o_old_node ).
           ENDIF.
         ENDIF.
       CATCH cx_salv_msg.
@@ -615,9 +618,16 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
     IF mo_debugger->m_debug IS NOT INITIAL.BREAK-POINT.ENDIF.
     IF sy-subrc = 0.
       DATA(o_nodes) = m_tree->get_nodes( ).
-      DATA(o_node) =  o_nodes->get_node( var-key ).
+      TRY.
+          DATA(o_node) = o_nodes->get_node( var-key ).
+        CATCH cx_salv_msg.
+          "stale key of an already deleted node - drop it instead of dumping
+          DELETE mt_vars WHERE key = var-key.
+          DELETE mt_classes_leaf WHERE key = var-key.
+          CLEAR o_node.
+      ENDTRY.
 
-      IF var-ref = ir_up.
+      IF o_node IS NOT INITIAL AND var-ref = ir_up.
         RETURN.
       ENDIF.
 
@@ -684,6 +694,10 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
         ENDTRY.
     ENDTRY.
 
+    "the old entry must go before appending the replacement, otherwise READ TABLE
+    "keeps finding the stale row with the key of the node deleted below
+    DELETE mt_vars WHERE name = is_var-name.
+
     APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
     <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
     <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
@@ -697,9 +711,7 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
     <vars>-cl_leaf = is_var-cl_leaf.
     <vars>-path = is_var-path.
 
-    IF o_node IS NOT INITIAL.
-      o_node->delete( ).
-    ENDIF.
+    purge_node( o_node ).
   ENDMETHOD.
 
   METHOD traverse_table.
@@ -850,9 +862,8 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
       <vars>-path = is_var-path.
 
       IF rel = if_salv_c_node_relation=>next_sibling AND o_node IS NOT INITIAL.
-        IF o_node IS NOT INITIAL.
-          o_node->delete( ).
-        ENDIF.
+        "purge also removes subtree keys from the tables
+        purge_node( o_node ).
       ENDIF.
     ENDIF.
   ENDMETHOD.
@@ -944,11 +955,35 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
   METHOD delete_node.
 
     DATA(o_nodes) = m_tree->get_nodes( ).
-    DATA(o_node) =  o_nodes->get_node( i_key ).
-    IF o_node IS NOT INITIAL.
-      o_node->delete( ).
+    TRY.
+        DATA(o_node) = o_nodes->get_node( i_key ).
+      CATCH cx_salv_msg.
+        "node already gone - just drop its stale keys from the tables
+        CLEAR o_node.
+    ENDTRY.
+    purge_node( o_node ).
+    DELETE mt_vars WHERE key = i_key.
+    DELETE mt_classes_leaf WHERE key = i_key.
 
-    ENDIF.
+  ENDMETHOD.
+
+  METHOD purge_node.
+
+    CHECK io_node IS NOT INITIAL.
+    TRY.
+        DATA(subtree) = io_node->get_subtree( ).
+        LOOP AT subtree INTO DATA(sub).
+          DATA(sub_key) = sub-node->get_key( ).
+          DELETE mt_vars WHERE key = sub_key.
+          DELETE mt_classes_leaf WHERE key = sub_key.
+        ENDLOOP.
+        DATA(node_key) = io_node->get_key( ).
+        DELETE mt_vars WHERE key = node_key.
+        DELETE mt_classes_leaf WHERE key = node_key.
+        io_node->delete( ).
+      CATCH cx_root.
+        "node was already deleted from the tree - table entries are purged above
+    ENDTRY.
 
   ENDMETHOD.
 
@@ -1082,7 +1117,7 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
     SORT vars_hist BY step DESCENDING.
     LOOP AT vars_hist INTO DATA(hist) WHERE name = i_full_name.
       IF hist-del IS INITIAL.
-        CLEAR: hist-ref, hist-first.
+        CLEAR: hist-ref, hist-first, hist-is_delta, hist-delta_from, hist-delta_del.
         hist-del = abap_true.
         hist-step = mo_debugger->m_hist_step - 1.
         INSERT hist INTO mo_debugger->mt_vars_hist INDEX 1.
@@ -1110,12 +1145,7 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
       IF i_state = abap_true.
         DELETE mo_debugger->mt_state WHERE name CS nam.
       ENDIF.
-      TRY.
-          IF o_node IS NOT INITIAL.
-            o_node->delete( ).
-          ENDIF.
-        CATCH cx_salv_msg.
-      ENDTRY.
+      purge_node( o_node ).
     ENDIF.
 
   ENDMETHOD.

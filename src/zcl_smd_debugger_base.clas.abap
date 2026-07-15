@@ -95,6 +95,17 @@ CLASS zcl_smd_debugger_base DEFINITION PUBLIC ABSTRACT INHERITING FROM cl_tpda_s
                  ref    LIKE cl_abap_typedescr=>kind_ref VALUE cl_abap_typedescr=>kind_ref,
                END OF c_kind.
 
+    "history delta handling: big tables are stored as deltas, not full copies
+    METHODS: hist_same_var IMPORTING is_a          TYPE zcl_smd_appl=>var_table
+                                     is_b          TYPE zcl_smd_appl=>var_table
+                           RETURNING VALUE(r_same) TYPE xfeld,
+
+      build_tab_delta IMPORTING ir_old  TYPE REF TO data
+                      CHANGING  cs_hist TYPE zcl_smd_appl=>var_table,
+
+      restore_tab_hist IMPORTING is_hist       TYPE zcl_smd_appl=>var_table
+                       RETURNING VALUE(rr_tab) TYPE REF TO data.
+
     METHODS: transfer_variable IMPORTING i_name              TYPE string
                                          i_type              TYPE string
                                          i_shortname         TYPE string OPTIONAL
@@ -960,6 +971,14 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
           ENDIF.
 
           IF hist-del IS INITIAL.
+            IF hist-is_delta IS NOT INITIAL.
+              "delta entry - rebuild the full table state before displaying
+              hist-ref = restore_tab_hist( hist ).
+              CLEAR: hist-is_delta, hist-delta_from, hist-delta_del.
+              IF hist-ref IS INITIAL.
+                CONTINUE. "snapshot chain broken - skip rather than dump
+              ENDIF.
+            ENDIF.
             READ TABLE vars_history WITH KEY name = hist-name ASSIGNING FIELD-SYMBOL(<hist>).
             IF sy-subrc = 0.
               <hist> = hist.
@@ -1991,10 +2010,28 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
         ENDIF.
 
         <state>-cl_leaf = i_cl_leaf.
+
+        "the view table only needs the latest full value per variable (it is used
+        "for change detection above) - drop superseded entries to save memory
+        IF <state>-leaf NE 'GLOBAL' AND <state>-leaf NE 'CLASS'.
+          DELETE mt_vars_hist_view WHERE name      = <state>-name
+                                     AND stack     = <state>-stack
+                                     AND eventtype = <state>-eventtype
+                                     AND eventname = <state>-eventname.
+        ELSE.
+          DELETE mt_vars_hist_view WHERE name = <state>-name.
+        ENDIF.
         INSERT <state> INTO mt_vars_hist_view INDEX 1.
 
         IF  add_hist = abap_true.
-          INSERT <state> INTO mt_vars_hist INDEX 1.
+          DATA(hist_entry) = <state>.
+          "for tables store only the changed block on top of the previous value
+          "instead of a full copy per step; hist holds the previous full value
+          IF hist-ref IS NOT INITIAL.
+            build_tab_delta( EXPORTING ir_old  = hist-ref
+                             CHANGING  cs_hist = hist_entry ).
+          ENDIF.
+          INSERT hist_entry INTO mt_vars_hist INDEX 1.
           READ TABLE mt_selected_var WITH KEY name = <state>-name TRANSPORTING NO FIELDS.
           IF sy-subrc = 0.
             m_is_find = abap_true.
@@ -2020,6 +2057,169 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
         INSERT <state> INTO mt_vars_hist INDEX 1.
       ENDIF.
     ENDIF.
+
+  ENDMETHOD.
+
+  METHOD hist_same_var.
+
+    "locals exist per stack frame/event, globals are unique by name
+    r_same = abap_true.
+    IF is_a-leaf = 'LOCAL' OR is_a-leaf = 'IMP' OR is_a-leaf = 'EXP'.
+      IF is_a-stack     <> is_b-stack
+      OR is_a-eventtype <> is_b-eventtype
+      OR is_a-eventname <> is_b-eventname.
+        CLEAR r_same.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD build_tab_delta.
+
+    "replaces cs_hist-ref (full table copy) with only the changed block of rows,
+    "described by delta_from/delta_del. On any doubt the full copy is kept.
+    CONSTANTS c_max_chain TYPE i VALUE 20. "full checkpoint every n deltas
+
+    FIELD-SYMBOLS: <old>   TYPE STANDARD TABLE,
+                   <new>   TYPE STANDARD TABLE,
+                   <delta> TYPE STANDARD TABLE.
+
+    IF ir_old IS INITIAL OR cs_hist-ref IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    TRY.
+        DATA(o_new_descr) = cl_abap_typedescr=>describe_by_data_ref( cs_hist-ref ).
+        DATA(o_old_descr) = cl_abap_typedescr=>describe_by_data_ref( ir_old ).
+        IF o_new_descr->kind <> cl_abap_typedescr=>kind_table
+        OR o_old_descr->kind <> cl_abap_typedescr=>kind_table.
+          RETURN.
+        ENDIF.
+        DATA(o_tab_descr) = CAST cl_abap_tabledescr( o_new_descr ).
+        IF o_tab_descr->table_kind <> cl_abap_tabledescr=>tablekind_std.
+          RETURN.
+        ENDIF.
+
+        "keep a full snapshot every c_max_chain deltas so replay stays cheap
+        DATA(chain) = 0.
+        LOOP AT mt_vars_hist INTO DATA(prev) WHERE name = cs_hist-name. "newest first
+          IF hist_same_var( is_a = prev is_b = cs_hist ) IS INITIAL.
+            CONTINUE.
+          ENDIF.
+          IF prev-is_delta IS INITIAL.
+            EXIT.
+          ENDIF.
+          ADD 1 TO chain.
+          IF chain >= c_max_chain.
+            RETURN.
+          ENDIF.
+        ENDLOOP.
+
+        ASSIGN ir_old->* TO <old>.
+        ASSIGN cs_hist-ref->* TO <new>.
+        DATA(n) = lines( <old> ).
+        DATA(m) = lines( <new> ).
+
+        "common prefix
+        DATA(p) = 0.
+        WHILE p < n AND p < m.
+          READ TABLE <old> INDEX p + 1 ASSIGNING FIELD-SYMBOL(<o_row>).
+          READ TABLE <new> INDEX p + 1 ASSIGNING FIELD-SYMBOL(<n_row>).
+          IF <o_row> <> <n_row>.
+            EXIT.
+          ENDIF.
+          p = p + 1.
+        ENDWHILE.
+
+        "common suffix (not overlapping the prefix)
+        DATA(s) = 0.
+        WHILE s < n - p AND s < m - p.
+          READ TABLE <old> INDEX n - s ASSIGNING <o_row>.
+          READ TABLE <new> INDEX m - s ASSIGNING <n_row>.
+          IF <o_row> <> <n_row>.
+            EXIT.
+          ENDIF.
+          s = s + 1.
+        ENDWHILE.
+
+        DATA(changed) = m - s - p. "rows the delta has to carry
+        IF changed >= m.
+          RETURN. "delta would not be smaller than the full copy
+        ENDIF.
+
+        DATA lr_delta TYPE REF TO data.
+        CREATE DATA lr_delta LIKE <new>.
+        ASSIGN lr_delta->* TO <delta>.
+        IF changed > 0.
+          APPEND LINES OF <new> FROM p + 1 TO m - s TO <delta>.
+        ENDIF.
+
+        cs_hist-is_delta   = abap_true.
+        cs_hist-delta_from = p + 1.
+        cs_hist-delta_del  = n - p - s.
+        cs_hist-ref        = lr_delta.
+
+      CATCH cx_root.
+        "anything unexpected -> keep the full copy, correctness over memory
+        CLEAR: cs_hist-is_delta, cs_hist-delta_from, cs_hist-delta_del.
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD restore_tab_hist.
+
+    "rebuilds the full table state for a delta history entry: walks back to the
+    "nearest full snapshot and re-applies the deltas on a fresh copy
+    DATA lt_chain TYPE STANDARD TABLE OF zcl_smd_appl=>var_table.
+
+    FIELD-SYMBOLS: <tab> TYPE STANDARD TABLE,
+                   <ins> TYPE STANDARD TABLE.
+
+    LOOP AT mt_vars_hist INTO DATA(hist). "newest first
+      IF hist-name <> is_hist-name OR hist-step > is_hist-step OR hist-del IS NOT INITIAL.
+        CONTINUE.
+      ENDIF.
+      IF hist_same_var( is_a = hist is_b = is_hist ) IS INITIAL.
+        CONTINUE.
+      ENDIF.
+      APPEND hist TO lt_chain.
+      IF hist-is_delta IS INITIAL.
+        EXIT. "reached the full snapshot
+      ENDIF.
+    ENDLOOP.
+
+    DATA(base_idx) = lines( lt_chain ).
+    IF base_idx = 0.
+      RETURN.
+    ENDIF.
+    READ TABLE lt_chain INDEX base_idx INTO DATA(base).
+    IF base-is_delta IS NOT INITIAL OR base-ref IS INITIAL.
+      RETURN. "no full snapshot found - cannot reconstruct
+    ENDIF.
+
+    TRY.
+        ASSIGN base-ref->* TO FIELD-SYMBOL(<base>).
+        CREATE DATA rr_tab LIKE <base>.
+        ASSIGN rr_tab->* TO <tab>.
+        <tab> = <base>.
+
+        DATA(idx) = base_idx - 1. "apply deltas from oldest to newest
+        WHILE idx >= 1.
+          READ TABLE lt_chain INDEX idx INTO DATA(delta).
+          IF delta-delta_del > 0.
+            DELETE <tab> FROM delta-delta_from TO delta-delta_from + delta-delta_del - 1.
+          ENDIF.
+          IF delta-ref IS NOT INITIAL.
+            ASSIGN delta-ref->* TO <ins>.
+            IF lines( <ins> ) > 0.
+              INSERT LINES OF <ins> INTO <tab> INDEX delta-delta_from.
+            ENDIF.
+          ENDIF.
+          idx = idx - 1.
+        ENDWHILE.
+      CATCH cx_root.
+        CLEAR rr_tab.
+    ENDTRY.
 
   ENDMETHOD.
 

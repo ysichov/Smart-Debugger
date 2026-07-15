@@ -25,6 +25,10 @@ CLASS zcl_smd_appl DEFINITION PUBLIC CREATE PUBLIC.
              instance      TYPE string,
              objname       TYPE string,
              done          TYPE xfeld,
+             "delta storage for table history: ref holds only the changed block
+             is_delta      TYPE xfeld, "'X' = ref contains replacement rows, not the full table
+             delta_from    TYPE i,     "1-based row index where the old block is replaced
+             delta_del     TYPE i,     "number of old rows removed at delta_from
            END OF var_table,
 
            variables TYPE STANDARD TABLE OF var_table WITH NON-UNIQUE DEFAULT KEY,
