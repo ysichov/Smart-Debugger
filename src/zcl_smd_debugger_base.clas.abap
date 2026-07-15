@@ -67,6 +67,8 @@ CLASS zcl_smd_debugger_base DEFINITION PUBLIC ABSTRACT INHERITING FROM cl_tpda_s
                   ir_up               TYPE any OPTIONAL
                   i_instance          TYPE string OPTIONAL,
 
+      is_z_or_custom_code IMPORTING i_program        TYPE clike
+                          RETURNING VALUE(rv_custom) TYPE abap_bool,
       f5 RETURNING VALUE(stop) TYPE xfeld,
       f6 RETURNING VALUE(stop) TYPE xfeld,
       f7 RETURNING VALUE(stop) TYPE xfeld,
@@ -1633,12 +1635,26 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD is_z_or_custom_code.
+
+    "Z/Y local development, customer/partner namespaces (/NAMESPACE/...) and
+    "their function pools (SAPLZ.../SAPLY...) all count as "own" code that
+    "the "Z & Standard" filter should not skip over - only genuine SAP
+    "standard (unnamespaced, non-Z/Y) programs are filtered out.
+    rv_custom = boolc(    i_program+0(1) = 'Z'
+                        OR i_program+0(1) = 'Y'
+                        OR i_program+0(1) = '/'
+                        OR i_program+0(5) = 'SAPLZ'
+                        OR i_program+0(5) = 'SAPLY' ).
+
+  ENDMETHOD.
+
   METHOD f5.
 
     READ TABLE mo_window->mt_stack INTO DATA(stack) INDEX 1.
 
     IF mo_window->m_debug_button NE 'F5' AND mo_window->m_zcode IS NOT INITIAL.
-      IF stack-program+0(1) NE 'Z' AND stack-program+0(5) NE 'SAPLZ' AND m_f6_level <> stack-stacklevel.
+      IF is_z_or_custom_code( stack-program ) = abap_false AND m_f6_level <> stack-stacklevel.
         f7( ).
         RETURN.
       ENDIF.
@@ -1664,8 +1680,13 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
     IF  mo_window->m_zcode IS NOT INITIAL.
 
       cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
-      DO.
-        IF   mo_window->m_prg-program+0(1) <> 'Z' AND mo_window->m_prg-program+0(5) <> 'SAPLZ' .
+      "bounded: without a cap this spins forever/dumps if the whole call
+      "stack above us is non-Z (e.g. a customer-namespace entry point that
+      "used to be misclassified as "standard") - a real call stack never
+      "gets anywhere near this deep, so hitting the cap just means "give up
+      "stepping out, stay where we are" instead of crashing.
+      DO 200 TIMES.
+        IF is_z_or_custom_code( mo_window->m_prg-program ) = abap_false.
           f7( ).
         ELSE.
           EXIT.
@@ -1824,7 +1845,7 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
 
       DELETE progs WHERE sys = abap_true.
 
-      LOOP AT progs INTO DATA(prog) WHERE name+30(2) = 'CP' AND ( name+0(1) = 'Z' OR name+0(1) = 'Y' ) .
+      LOOP AT progs INTO DATA(prog) WHERE name+30(2) = 'CP' AND ( name+0(1) = 'Z' OR name+0(1) = 'Y' OR name+0(1) = '/' ) .
 
         CLEAR prog-name+30(2).
         REPLACE ALL OCCURRENCES OF '=' IN prog-name WITH ''.
