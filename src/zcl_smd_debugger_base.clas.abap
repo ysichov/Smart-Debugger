@@ -971,14 +971,6 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
           ENDIF.
 
           IF hist-del IS INITIAL.
-            IF hist-is_delta IS NOT INITIAL.
-              "delta entry - rebuild the full table state before displaying
-              hist-ref = restore_tab_hist( hist ).
-              CLEAR: hist-is_delta, hist-delta_from, hist-delta_del.
-              IF hist-ref IS INITIAL.
-                CONTINUE. "snapshot chain broken - skip rather than dump
-              ENDIF.
-            ENDIF.
             READ TABLE vars_history WITH KEY name = hist-name ASSIGNING FIELD-SYMBOL(<hist>).
             IF sy-subrc = 0.
               <hist> = hist.
@@ -986,6 +978,14 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
             ELSE.
               "check initial.
               IF m_hide IS NOT INITIAL.
+                IF hist-is_delta IS NOT INITIAL.
+                  "the initial-check below needs the real table, not the delta block
+                  hist-ref = restore_tab_hist( hist ).
+                  CLEAR: hist-is_delta, hist-delta_from, hist-delta_del.
+                  IF hist-ref IS INITIAL.
+                    CONTINUE. "snapshot chain broken - skip rather than dump
+                  ENDIF.
+                ENDIF.
                 ASSIGN hist-ref->* TO FIELD-SYMBOL(<new>).
                 IF <new> IS NOT INITIAL.
                   APPEND INITIAL LINE TO vars_history ASSIGNING <hist>.
@@ -1009,6 +1009,16 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
       IF m_debug IS NOT INITIAL. BREAK-POINT. ENDIF.
 
       SORT vars_history BY name.
+
+      "rebuild full table states for the delta entries that survived the loop -
+      "this runs once per displayed variable instead of once per history record
+      LOOP AT vars_history ASSIGNING FIELD-SYMBOL(<delta_var>) WHERE is_delta IS NOT INITIAL.
+        <delta_var>-ref = restore_tab_hist( <delta_var> ).
+        CLEAR: <delta_var>-is_delta, <delta_var>-delta_from, <delta_var>-delta_del.
+        IF <delta_var>-ref IS INITIAL.
+          DELETE vars_history. "snapshot chain broken - hide rather than dump
+        ENDIF.
+      ENDLOOP.
 
       IF step_old-stacklevel <> steps-stacklevel OR m_refresh = abap_true.
         mo_tree_local->clear( ).
@@ -2062,14 +2072,20 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
 
   METHOD hist_same_var.
 
-    "locals exist per stack frame/event, globals are unique by name
+    "identity must mirror the previous-value lookup in save_hist: object
+    "instances and globals are unique by name, everything else lives per
+    "stack frame/event - otherwise delta chains of different frames get mixed
     r_same = abap_true.
-    IF is_a-leaf = 'LOCAL' OR is_a-leaf = 'IMP' OR is_a-leaf = 'EXP'.
-      IF is_a-stack     <> is_b-stack
-      OR is_a-eventtype <> is_b-eventtype
-      OR is_a-eventname <> is_b-eventname.
-        CLEAR r_same.
-      ENDIF.
+    IF is_a-name(3) = '{O:'.
+      RETURN.
+    ENDIF.
+    IF is_a-leaf = 'GLOBAL' OR is_a-leaf = 'CLASS'.
+      RETURN.
+    ENDIF.
+    IF is_a-stack     <> is_b-stack
+    OR is_a-eventtype <> is_b-eventtype
+    OR is_a-eventname <> is_b-eventname.
+      CLEAR r_same.
     ENDIF.
 
   ENDMETHOD.
