@@ -431,6 +431,8 @@ CLASS zcl_smd_window IMPLEMENTATION.
         wrong_parameters     = 3
         OTHERS               = 4.
 
+    "session breakpoints - marker 2 is set ONCE at the end, together with
+    "watch/coverage lines; setting it twice would erase the first set
     LOOP AT points INTO DATA(point). "WHERE inclnamesrc = m_prg-include.
       APPEND INITIAL LINE TO lines ASSIGNING FIELD-SYMBOL(<line>).
       <line> = point-line.
@@ -439,7 +441,6 @@ CLASS zcl_smd_window IMPLEMENTATION.
       MOVE-CORRESPONDING point TO <point>.
       <point>-type = 'S'.
     ENDLOOP.
-    mo_code_viewer->set_marker( EXPORTING marker_number = 2 marker_lines = lines ).
 
 *    "exernal breakpoints
     CALL METHOD cl_abap_debugger=>read_breakpoints
@@ -454,25 +455,25 @@ CLASS zcl_smd_window IMPLEMENTATION.
         wrong_parameters     = 3
         OTHERS               = 4.
 
-    "blue arrow - current line
-    APPEND INITIAL LINE TO lines ASSIGNING <line>.
+    "blue arrow - current line only (own table, otherwise every breakpoint
+    "line would get the arrow marker too)
+    DATA arrow_lines TYPE lntab.
+    APPEND INITIAL LINE TO arrow_lines ASSIGNING <line>.
     <line> = i_line.
-    mo_code_viewer->set_marker( EXPORTING marker_number = 7 marker_lines = lines ).
+    mo_code_viewer->set_marker( EXPORTING marker_number = 7 marker_lines = arrow_lines ).
 
-    CLEAR lines.
-
+    DATA ext_lines TYPE lntab.
     LOOP AT points INTO point. "WHERE inclnamesrc = m_prg-include.
-      APPEND INITIAL LINE TO lines ASSIGNING <line>.
+      APPEND INITIAL LINE TO ext_lines ASSIGNING <line>.
       <line> = point-line.
 
       APPEND INITIAL LINE TO mt_bpoints ASSIGNING <point>.
       MOVE-CORRESPONDING point TO <point>.
       <point>-type = 'E'.
     ENDLOOP.
-    mo_code_viewer->set_marker( EXPORTING marker_number = 4 marker_lines = lines ).
+    mo_code_viewer->set_marker( EXPORTING marker_number = 4 marker_lines = ext_lines ).
 
-    "watchpoints or coverage
-    CLEAR lines.
+    "watchpoints or coverage - share marker 2 with session breakpoints
     LOOP AT mt_watch INTO DATA(watch).
       APPEND INITIAL LINE TO lines ASSIGNING <line>.
       <line> = watch-line.
@@ -484,6 +485,8 @@ CLASS zcl_smd_window IMPLEMENTATION.
       <line> = coverage-line.
     ENDLOOP.
 
+    SORT lines.
+    DELETE ADJACENT DUPLICATES FROM lines.
     mo_code_viewer->set_marker( EXPORTING marker_number = 2 marker_lines = lines ).
 
     IF i_line IS NOT INITIAL.

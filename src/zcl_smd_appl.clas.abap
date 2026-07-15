@@ -167,7 +167,10 @@ CLASS zcl_smd_appl IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD init_lang.
-    SELECT c~spras t~sptxt INTO CORRESPONDING FIELDS OF TABLE mt_lang
+    "ladatum/lauzeit are selected too: ORDER BY on columns missing from the
+    "field list fails the strict-mode syntax check on newer releases
+    SELECT c~spras t~sptxt c~ladatum c~lauzeit
+      INTO CORRESPONDING FIELDS OF TABLE mt_lang
       FROM t002c AS c
       INNER JOIN t002t AS t
       ON c~spras = t~sprsl

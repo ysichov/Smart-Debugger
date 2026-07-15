@@ -214,7 +214,8 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
           pre_stack TYPE ts_line,
           opened    TYPE i.
 
-    CLEAR mo_debugger->mo_window->mt_watch.
+    CLEAR: mo_debugger->mo_window->mt_watch,
+           mt_if, ms_if. "stale if/endif pairs of a previous run corrupt the graph
 
     IF lines( mo_debugger->mt_steps ) > 1.
       DATA(steps) = mo_debugger->mt_steps.
@@ -437,8 +438,12 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
       ENDIF.
 
       IF <line>-cond = 'ENDIF' OR <line>-cond = 'ENDCASE'.
-        <if>-end_ind = <line>-ind.
+        "steps may start mid-block: ENDIF without a recorded IF must not dump
+        IF <if> IS ASSIGNED.
+          <if>-end_ind = <line>-ind.
+        ENDIF.
         SUBTRACT 1 FROM if_depth.
+        UNASSIGN <if>.
         LOOP AT mt_if  ASSIGNING <if> WHERE end_ind = 0.
         ENDLOOP.
       ENDIF.
@@ -499,7 +504,7 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
 
           ENDIF.
         ENDDO.
-        IF when_count = 1.
+        IF when_count = 1 AND <if> IS ASSIGNED.
           <if>-if_ind = els_before.
           CLEAR <line>-els_before.
         ENDIF.
@@ -629,7 +634,11 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
 
       IF pre_stack IS INITIAL.
         IF line-cond = 'WHEN' OR line-cond = 'ELSE' OR line-cond = 'ELSEIF'.
-          pre_stack = lines[ <if>-if_ind ].
+          IF <if> IS ASSIGNED AND <if>-if_ind > 0 AND <if>-if_ind <= lines( lines ).
+            pre_stack = lines[ <if>-if_ind ].
+          ELSE.
+            pre_stack = line. "no recorded opening IF/CASE - fall back safely
+          ENDIF.
         ELSE.
           pre_stack = line.
 

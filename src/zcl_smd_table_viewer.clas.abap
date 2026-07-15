@@ -594,7 +594,10 @@ CLASS ZCL_SMD_TABLE_VIEWER IMPLEMENTATION.
   method ON_TABLE_CLOSE.
 
     DATA: tabix LIKE sy-tabix.
-    sender->free( ).
+    sender->free( EXCEPTIONS cntl_error        = 1
+                             cntl_system_error = 2
+                             OTHERS            = 3 ).
+    DELETE zcl_smd_appl=>mt_popups WHERE child = sender.
 
     "Free Memory
     LOOP AT zcl_smd_appl=>mt_obj ASSIGNING FIELD-SYMBOL(<obj>) WHERE alv_viewer IS NOT INITIAL.

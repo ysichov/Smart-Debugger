@@ -48,7 +48,6 @@ CLASS zcl_smd_debugger_base DEFINITION PUBLIC ABSTRACT INHERITING FROM cl_tpda_s
           mt_selected_var   TYPE TABLE OF t_sel_var,
           mv_stack_changed  TYPE xfeld,
           m_variable        TYPE REF TO data,
-          mt_new_string     TYPE TABLE OF  string,
           m_quick           TYPE tpda_scr_quick_info,
           mr_statements     TYPE RANGE OF string.
 
@@ -603,10 +602,14 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
 
                 " Handle string references specially
                 IF ref_info-typid = 'g'. "string
-                  " Create a string variable directly
-                  APPEND INITIAL LINE TO mt_new_string ASSIGNING FIELD-SYMBOL(<m_string_ref>).
+                  " Create a string variable directly on the heap - garbage
+                  " collected once no history entry references it anymore
+                  DATA lr_new_string TYPE REF TO data.
+                  FIELD-SYMBOLS <m_string_ref> TYPE string.
+                  CREATE DATA lr_new_string TYPE string.
+                  ASSIGN lr_new_string->* TO <m_string_ref>.
                   <m_string_ref> = create_simple_string( <symbdatref>-instancename ).
-                  GET REFERENCE OF <m_string_ref> INTO m_variable.
+                  m_variable = lr_new_string.
 
                   traverse( io_type_descr  = cl_abap_typedescr=>describe_by_data_ref( m_variable )
                             i_name        = name
@@ -627,9 +630,10 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
                 ENDIF.
               CATCH cx_tpda_varname.
                 " Handle error - show as unresolved reference
-                APPEND INITIAL LINE TO mt_new_string ASSIGNING <m_string_ref>.
+                CREATE DATA lr_new_string TYPE string.
+                ASSIGN lr_new_string->* TO <m_string_ref>.
                 <m_string_ref> = |Unresolved reference: { <symbdatref>-instancename }|.
-                GET REFERENCE OF <m_string_ref> INTO m_variable.
+                m_variable = lr_new_string.
 
                 traverse( io_type_descr  = cl_abap_typedescr=>describe_by_data_ref( m_variable )
                           i_name        = name
@@ -688,13 +692,14 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
           ENDIF.
 
         ELSEIF m_quick-typid = 'g'."string
-          APPEND INITIAL LINE TO mt_new_string ASSIGNING FIELD-SYMBOL(<m_string>).
+          CREATE DATA lr_new_string TYPE string.
+          ASSIGN lr_new_string->* TO <m_string_ref>.
           IF i_name NE '{A:initial}'.
-            <m_string> = create_simple_string( i_name ).
+            <m_string_ref> = create_simple_string( i_name ).
           ELSE.
-            <m_string> = '{A:initial}'.
+            <m_string_ref> = '{A:initial}'.
           ENDIF.
-          GET REFERENCE OF <m_string> INTO m_variable.
+          m_variable = lr_new_string.
           traverse( io_type_descr  = cl_abap_typedescr=>describe_by_data_ref( m_variable )
                     i_name        = name
                     i_type        = i_type
@@ -1903,22 +1908,24 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
         ENDIF.
       ENDIF.
     ENDIF.
+    "ms_stack instead of mt_stack[ 1 ]: the window's stack table is replaced by
+    "a pseudo-stack while the coverage view is active and dumps when empty
     IF i_instance IS INITIAL.
       READ TABLE mt_state
            WITH KEY name = full_name
-                    program = mo_window->mt_stack[ 1 ]-program
+                    program = ms_stack-program
             ASSIGNING FIELD-SYMBOL(<state>).
     ELSE.
       READ TABLE mt_state
           WITH KEY name = full_name
-                   program = mo_window->mt_stack[ 1 ]-program
+                   program = ms_stack-program
                    instance = i_instance
            ASSIGNING <state>.
     ENDIF.
 
     IF sy-subrc <> 0.
       APPEND INITIAL LINE TO mt_state ASSIGNING <state>.
-      <state>-stack = mo_window->mt_stack[ 1 ]-stacklevel.
+      <state>-stack = ms_stack-stacklevel.
       <state>-step  = m_step - m_step_delta.
       <state>-program   = mo_window->m_prg-program.
       <state>-eventtype = mo_window->m_prg-eventtype.
@@ -2298,35 +2305,12 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
 
   METHOD traverse.
 
-    "create new data
-    DATA: lr_new   TYPE REF TO data,
-          lr_struc TYPE REF TO data.
-
-    FIELD-SYMBOLS: <new>      TYPE any,
-                   <tab_from> TYPE ANY TABLE,
-                   <tab_to>   TYPE STANDARD TABLE,
-                   <ir_up>    TYPE any.
-    ASSIGN ir_up->* TO <ir_up>.
-    DESCRIBE FIELD ir_up TYPE DATA(type).
-    IF type NE cl_abap_typedescr=>typekind_table.
-      CREATE DATA lr_new LIKE <ir_up>.
-      ASSIGN lr_new->*  TO <new>.
-      ASSIGN ir_up->* TO <new>.
-      GET REFERENCE OF <new> INTO lr_new.
-    ELSE.
-      ASSIGN ir_up->* TO <tab_from>.
-      CREATE DATA lr_struc LIKE LINE OF <tab_from>.
-      ASSIGN lr_struc->* TO FIELD-SYMBOL(<record>).
-      CREATE DATA lr_new LIKE STANDARD TABLE OF <record>.
-      ASSIGN lr_new->* TO <tab_to>.
-      <tab_to> = <tab_from>.
-    ENDIF.
-    GET REFERENCE OF <new> INTO m_variable.
-
-    DATA td TYPE sydes_desc.
-    DESCRIBE FIELD ir_up INTO td.
-
-    m_variable = lr_new.
+    "ir_up already points to a fresh per-step copy built by transfer_variable
+    "(create_simple_var / elem_clone / get_deep_struc). The former code here
+    "pretended to deep-copy tables, but DESCRIBE FIELD on a REF TO data always
+    "returns 'l', so the table branch was dead and the rest just re-derived
+    "the same reference.
+    m_variable = ir_up.
 
     CASE io_type_descr->kind.
       WHEN c_kind-struct.

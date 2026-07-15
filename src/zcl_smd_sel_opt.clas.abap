@@ -439,6 +439,9 @@ CLASS ZCL_SMD_SEL_OPT IMPLEMENTATION.
     ENDIF.
 
     READ TABLE mt_sel_tab ASSIGNING FIELD-SYMBOL(<sel>) INDEX es_row_no-row_id.
+    IF sy-subrc <> 0.
+      RETURN. "F4 outside of a data row - let the standard help run
+    ENDIF.
     DATA(fname) =  <sel>-field_label.
 
     mt_sel[] = mt_sel_tab[].
@@ -534,6 +537,9 @@ CLASS ZCL_SMD_SEL_OPT IMPLEMENTATION.
           option   TYPE raldb_opti.
 
     READ TABLE mt_sel_tab INDEX es_row_no-row_id ASSIGNING FIELD-SYMBOL(<tab>).
+    IF sy-subrc <> 0.
+      RETURN. "click outside of a data row
+    ENDIF.
     CASE es_col_id.
       WHEN 'OPTION_ICON'. "edit select logical expression type
         CALL FUNCTION 'SELECT_OPTION_OPTIONS'

@@ -425,7 +425,7 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
 
       APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
       <vars>-key = e_root_key.
-      <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
+      <vars>-stack = mo_debugger->ms_stack-stacklevel.
       <vars>-step  = mo_debugger->m_step - mo_debugger->m_step_delta.
       <vars>-program   = mo_debugger->mo_window->m_prg-program.
       <vars>-eventtype = mo_debugger->mo_window->m_prg-eventtype.
@@ -584,7 +584,7 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
           e_root_key = o_node->get_key( ).
 
           APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
-          <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
+          <vars>-stack = mo_debugger->ms_stack-stacklevel.
           <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
           <vars>-program = mo_debugger->mo_window->m_prg-program.
           <vars>-eventtype = mo_debugger->mo_window->m_prg-eventtype.
@@ -699,7 +699,7 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
     DELETE mt_vars WHERE name = is_var-name.
 
     APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
-    <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
+    <vars>-stack = mo_debugger->ms_stack-stacklevel.
     <vars>-step = mo_debugger->m_step - mo_debugger->m_step_delta.
     <vars>-program = mo_debugger->mo_window->m_prg-program.
     <vars>-eventtype = mo_debugger->mo_window->m_prg-eventtype.
@@ -854,7 +854,7 @@ CLASS zcl_smd_rtti_tree IMPLEMENTATION.
       ENDTRY.
 
       APPEND INITIAL LINE TO mt_vars ASSIGNING FIELD-SYMBOL(<vars>).
-      <vars>-stack = mo_debugger->mo_window->mt_stack[ 1 ]-stacklevel.
+      <vars>-stack = mo_debugger->ms_stack-stacklevel.
       <vars>-leaf = m_leaf.
       <vars>-name = is_var-name.
       <vars>-program = mo_debugger->mo_window->m_prg-program.

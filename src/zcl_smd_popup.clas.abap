@@ -79,15 +79,21 @@ CLASS ZCL_SMD_POPUP IMPLEMENTATION.
 
   method ON_BOX_CLOSE.
 
-*    LOOP AT zcl_smd_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>) WHERE parent = sender .
-*      <popup>-child->free( ).
-*      CLEAR <popup>-child.
-*    ENDLOOP.
-*    IF sy-subrc <> 0.
-*      DELETE  zcl_smd_appl=>mt_popups WHERE child = sender.
-*    ENDIF.
-*    DELETE zcl_smd_appl=>mt_popups WHERE child IS INITIAL.
-    sender->free( ).
+    "close dependent child popups of this box and drop finished entries,
+    "otherwise children stay open orphaned and mt_popups grows forever
+    LOOP AT zcl_smd_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>) WHERE parent = sender.
+      IF <popup>-child IS BOUND.
+        <popup>-child->free( EXCEPTIONS cntl_error        = 1
+                                        cntl_system_error = 2
+                                        OTHERS            = 3 ).
+        CLEAR <popup>-child.
+      ENDIF.
+    ENDLOOP.
+    DELETE zcl_smd_appl=>mt_popups WHERE child = sender OR child IS INITIAL.
+
+    sender->free( EXCEPTIONS cntl_error        = 1
+                             cntl_system_error = 2
+                             OTHERS            = 3 ).
 
   endmethod.
 ENDCLASS.
