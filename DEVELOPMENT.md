@@ -89,6 +89,44 @@ ELSE.
 ENDIF.
 ```
 
+## Building the Standalone Version
+
+Smart Debugger includes two runtime modes:
+
+1. **Modular classes** (`zcl_smd_*.clas.abap`) — primary development form, organized by concern
+2. **Standalone program** (`z_smart_debugger_standalone.prog.abap`) — single-file variant for
+   transport/deployment without dependency management
+
+### Generating Standalone
+
+Use the provided scripts to merge classes into a standalone program:
+
+**Windows:**
+```batch
+cd C:\soft\GitHub\Smart-Debugger
+generate_standalone.bat
+```
+
+**Linux/macOS:**
+```bash
+cd /c/soft/GitHub/Smart-Debugger
+./generate_standalone.sh
+```
+
+**Requirements:**
+- `abapmerge` tool (https://github.com/larshp/abapmerge) — install via `npm install -g abapmerge`
+- `bash` (Git Bash on Windows)
+
+**What it does:**
+1. Copies all `src/` files to working directory
+2. Removes old standalone versions
+3. Runs abapmerge to combine `z_smart_debugger.prog.abap` with all classes
+4. Copies merged result back to `src/z_smart_debugger_standalone.prog.abap`
+5. Preserves header comments from main program
+
+**Important:** Do not edit `z_smart_debugger_standalone.prog.abap` directly — it is regenerated
+from the class-based source. Make changes to the modular classes instead.
+
 ## Recent Fixes (2026-07-15)
 
 Two waves of fixes addressing 13 issues:
