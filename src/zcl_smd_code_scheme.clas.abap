@@ -61,6 +61,10 @@ CLASS zcl_smd_code_scheme DEFINITION
     CONSTANTS c_apos TYPE c LENGTH 1 VALUE ''''.
     CONSTANTS c_branches TYPE string VALUE ' ELSEIF ELSE WHEN CATCH CLEANUP '.
 
+    " Declarations are not execution: they never appear in the scheme and do
+    " not count towards the "N operations" between two branches.
+    CONSTANTS c_decls TYPE string VALUE ' DATA CLASS-DATA CONSTANTS STATICS FIELD-SYMBOLS TYPES TYPE-POOLS TABLES RANGES INCLUDE METHODS CLASS-METHODS EVENTS INTERFACES ALIASES DEFINE PARAMETERS SELECT-OPTIONS NODES INFOTYPES '.
+
     CLASS-METHODS analyze
       IMPORTING it_source       TYPE STANDARD TABLE
                 it_kw           TYPE zcl_smd_window=>tt_kword
@@ -71,6 +75,26 @@ CLASS zcl_smd_code_scheme DEFINITION
     CLASS-METHODS closer_of
       IMPORTING i_word          TYPE string
       RETURNING VALUE(r_closer) TYPE string.
+
+    "! Mermaid arrow, with the branch condition on it when there is one.
+    CLASS-METHODS arrow
+      IMPORTING i_label       TYPE string
+      RETURNING VALUE(r_text) TYPE string.
+
+    "! Emits an "N operations" node for the executable statements between two
+    "! lines and wires it after i_prev. Returns the node the chain now ends
+    "! on — the new node, or i_prev when there was nothing in between.
+    CLASS-METHODS ops_node
+      IMPORTING i_from        TYPE i
+                i_to          TYPE i
+                i_id          TYPE string
+                i_prev        TYPE string
+                i_label       TYPE string OPTIONAL
+                it_ops        TYPE int4_table
+                it_lines      TYPE tt_line
+      CHANGING  cv_mm         TYPE string
+                cv_edges      TYPE string
+      RETURNING VALUE(r_node) TYPE string.
 
     "! Statement text, trimmed and stripped of what would break a label.
     CLASS-METHODS scheme_label
@@ -86,27 +110,39 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
 
   METHOD build.
 
-    TYPES: BEGIN OF ts_prev,
-             depth TYPE i,
-             node  TYPE string,
-             line  TYPE i,
-           END OF ts_prev.
-    DATA lt_prev TYPE STANDARD TABLE OF ts_prev WITH EMPTY KEY.
     DATA lv_edges TYPE string.
+    " Condition of the branch just entered, waiting to be put on its arrow
+    DATA lv_lbl TYPE string.
+    " classDef / class lines, emitted after everything they refer to
+    DATA lv_styles TYPE string.
 
     TYPES: BEGIN OF ts_sub,
              endline TYPE i,
            END OF ts_sub.
     DATA lt_sub TYPE STANDARD TABLE OF ts_sub WITH EMPTY KEY.
 
+    " Open IF/CASE blocks, innermost first: the header every branch fans out
+    " from, and the tail of each branch already walked, so that they can be
+    " joined back together on the closing statement.
+    TYPES: BEGIN OF ts_cond,
+             closeline TYPE i,
+             depth     TYPE i,
+             word      TYPE string,
+             header    TYPE string,
+             seen      TYPE abap_bool,   " first branch already passed
+             tails     TYPE string_table,
+           END OF ts_cond.
+    DATA lt_cond TYPE STANDARD TABLE OF ts_cond WITH EMPTY KEY.
+
     DATA(lt_lines) = analyze( it_source = it_source it_kw = it_kw io_scan = io_scan ).
 
     " Running count of plain statements, so the number of operations between
     " two lines is one subtraction rather than a scan.
-    DATA lt_ops TYPE STANDARD TABLE OF i WITH EMPTY KEY.
+    DATA lt_ops TYPE int4_table.
     DATA(lv_run) = 0.
     LOOP AT lt_lines INTO DATA(ls_cnt).
-      IF ls_cnt-kind = 'P' AND ls_cnt-word IS NOT INITIAL.
+      IF ls_cnt-kind = 'P' AND ls_cnt-word IS NOT INITIAL
+        AND c_decls NS | { ls_cnt-word } |.
         lv_run = lv_run + 1.
       ENDIF.
       APPEND lv_run TO lt_ops.
@@ -132,6 +168,37 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
 
     LOOP AT lt_lines INTO DATA(ls_line).
 
+      " Join the branches of every IF/CASE that closes on this line, so the
+      " block visibly ends instead of running on as one chain.
+      WHILE lines( lt_cond ) > 0.
+        READ TABLE lt_cond INTO DATA(ls_cond) INDEX 1.
+        IF ls_cond-closeline <> ls_line-line. EXIT. ENDIF.
+        " Statements after the last structure of the branch still belong to
+        " it — without this they fall out of the picture entirely.
+        APPEND ops_node( EXPORTING i_from  = lv_prev_line
+                                   i_to    = ls_line-line
+                                   i_id    = |x{ ls_line-line }|
+                                   i_prev  = lv_prev_node
+                                   i_label = lv_lbl
+                                   it_ops  = lt_ops
+                                   it_lines = lt_lines
+                         CHANGING  cv_mm    = rv_mm
+                                   cv_edges = lv_edges ) TO ls_cond-tails.
+        CLEAR lv_lbl.
+        " The closing statement is worth a node of its own — unlike ENDLOOP,
+        " where the frame around the body already shows where it ends.
+        DATA(lv_join) = |j{ ls_line-line }|.
+        rv_mm = rv_mm && |  { lv_join }("{ scheme_label( ls_line-text ) }")\n|.
+        LOOP AT ls_cond-tails INTO DATA(lv_tail).
+          CHECK lv_tail IS NOT INITIAL.
+          lv_edges = lv_edges && |  { lv_tail } --> { lv_join }\n|.
+        ENDLOOP.
+        lv_prev_node  = lv_join.
+        lv_prev_line  = ls_line-line.
+        lv_prev_depth = ls_cond-depth.
+        DELETE lt_cond INDEX 1.
+      ENDWHILE.
+
       " Close every frame whose block ended before this line
       WHILE lines( lt_sub ) > 0.
         READ TABLE lt_sub INTO DATA(ls_sub) INDEX 1.
@@ -148,57 +215,124 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
         THEN scheme_label( i_title )
         ELSE scheme_label( ls_line-text ) ).
 
-      " A loop is the frame around its body, not a node of its own
-      IF ls_line-kind = 'O' AND ls_line-all > ls_line-line
-        AND ( ls_line-word = 'LOOP' OR ls_line-word = 'DO' OR ls_line-word = 'WHILE' ).
+      " A loop becomes the frame around its body — but only if that body
+      " holds structure of its own. A loop over plain statements would give
+      " an empty frame with no edge reaching it, left floating on the canvas;
+      " those stay ordinary nodes.
+      " TRY gets a frame of its own too: its CATCH blocks are separate paths
+      " out of the protected code, and a frame is what makes that readable.
+      DATA(lv_is_loop) = xsdbool(
+        ls_line-kind = 'O' AND ls_line-all > ls_line-line
+        AND ( ls_line-word = 'LOOP' OR ls_line-word = 'DO' OR ls_line-word = 'WHILE'
+           OR ls_line-word = 'TRY' ) ).
+
+      IF lv_is_loop = abap_true.
+        DATA(lv_inner) = 0.
+        LOOP AT lt_lines TRANSPORTING NO FIELDS
+          WHERE line > ls_line-line AND line <= ls_line-all
+            AND ( kind = 'O' OR kind = 'B' OR kind = 'S' ).
+          lv_inner = 1.
+          EXIT.
+        ENDLOOP.
+        IF lv_inner = 0. lv_is_loop = abap_false. ENDIF.
+      ENDIF.
+
+      IF lv_is_loop = abap_true.
         rv_mm = rv_mm && |  subgraph g{ ls_line-line }["{ lv_label }"]\n|.
         rv_mm = rv_mm && |  direction LR\n|.
+        " A protected block is coloured apart from a loop
+        IF ls_line-word = 'TRY'.
+          lv_styles = lv_styles && |class g{ ls_line-line } tryblk\n|.
+        ENDIF.
         INSERT VALUE #( endline = ls_line-all ) INTO lt_sub INDEX 1.
         CONTINUE.
       ENDIF.
 
+      " A branch is not a box of its own: its condition rides on the arrow
+      " leaving the IF/CASE, which is both shorter and how the flow reads.
+      FIELD-SYMBOLS <ls_br> TYPE ts_cond.
+      UNASSIGN <ls_br>.
+      IF ls_line-kind = 'B'.
+        READ TABLE lt_cond ASSIGNING <ls_br> INDEX 1.
+        " Only when the branch really belongs to that IF/CASE. A CATCH sits
+        " one level down inside its TRY and used to grab the enclosing IF —
+        " that is how TRY/CATCH ended up tangled with the conditions.
+        IF sy-subrc = 0 AND <ls_br>-depth <> ls_line-depth.
+          UNASSIGN <ls_br>.
+        ENDIF.
+        IF <ls_br> IS ASSIGNED.
+          " The branch just walked ends here: its trailing statements first,
+          " then its tail is kept for the join at the closing statement.
+          DATA(lv_tail_node) = ops_node( EXPORTING i_from  = lv_prev_line
+                                                   i_to    = ls_line-line
+                                                   i_id    = |y{ ls_line-line }|
+                                                   i_prev  = lv_prev_node
+                                                   i_label = lv_lbl
+                                                   it_ops  = lt_ops
+                                                   it_lines = lt_lines
+                                         CHANGING  cv_mm    = rv_mm
+                                                   cv_edges = lv_edges ).
+          IF <ls_br>-word = 'CASE' AND <ls_br>-seen = abap_false.
+            " Statements between CASE and its first WHEN run unconditionally,
+            " before the dispatch — so they are not a branch, and every WHEN
+            " has to fan out from the end of them rather than from the CASE.
+            IF lv_tail_node <> <ls_br>-header.
+              <ls_br>-header = lv_tail_node.
+            ENDIF.
+          ELSEIF lv_tail_node <> <ls_br>-header.
+            " Still standing on the header means the branch was empty, and an
+            " empty path only adds an arrow that says nothing.
+            APPEND lv_tail_node TO <ls_br>-tails.
+          ENDIF.
+          <ls_br>-seen = abap_true.
+          lv_lbl        = lv_label.
+          lv_prev_node  = <ls_br>-header.
+          lv_prev_line  = ls_line-line.
+          lv_prev_depth = ls_line-depth.
+          CONTINUE.
+        ENDIF.
+      ENDIF.
+
       DATA(lv_shape) = SWITCH string( ls_line-word
         WHEN 'IF' OR 'CASE'                 THEN |{ lv_node }\{"{ lv_label }"\}|
+        WHEN 'LOOP' OR 'DO' OR 'WHILE'      THEN |{ lv_node }[/"{ lv_label }"/]|
         WHEN 'METHOD' OR 'FORM' OR 'MODULE' THEN |{ lv_node }[["{ lv_label }"]]|
         ELSE                                     |{ lv_node }("{ lv_label }")| ).
       rv_mm = rv_mm && |  { lv_shape }\n|.
 
-      " Edge source: previous node of the same level, or the enclosing
-      " header when this is the first structure line of a block.
       DATA(lv_from)      = lv_prev_node.
       DATA(lv_from_line) = lv_prev_line.
-      LOOP AT lt_prev INTO DATA(ls_prev) WHERE depth = ls_line-depth.
-        lv_from      = ls_prev-node.
-        lv_from_line = ls_prev-line.
-      ENDLOOP.
-      IF ls_line-depth > lv_prev_depth.
-        lv_from      = lv_prev_node.
-        lv_from_line = lv_prev_line.
-      ENDIF.
 
       IF lv_from IS NOT INITIAL.
-        DATA(lv_ops) = 0.
-        IF ls_line-line > lv_from_line + 1 AND lv_from_line > 0.
-          READ TABLE lt_ops INTO DATA(lv_to_cnt) INDEX ls_line-line - 1.
-          IF sy-subrc = 0.
-            READ TABLE lt_ops INTO DATA(lv_fr_cnt) INDEX lv_from_line.
-            IF sy-subrc = 0. lv_ops = lv_to_cnt - lv_fr_cnt. ENDIF.
-          ENDIF.
-        ENDIF.
-
-        IF lv_ops > 0.
-          DATA(lv_ops_node) = |o{ ls_line-line }|.
-          rv_mm = rv_mm && |  { lv_ops_node }["{ lv_ops } { COND string(
-            WHEN lv_ops = 1 THEN 'operation' ELSE 'operations' ) }"]\n|.
-          lv_edges = lv_edges && |  { lv_from } --> { lv_ops_node }\n|.
-          lv_edges = lv_edges && |  { lv_ops_node } --> { lv_node }\n|.
+        " One and the same builder everywhere, so a stretch of statements
+        " looks the same wherever it sits.
+        DATA(lv_after_ops) = ops_node( EXPORTING i_from   = lv_from_line
+                                                 i_to     = ls_line-line
+                                                 i_id     = |o{ ls_line-line }|
+                                                 i_prev   = lv_from
+                                                 i_label  = lv_lbl
+                                                 it_ops   = lt_ops
+                                                 it_lines = lt_lines
+                                       CHANGING  cv_mm    = rv_mm
+                                                 cv_edges = lv_edges ).
+        IF lv_after_ops <> lv_from.
+          CLEAR lv_lbl.
+          lv_edges = lv_edges && |  { lv_after_ops } --> { lv_node }\n|.
         ELSE.
-          lv_edges = lv_edges && |  { lv_from } --> { lv_node }\n|.
+          lv_edges = lv_edges && |  { lv_from }{ arrow( lv_lbl ) }{ lv_node }\n|.
+          CLEAR lv_lbl.
         ENDIF.
       ENDIF.
 
-      DELETE lt_prev WHERE depth >= ls_line-depth.
-      APPEND VALUE #( depth = ls_line-depth node = lv_node line = ls_line-line ) TO lt_prev.
+      " An IF/CASE opens a fan-out that has to be closed again
+      IF ls_line-kind = 'O' AND ls_line-all > ls_line-line
+        AND ( ls_line-word = 'IF' OR ls_line-word = 'CASE' ).
+        INSERT VALUE #( closeline = ls_line-all + 1
+                        depth     = ls_line-depth
+                        word      = ls_line-word
+                        header    = lv_node ) INTO lt_cond INDEX 1.
+      ENDIF.
+
       lv_prev_node  = lv_node.
       lv_prev_depth = ls_line-depth.
       lv_prev_line  = ls_line-line.
@@ -211,6 +345,10 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
 
     " Edges last: an edge written inside a subgraph pulls its nodes into
     " that subgraph and the nesting falls apart.
+    IF lv_styles IS NOT INITIAL.
+      rv_mm = rv_mm && |classDef tryblk fill:#eaf6ea,stroke:#2e7d32,color:#000
+| && lv_styles.
+    ENDIF.
     rv_mm = rv_mm && lv_edges.
 
   ENDMETHOD.
@@ -367,6 +505,53 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
       WHEN 'AT'.      r_closer = 'ENDAT'.
       WHEN 'PROVIDE'. r_closer = 'ENDPROVIDE'.
     ENDCASE.
+  ENDMETHOD.
+
+
+  METHOD arrow.
+    IF i_label IS INITIAL.
+      r_text = ` --> `.
+    ELSE.
+      " Quoted: an unquoted edge label ends at the first bracket, and
+      " conditions like m_tabname+0(3) = 'HRP' are full of them.
+      r_text = | -->\|"{ i_label }"\| |.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD ops_node.
+
+    r_node = i_prev.
+    CHECK i_prev IS NOT INITIAL.
+    CHECK i_from > 0 AND i_to > i_from + 1.
+
+    READ TABLE it_ops INTO DATA(lv_to_cnt) INDEX i_to - 1.
+    CHECK sy-subrc = 0.
+    READ TABLE it_ops INTO DATA(lv_fr_cnt) INDEX i_from.
+    CHECK sy-subrc = 0.
+
+    DATA(lv_ops) = lv_to_cnt - lv_fr_cnt.
+    CHECK lv_ops > 0.
+
+    " A single statement is shown in full: hiding one line behind
+    " "1 operation" saves no space and tells the reader less.
+    IF lv_ops = 1.
+      LOOP AT it_lines INTO DATA(ls_op)
+        WHERE line > i_from AND line < i_to
+          AND kind = 'P' AND word IS NOT INITIAL.
+        CHECK c_decls NS | { ls_op-word } |.
+        cv_mm = cv_mm && |  { i_id }("{ scheme_label( ls_op-text ) }")\n|.
+        cv_edges = cv_edges && |  { i_prev }{ arrow( i_label ) }{ i_id }\n|.
+        r_node = i_id.
+        RETURN.
+      ENDLOOP.
+    ENDIF.
+
+    cv_mm = cv_mm && |  { i_id }["{ lv_ops } { COND string(
+      WHEN lv_ops = 1 THEN 'operation' ELSE 'operations' ) }"]\n|.
+    cv_edges = cv_edges && |  { i_prev } --> { i_id }\n|.
+    r_node = i_id.
+
   ENDMETHOD.
 
 
