@@ -491,6 +491,7 @@ CLASS zcl_smd_code_scheme DEFINITION
                 i_prev        TYPE string
                 i_label       TYPE string OPTIONAL
                 it_ops        TYPE int4_table
+                it_lines      TYPE tt_line
       CHANGING  cv_mm         TYPE string
                 cv_edges      TYPE string
       RETURNING VALUE(r_node) TYPE string.
@@ -8045,6 +8046,8 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
     DATA lv_edges TYPE string.
     " Condition of the branch just entered, waiting to be put on its arrow
     DATA lv_lbl TYPE string.
+    " classDef / class lines, emitted after everything they refer to
+    DATA lv_styles TYPE string.
 
     TYPES: BEGIN OF ts_sub,
              endline TYPE i,
@@ -8111,6 +8114,7 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
                                    i_prev  = lv_prev_node
                                    i_label = lv_lbl
                                    it_ops  = lt_ops
+                                   it_lines = lt_lines
                          CHANGING  cv_mm    = rv_mm
                                    cv_edges = lv_edges ) TO ls_cond-tails.
         CLEAR lv_lbl.
@@ -8148,9 +8152,12 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
       " holds structure of its own. A loop over plain statements would give
       " an empty frame with no edge reaching it, left floating on the canvas;
       " those stay ordinary nodes.
+      " TRY gets a frame of its own too: its CATCH blocks are separate paths
+      " out of the protected code, and a frame is what makes that readable.
       DATA(lv_is_loop) = xsdbool(
         ls_line-kind = 'O' AND ls_line-all > ls_line-line
-        AND ( ls_line-word = 'LOOP' OR ls_line-word = 'DO' OR ls_line-word = 'WHILE' ) ).
+        AND ( ls_line-word = 'LOOP' OR ls_line-word = 'DO' OR ls_line-word = 'WHILE'
+           OR ls_line-word = 'TRY' ) ).
 
       IF lv_is_loop = abap_true.
         DATA(lv_inner) = 0.
@@ -8166,15 +8173,27 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
       IF lv_is_loop = abap_true.
         rv_mm = rv_mm && |  subgraph g{ ls_line-line }["{ lv_label }"]\n|.
         rv_mm = rv_mm && |  direction LR\n|.
+        " A protected block is coloured apart from a loop
+        IF ls_line-word = 'TRY'.
+          lv_styles = lv_styles && |class g{ ls_line-line } tryblk\n|.
+        ENDIF.
         INSERT VALUE #( endline = ls_line-all ) INTO lt_sub INDEX 1.
         CONTINUE.
       ENDIF.
 
       " A branch is not a box of its own: its condition rides on the arrow
       " leaving the IF/CASE, which is both shorter and how the flow reads.
+      FIELD-SYMBOLS <ls_br> TYPE ts_cond.
+      UNASSIGN <ls_br>.
       IF ls_line-kind = 'B'.
-        READ TABLE lt_cond ASSIGNING FIELD-SYMBOL(<ls_br>) INDEX 1.
-        IF sy-subrc = 0.
+        READ TABLE lt_cond ASSIGNING <ls_br> INDEX 1.
+        " Only when the branch really belongs to that IF/CASE. A CATCH sits
+        " one level down inside its TRY and used to grab the enclosing IF —
+        " that is how TRY/CATCH ended up tangled with the conditions.
+        IF sy-subrc = 0 AND <ls_br>-depth <> ls_line-depth.
+          UNASSIGN <ls_br>.
+        ENDIF.
+        IF <ls_br> IS ASSIGNED.
           " The branch just walked ends here: its trailing statements first,
           " then its tail is kept for the join at the closing statement.
           DATA(lv_tail_node) = ops_node( EXPORTING i_from  = lv_prev_line
@@ -8183,6 +8202,7 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
                                                    i_prev  = lv_prev_node
                                                    i_label = lv_lbl
                                                    it_ops  = lt_ops
+                                                   it_lines = lt_lines
                                          CHANGING  cv_mm    = rv_mm
                                                    cv_edges = lv_edges ).
           IF <ls_br>-word = 'CASE' AND <ls_br>-seen = abap_false.
@@ -8217,23 +8237,23 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
       DATA(lv_from_line) = lv_prev_line.
 
       IF lv_from IS NOT INITIAL.
-        DATA(lv_ops) = 0.
-        IF ls_line-line > lv_from_line + 1 AND lv_from_line > 0.
-          READ TABLE lt_ops INTO DATA(lv_to_cnt) INDEX ls_line-line - 1.
-          IF sy-subrc = 0.
-            READ TABLE lt_ops INTO DATA(lv_fr_cnt) INDEX lv_from_line.
-            IF sy-subrc = 0. lv_ops = lv_to_cnt - lv_fr_cnt. ENDIF.
-          ENDIF.
-        ENDIF.
-
-        IF lv_ops > 0.
-          DATA(lv_ops_node) = |o{ ls_line-line }|.
-          rv_mm = rv_mm && |  { lv_ops_node }["{ lv_ops } { COND string(
-            WHEN lv_ops = 1 THEN 'operation' ELSE 'operations' ) }"]\n|.
-          lv_edges = lv_edges && |  { lv_from } --> { lv_ops_node }\n|.
-          lv_edges = lv_edges && |  { lv_ops_node } --> { lv_node }\n|.
+        " One and the same builder everywhere, so a stretch of statements
+        " looks the same wherever it sits.
+        DATA(lv_after_ops) = ops_node( EXPORTING i_from   = lv_from_line
+                                                 i_to     = ls_line-line
+                                                 i_id     = |o{ ls_line-line }|
+                                                 i_prev   = lv_from
+                                                 i_label  = lv_lbl
+                                                 it_ops   = lt_ops
+                                                 it_lines = lt_lines
+                                       CHANGING  cv_mm    = rv_mm
+                                                 cv_edges = lv_edges ).
+        IF lv_after_ops <> lv_from.
+          CLEAR lv_lbl.
+          lv_edges = lv_edges && |  { lv_after_ops } --> { lv_node }\n|.
         ELSE.
-          lv_edges = lv_edges && |  { lv_from } --> { lv_node }\n|.
+          lv_edges = lv_edges && |  { lv_from }{ arrow( lv_lbl ) }{ lv_node }\n|.
+          CLEAR lv_lbl.
         ENDIF.
       ENDIF.
 
@@ -8258,6 +8278,10 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
 
     " Edges last: an edge written inside a subgraph pulls its nodes into
     " that subgraph and the nesting falls apart.
+    IF lv_styles IS NOT INITIAL.
+      rv_mm = rv_mm && |classDef tryblk fill:#eaf6ea,stroke:#2e7d32,color:#000
+| && lv_styles.
+    ENDIF.
     rv_mm = rv_mm && lv_edges.
 
   ENDMETHOD.
@@ -8433,6 +8457,20 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
 
     DATA(lv_ops) = lv_to_cnt - lv_fr_cnt.
     CHECK lv_ops > 0.
+
+    " A single statement is shown in full: hiding one line behind
+    " "1 operation" saves no space and tells the reader less.
+    IF lv_ops = 1.
+      LOOP AT it_lines INTO DATA(ls_op)
+        WHERE line > i_from AND line < i_to
+          AND kind = 'P' AND word IS NOT INITIAL.
+        CHECK c_decls NS | { ls_op-word } |.
+        cv_mm = cv_mm && |  { i_id }("{ scheme_label( ls_op-text ) }")\n|.
+        cv_edges = cv_edges && |  { i_prev }{ arrow( i_label ) }{ i_id }\n|.
+        r_node = i_id.
+        RETURN.
+      ENDLOOP.
+    ENDIF.
 
     cv_mm = cv_mm && |  { i_id }["{ lv_ops } { COND string(
       WHEN lv_ops = 1 THEN 'operation' ELSE 'operations' ) }"]\n|.
@@ -8635,8 +8673,8 @@ ENDCLASS.                    "lcl_debugger_script IMPLEMENTATION
 
 ****************************************************
 INTERFACE lif_abapmerge_marker.
-* abapmerge 0.16.7 - 2026-07-21T13:18:00.578Z
-  CONSTANTS c_merge_timestamp TYPE string VALUE `2026-07-21T13:18:00.578Z`.
+* abapmerge 0.16.7 - 2026-07-21T15:32:34.333Z
+  CONSTANTS c_merge_timestamp TYPE string VALUE `2026-07-21T15:32:34.333Z`.
   CONSTANTS c_abapmerge_version TYPE string VALUE `0.16.7`.
 ENDINTERFACE.
 ****************************************************
