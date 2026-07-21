@@ -46,6 +46,7 @@ CLASS zcl_smd_html_viewer DEFINITION DEFERRED.
 CLASS zcl_smd_debugger_base DEFINITION DEFERRED.
 CLASS zcl_smd_ddic DEFINITION DEFERRED.
 CLASS zcl_smd_common DEFINITION DEFERRED.
+CLASS zcl_smd_code_scheme DEFINITION DEFERRED.
 CLASS zcl_smd_appl DEFINITION DEFERRED.
 INTERFACE zif_smd_ai_agent_types.
 
@@ -208,6 +209,273 @@ CLASS zcl_smd_appl DEFINITION CREATE PUBLIC.
                                it_ref    TYPE REF TO data OPTIONAL
                                i_name    TYPE string
                                io_window TYPE REF TO zcl_smd_window.
+
+ENDCLASS.
+CLASS zcl_smd_window DEFINITION INHERITING FROM zcl_smd_popup CREATE PUBLIC.
+
+  PUBLIC SECTION.
+
+    TYPES: BEGIN OF ts_table,
+             ref      TYPE REF TO data,
+             kind(1),
+             value    TYPE string,
+             typename TYPE abap_abstypename,
+             fullname TYPE string,
+           END OF ts_table,
+
+           BEGIN OF ts_calls,
+             event TYPE string,
+             type  TYPE string,
+             name  TYPE string,
+             outer TYPE string,
+             inner TYPE string,
+           END OF ts_calls,
+           tt_calls TYPE STANDARD TABLE OF ts_calls WITH NON-UNIQUE KEY outer,
+
+           BEGIN OF ts_calls_line,
+             class     TYPE string,
+             eventtype TYPE string,
+             eventname TYPE string,
+             index     TYPE i,
+           END OF ts_calls_line,
+           tt_calls_line TYPE STANDARD TABLE OF ts_calls_line WITH NON-UNIQUE EMPTY KEY,
+
+           BEGIN OF ts_kword,
+             index     TYPE i,
+             line      TYPE i,
+             name      TYPE string,
+             from      TYPE i,
+             to        TYPE i,
+             tt_calls  TYPE tt_calls,
+             to_evtype TYPE string,
+             to_evname TYPE string,
+           END OF ts_kword,
+
+           BEGIN OF calculated_var ,
+             line TYPE i,
+             name TYPE string,
+           END OF calculated_var ,
+
+           BEGIN OF composed_vars,
+             line TYPE i,
+             name TYPE string,
+           END OF composed_vars,
+
+           tt_kword      TYPE STANDARD TABLE OF ts_kword WITH EMPTY KEY,
+           tt_calculated TYPE STANDARD TABLE OF calculated_var  WITH EMPTY KEY,
+           tt_composed   TYPE STANDARD TABLE OF composed_vars WITH EMPTY KEY,
+
+           BEGIN OF ts_params,
+             class     TYPE string,
+             event     TYPE string,
+             name      TYPE string,
+             param     TYPE string,
+             type      TYPE char1,
+             preferred TYPE char1,
+           END OF ts_params,
+           tt_params TYPE STANDARD TABLE OF ts_params WITH EMPTY KEY,
+
+           BEGIN OF ts_int_tabs,
+             eventtype TYPE string,
+             eventname TYPE string,
+             name      TYPE string,
+             type      TYPE string,
+           END OF ts_int_tabs,
+           tt_tabs TYPE STANDARD TABLE OF ts_int_tabs WITH EMPTY KEY,
+
+           BEGIN OF ts_progs,
+             include       TYPE program,
+             source        TYPE REF TO cl_ci_source_include,
+             scan          TYPE REF TO cl_ci_scan,
+             t_keytokens   TYPE tt_kword,
+             t_calculated  TYPE tt_calculated,
+             t_composed    TYPE tt_composed,
+             t_params      TYPE tt_params,
+             tt_tabs       TYPE tt_tabs,
+             tt_calls_line TYPE tt_calls_line,
+           END OF ts_progs,
+
+           BEGIN OF ts_locals,
+             program    TYPE tpda_program,
+             eventtype  TYPE tpda_event_type,
+             eventname  TYPE tpda_event,
+             loc_fill   TYPE xfeld,
+             locals_tab TYPE tpda_scr_locals_it,
+             mt_fs      TYPE tpda_scr_locals_it,
+           END OF ts_locals,
+
+           BEGIN OF ts_globals,
+             program     TYPE tpda_program,
+             glob_fill   TYPE xfeld,
+             globals_tab TYPE tpda_scr_globals_it,
+             mt_fs       TYPE tpda_scr_locals_it,
+           END OF ts_globals,
+
+           BEGIN OF ts_watch,
+             program TYPE string,
+             line    TYPE i,
+           END OF ts_watch,
+           tt_watch TYPE STANDARD  TABLE OF ts_watch WITH EMPTY KEY,
+
+           BEGIN OF ts_bpoint,
+             program TYPE string,
+             include TYPE string,
+             line    TYPE i,
+             type    TYPE char1,
+             del     TYPE char1,
+           END OF ts_bpoint,
+           tt_bpoints TYPE STANDARD TABLE OF ts_bpoint WITH EMPTY KEY.
+
+    TYPES tt_table TYPE STANDARD TABLE OF ts_table
+          WITH NON-UNIQUE DEFAULT KEY.
+    TYPES tt_html TYPE STANDARD TABLE OF w3html
+          WITH NON-UNIQUE DEFAULT KEY.
+
+    DATA: m_version              TYPE x, " 0 - alpha, 01 - beta
+          m_history              TYPE x,
+          m_visualization        TYPE x,
+          m_varhist              TYPE x,
+          m_zcode                TYPE x,
+          m_direction            TYPE x,
+          m_prg                  TYPE tpda_scr_prg_info,
+          m_debug_button         LIKE sy-ucomm,
+          m_show_step            TYPE xfeld,
+          mt_bpoints             TYPE tt_bpoints,
+          mo_debugger            TYPE REF TO zcl_smd_debugger_base,
+          mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
+          mo_splitter_var        TYPE REF TO cl_gui_splitter_container,
+          mo_splitter_steps      TYPE REF TO cl_gui_splitter_container,
+          mo_toolbar_container   TYPE REF TO cl_gui_container,
+          mo_importing_container TYPE REF TO cl_gui_container,
+          mo_locals_container    TYPE REF TO cl_gui_container,
+          mo_exporting_container TYPE REF TO cl_gui_container,
+          mo_code_container      TYPE REF TO cl_gui_container,
+          mo_ai_container        TYPE REF TO cl_gui_container,
+          mo_ai_prompt_container TYPE REF TO cl_gui_container,
+          mo_ai_result_container TYPE REF TO cl_gui_container,
+          mo_imp_exp_container   TYPE REF TO cl_gui_container,
+          mo_editor_container    TYPE REF TO cl_gui_container,
+          mo_steps_container     TYPE REF TO cl_gui_container,
+          mo_stack_container     TYPE REF TO cl_gui_container,
+          mo_hist_container      TYPE REF TO cl_gui_container,
+          mo_ai_splitter         TYPE REF TO cl_gui_splitter_container,
+          mo_ai_prompt           TYPE REF TO cl_gui_textedit,
+          mo_ai_result           TYPE REF TO cl_gui_html_viewer,
+          mo_ai_agent            TYPE REF TO object, "AI agent stripped from standalone build
+          mo_ai_log_viewer       TYPE REF TO zcl_smd_html_viewer,
+          mt_ai_pending_actions  TYPE zif_smd_ai_agent_types=>tt_action,
+          mo_code_viewer         TYPE REF TO cl_gui_abapedit,
+          mt_stack               TYPE TABLE OF zcl_smd_appl=>t_stack,
+          mo_toolbar             TYPE REF TO cl_gui_toolbar,
+          mo_salv_stack          TYPE REF TO cl_salv_table,
+          mo_salv_steps          TYPE REF TO cl_salv_table,
+          mo_salv_hist           TYPE REF TO cl_salv_table,
+          mt_breaks              TYPE tpda_bp_persistent_it,
+          mt_watch               TYPE tt_watch,
+          mt_coverage            TYPE tt_watch,
+          mv_ai_provider         TYPE string,
+          mv_ai_model            TYPE text255,
+          mv_ai_apikey           TYPE string,
+          m_ai_open              TYPE xfeld,
+          m_hist_depth           TYPE i,
+          m_start_stack          TYPE i,
+          mt_source              TYPE STANDARD  TABLE OF ts_progs,
+          mt_params              TYPE STANDARD  TABLE OF ts_params,
+          mt_locals_set          TYPE STANDARD TABLE OF ts_locals,
+          mt_globals_set         TYPE STANDARD TABLE OF ts_globals.
+
+    "raised after every debugger step or history navigation once the new state
+    "is displayed - open table popups refresh their content on it
+    EVENTS navigated.
+
+    METHODS: constructor IMPORTING i_debugger TYPE REF TO zcl_smd_debugger_base i_additional_name TYPE string OPTIONAL,
+      raise_navigated,
+      add_toolbar_buttons,
+      hnd_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode,
+      on_stack_double_click FOR EVENT double_click OF cl_salv_events_table IMPORTING row column,
+      set_program IMPORTING i_program TYPE program,
+      show_coverage,
+
+      on_editor_double_click  FOR EVENT dblclick OF cl_gui_abapedit IMPORTING sender,
+      on_editor_border_click  FOR EVENT border_click OF cl_gui_abapedit IMPORTING line cntrl_pressed_set shift_pressed_set,
+
+      set_program_line IMPORTING i_line LIKE sy-index OPTIONAL,
+      create_ai_panel,
+      run_ai_agent,
+      set_ai_text IMPORTING io_text TYPE REF TO cl_gui_textedit i_text TYPE string,
+      set_ai_result IMPORTING i_text TYPE string,
+      show_ai_log,
+      create_code_viewer,
+      show_stack.
+
+ENDCLASS.
+CLASS zcl_smd_code_scheme DEFINITION
+  FINAL
+  CREATE PRIVATE.
+
+  PUBLIC SECTION.
+
+    "! @parameter it_source | source lines of the include
+    "! @parameter it_kw     | parsed statement keywords (index / line / name)
+    "! @parameter io_scan   | scan of the same include; without it there is
+    "!                        no block information and only a title is drawn
+    "! @parameter i_title   | caption of the root node
+    CLASS-METHODS build
+      IMPORTING it_source    TYPE STANDARD TABLE
+                it_kw        TYPE zcl_smd_window=>tt_kword OPTIONAL
+                io_scan      TYPE REF TO cl_ci_scan OPTIONAL
+                i_title      TYPE string OPTIONAL
+      RETURNING VALUE(rv_mm) TYPE string.
+
+  PRIVATE SECTION.
+
+    TYPES:
+      BEGIN OF ts_line,
+        line  TYPE i,
+        text  TYPE string,
+        word  TYPE string,
+        depth TYPE i,
+        kind  TYPE char1,   " 'O'=opener 'B'=branch 'C'=closer 'P'=plain
+                            " 'S'=whole block on one line
+        end   TYPE i,       " last line of this header's own branch segment
+        all   TYPE i,       " openers: last line before the matching closer
+      END OF ts_line,
+      tt_line TYPE STANDARD TABLE OF ts_line WITH EMPTY KEY.
+
+    TYPES:
+      BEGIN OF ts_stmt,
+        index TYPE i,
+        line  TYPE i,
+        word  TYPE string,
+      END OF ts_stmt,
+      tt_stmt TYPE STANDARD TABLE OF ts_stmt WITH EMPTY KEY.
+
+    TYPES:
+      BEGIN OF ts_block,
+        open  TYPE i,
+        close TYPE i,
+        word  TYPE string,
+      END OF ts_block,
+      tt_block TYPE STANDARD TABLE OF ts_block WITH EMPTY KEY.
+
+    CONSTANTS c_apos TYPE c LENGTH 1 VALUE ''''.
+    CONSTANTS c_branches TYPE string VALUE ' ELSEIF ELSE WHEN CATCH CLEANUP '.
+
+    CLASS-METHODS analyze
+      IMPORTING it_source       TYPE STANDARD TABLE
+                it_kw           TYPE zcl_smd_window=>tt_kword
+                io_scan         TYPE REF TO cl_ci_scan
+      RETURNING VALUE(rt_lines) TYPE tt_line.
+
+    "! Closing keyword expected for an opening one, '' if not a block opener.
+    CLASS-METHODS closer_of
+      IMPORTING i_word          TYPE string
+      RETURNING VALUE(r_closer) TYPE string.
+
+    "! Statement text, trimmed and stripped of what would break a label.
+    CLASS-METHODS scheme_label
+      IMPORTING i_text        TYPE string
+      RETURNING VALUE(r_text) TYPE string.
 
 ENDCLASS.
 CLASS zcl_smd_common DEFINITION
@@ -508,20 +776,12 @@ CLASS zcl_smd_mermaid DEFINITION INHERITING FROM zcl_smd_popup CREATE PUBLIC.
 
   PUBLIC SECTION.
 
-    TYPES: BEGIN OF ts_if,
-             if_ind      TYPE i,
-             end_ind     TYPE i,
-             before_else TYPE i,
-           END OF ts_if,
-           tt_if TYPE STANDARD TABLE OF ts_if WITH EMPTY KEY.
     DATA: mo_debugger     TYPE REF TO zcl_smd_debugger_base,
           mo_mm_container TYPE REF TO cl_gui_container,
           mo_mm_toolbar   TYPE REF TO cl_gui_container,
           mo_toolbar      TYPE REF TO cl_gui_toolbar,
           mo_diagram      TYPE REF TO object,
           mv_type         TYPE string,
-          ms_if           TYPE ts_if,
-          mt_if           TYPE tt_if,
           mv_step         TYPE i,
           mt_steps        TYPE zcl_smd_appl=>tt_steps.
 
@@ -837,204 +1097,6 @@ CLASS zcl_smd_source_parser DEFINITION CREATE PUBLIC.
 
   PUBLIC SECTION.
     CLASS-METHODS: parse_tokens IMPORTING i_program TYPE program io_debugger TYPE REF TO zcl_smd_debugger_base.
-
-ENDCLASS.
-CLASS zcl_smd_window DEFINITION INHERITING FROM zcl_smd_popup CREATE PUBLIC.
-
-  PUBLIC SECTION.
-
-    TYPES: BEGIN OF ts_table,
-             ref      TYPE REF TO data,
-             kind(1),
-             value    TYPE string,
-             typename TYPE abap_abstypename,
-             fullname TYPE string,
-           END OF ts_table,
-
-           BEGIN OF ts_calls,
-             event TYPE string,
-             type  TYPE string,
-             name  TYPE string,
-             outer TYPE string,
-             inner TYPE string,
-           END OF ts_calls,
-           tt_calls TYPE STANDARD TABLE OF ts_calls WITH NON-UNIQUE KEY outer,
-
-           BEGIN OF ts_calls_line,
-             class     TYPE string,
-             eventtype TYPE string,
-             eventname TYPE string,
-             index     TYPE i,
-           END OF ts_calls_line,
-           tt_calls_line TYPE STANDARD TABLE OF ts_calls_line WITH NON-UNIQUE EMPTY KEY,
-
-           BEGIN OF ts_kword,
-             index     TYPE i,
-             line      TYPE i,
-             name      TYPE string,
-             from      TYPE i,
-             to        TYPE i,
-             tt_calls  TYPE tt_calls,
-             to_evtype TYPE string,
-             to_evname TYPE string,
-           END OF ts_kword,
-
-           BEGIN OF calculated_var ,
-             line TYPE i,
-             name TYPE string,
-           END OF calculated_var ,
-
-           BEGIN OF composed_vars,
-             line TYPE i,
-             name TYPE string,
-           END OF composed_vars,
-
-           tt_kword      TYPE STANDARD TABLE OF ts_kword WITH EMPTY KEY,
-           tt_calculated TYPE STANDARD TABLE OF calculated_var  WITH EMPTY KEY,
-           tt_composed   TYPE STANDARD TABLE OF composed_vars WITH EMPTY KEY,
-
-           BEGIN OF ts_params,
-             class     TYPE string,
-             event     TYPE string,
-             name      TYPE string,
-             param     TYPE string,
-             type      TYPE char1,
-             preferred TYPE char1,
-           END OF ts_params,
-           tt_params TYPE STANDARD TABLE OF ts_params WITH EMPTY KEY,
-
-           BEGIN OF ts_int_tabs,
-             eventtype TYPE string,
-             eventname TYPE string,
-             name      TYPE string,
-             type      TYPE string,
-           END OF ts_int_tabs,
-           tt_tabs TYPE STANDARD TABLE OF ts_int_tabs WITH EMPTY KEY,
-
-           BEGIN OF ts_progs,
-             include       TYPE program,
-             source        TYPE REF TO cl_ci_source_include,
-             scan          TYPE REF TO cl_ci_scan,
-             t_keytokens   TYPE tt_kword,
-             t_calculated  TYPE tt_calculated,
-             t_composed    TYPE tt_composed,
-             t_params      TYPE tt_params,
-             tt_tabs       TYPE tt_tabs,
-             tt_calls_line TYPE tt_calls_line,
-           END OF ts_progs,
-
-           BEGIN OF ts_locals,
-             program    TYPE tpda_program,
-             eventtype  TYPE tpda_event_type,
-             eventname  TYPE tpda_event,
-             loc_fill   TYPE xfeld,
-             locals_tab TYPE tpda_scr_locals_it,
-             mt_fs      TYPE tpda_scr_locals_it,
-           END OF ts_locals,
-
-           BEGIN OF ts_globals,
-             program     TYPE tpda_program,
-             glob_fill   TYPE xfeld,
-             globals_tab TYPE tpda_scr_globals_it,
-             mt_fs       TYPE tpda_scr_locals_it,
-           END OF ts_globals,
-
-           BEGIN OF ts_watch,
-             program TYPE string,
-             line    TYPE i,
-           END OF ts_watch,
-           tt_watch TYPE STANDARD  TABLE OF ts_watch WITH EMPTY KEY,
-
-           BEGIN OF ts_bpoint,
-             program TYPE string,
-             include TYPE string,
-             line    TYPE i,
-             type    TYPE char1,
-             del     TYPE char1,
-           END OF ts_bpoint,
-           tt_bpoints TYPE STANDARD TABLE OF ts_bpoint WITH EMPTY KEY.
-
-    TYPES tt_table TYPE STANDARD TABLE OF ts_table
-          WITH NON-UNIQUE DEFAULT KEY.
-    TYPES tt_html TYPE STANDARD TABLE OF w3html
-          WITH NON-UNIQUE DEFAULT KEY.
-
-    DATA: m_version              TYPE x, " 0 - alpha, 01 - beta
-          m_history              TYPE x,
-          m_visualization        TYPE x,
-          m_varhist              TYPE x,
-          m_zcode                TYPE x,
-          m_direction            TYPE x,
-          m_prg                  TYPE tpda_scr_prg_info,
-          m_debug_button         LIKE sy-ucomm,
-          m_show_step            TYPE xfeld,
-          mt_bpoints             TYPE tt_bpoints,
-          mo_debugger            TYPE REF TO zcl_smd_debugger_base,
-          mo_splitter_code       TYPE REF TO cl_gui_splitter_container,
-          mo_splitter_var        TYPE REF TO cl_gui_splitter_container,
-          mo_splitter_steps      TYPE REF TO cl_gui_splitter_container,
-          mo_toolbar_container   TYPE REF TO cl_gui_container,
-          mo_importing_container TYPE REF TO cl_gui_container,
-          mo_locals_container    TYPE REF TO cl_gui_container,
-          mo_exporting_container TYPE REF TO cl_gui_container,
-          mo_code_container      TYPE REF TO cl_gui_container,
-          mo_ai_container        TYPE REF TO cl_gui_container,
-          mo_ai_prompt_container TYPE REF TO cl_gui_container,
-          mo_ai_result_container TYPE REF TO cl_gui_container,
-          mo_imp_exp_container   TYPE REF TO cl_gui_container,
-          mo_editor_container    TYPE REF TO cl_gui_container,
-          mo_steps_container     TYPE REF TO cl_gui_container,
-          mo_stack_container     TYPE REF TO cl_gui_container,
-          mo_hist_container      TYPE REF TO cl_gui_container,
-          mo_ai_splitter         TYPE REF TO cl_gui_splitter_container,
-          mo_ai_prompt           TYPE REF TO cl_gui_textedit,
-          mo_ai_result           TYPE REF TO cl_gui_html_viewer,
-          mo_ai_agent            TYPE REF TO object, "AI agent stripped from standalone build
-          mo_ai_log_viewer       TYPE REF TO zcl_smd_html_viewer,
-          mt_ai_pending_actions  TYPE zif_smd_ai_agent_types=>tt_action,
-          mo_code_viewer         TYPE REF TO cl_gui_abapedit,
-          mt_stack               TYPE TABLE OF zcl_smd_appl=>t_stack,
-          mo_toolbar             TYPE REF TO cl_gui_toolbar,
-          mo_salv_stack          TYPE REF TO cl_salv_table,
-          mo_salv_steps          TYPE REF TO cl_salv_table,
-          mo_salv_hist           TYPE REF TO cl_salv_table,
-          mt_breaks              TYPE tpda_bp_persistent_it,
-          mt_watch               TYPE tt_watch,
-          mt_coverage            TYPE tt_watch,
-          mv_ai_provider         TYPE string,
-          mv_ai_model            TYPE text255,
-          mv_ai_apikey           TYPE string,
-          m_ai_open              TYPE xfeld,
-          m_hist_depth           TYPE i,
-          m_start_stack          TYPE i,
-          mt_source              TYPE STANDARD  TABLE OF ts_progs,
-          mt_params              TYPE STANDARD  TABLE OF ts_params,
-          mt_locals_set          TYPE STANDARD TABLE OF ts_locals,
-          mt_globals_set         TYPE STANDARD TABLE OF ts_globals.
-
-    "raised after every debugger step or history navigation once the new state
-    "is displayed - open table popups refresh their content on it
-    EVENTS navigated.
-
-    METHODS: constructor IMPORTING i_debugger TYPE REF TO zcl_smd_debugger_base i_additional_name TYPE string OPTIONAL,
-      raise_navigated,
-      add_toolbar_buttons,
-      hnd_toolbar FOR EVENT function_selected OF cl_gui_toolbar IMPORTING fcode,
-      on_stack_double_click FOR EVENT double_click OF cl_salv_events_table IMPORTING row column,
-      set_program IMPORTING i_program TYPE program,
-      show_coverage,
-
-      on_editor_double_click  FOR EVENT dblclick OF cl_gui_abapedit IMPORTING sender,
-      on_editor_border_click  FOR EVENT border_click OF cl_gui_abapedit IMPORTING line cntrl_pressed_set shift_pressed_set,
-
-      set_program_line IMPORTING i_line LIKE sy-index OPTIONAL,
-      create_ai_panel,
-      run_ai_agent,
-      set_ai_text IMPORTING io_text TYPE REF TO cl_gui_textedit i_text TYPE string,
-      set_ai_result IMPORTING i_text TYPE string,
-      show_ai_log,
-      create_code_viewer,
-      show_stack.
 
 ENDCLASS.
 CLASS zcl_smd_table_viewer DEFINITION
@@ -5147,524 +5209,27 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
 
   METHOD magic_search.
 
-    DATA: add         TYPE xfeld,
-          mm_string   TYPE string,
-          sub         TYPE string,
-          form        TYPE string,
-          direction   TYPE string,
-          box_s       TYPE string,
-          box_e       TYPE string,
-          ind2        TYPE i,
-          start       TYPE i,
-          end         TYPE i,
-          bool        TYPE string,
-          block_first TYPE i,
-          els_before  TYPE i.
+    " Control-structure scheme of the include on display. The former
+    " implementation paired IF/ENDIF and counted nesting by hand; the
+    " scanner already carries that information, so it is read from there.
+    READ TABLE mo_debugger->mo_window->mt_source
+      WITH KEY include = mo_debugger->mo_window->m_prg-include INTO DATA(ls_src).
+    IF sy-subrc <> 0.
+      READ TABLE mo_debugger->mo_window->mt_source INDEX 1 INTO ls_src.
+    ENDIF.
+    CHECK ls_src-source IS BOUND.
 
-    TYPES: BEGIN OF ts_line,
-             cond       TYPE string,
-             include    TYPE string,
-             line       TYPE i,
-             ind        TYPE i,
-             event      TYPE string,
-             stack      TYPE i,
-             code       TYPE string,
-             arrow      TYPE string,
-             subname    TYPE string,
-             del        TYPE flag,
-             els_before TYPE i,
-             els_after  TYPE i,
-           END OF ts_line.
+    DATA(lv_mm) = zcl_smd_code_scheme=>build(
+      it_source = ls_src-source->lines
+      it_kw     = ls_src-t_keytokens
+      io_scan   = ls_src-scan
+      i_title   = CONV string( ls_src-include ) ).
 
-    DATA: line      TYPE ts_line,
-          lines     TYPE STANDARD TABLE OF ts_line,
-          pre_stack TYPE ts_line,
-          opened    TYPE i.
-
-    CLEAR: mo_debugger->mo_window->mt_watch,
-           mt_if, ms_if. "stale if/endif pairs of a previous run corrupt the graph
-
-    IF lines( mo_debugger->mt_steps ) > 1.
-      DATA(steps) = mo_debugger->mt_steps.
-    ELSE.
-      code_execution_scanner( ).
-      steps = mt_steps.
+    IF i_direction = 'TB'.
+      REPLACE FIRST OCCURRENCE OF 'flowchart LR' IN lv_mm WITH 'flowchart TD'.
     ENDIF.
 
-    DATA: yes TYPE xfeld.
-    DATA(selected_var) = mo_debugger->mt_selected_var.
-
-    LOOP AT steps INTO DATA(step).
-      READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = step-include INTO DATA(source).
-      READ TABLE source-t_keytokens WITH KEY line = step-line INTO DATA(keyword).
-      LOOP AT keyword-tt_calls INTO DATA(call).
-
-        READ TABLE selected_var WITH KEY name = call-outer TRANSPORTING NO FIELDS.
-        IF sy-subrc = 0 OR mo_debugger->mt_selected_var IS INITIAL.
-          yes = abap_true.
-        ENDIF.
-
-        READ TABLE selected_var WITH KEY name = call-inner TRANSPORTING NO FIELDS.
-        IF sy-subrc = 0 OR mo_debugger->mt_selected_var IS INITIAL.
-          yes = abap_true.
-        ENDIF.
-      ENDLOOP.
-      IF yes = abap_true.
-        LOOP AT keyword-tt_calls INTO call.
-          READ TABLE selected_var WITH KEY name = call-outer TRANSPORTING NO FIELDS.
-          IF sy-subrc <> 0.
-            APPEND INITIAL LINE TO  selected_var ASSIGNING FIELD-SYMBOL(<selected>).
-            <selected>-name = call-outer.
-          ENDIF.
-
-          READ TABLE selected_var WITH KEY name = call-inner TRANSPORTING NO FIELDS.
-          IF sy-subrc <> 0.
-            APPEND INITIAL LINE TO  selected_var ASSIGNING <selected>.
-            <selected>-name = call-inner.
-          ENDIF.
-        ENDLOOP.
-      ENDIF.
-    ENDLOOP.
-
-    "deleting empty cycles.
-    DATA: prev    LIKE LINE OF steps,
-          pre_key TYPE string.
-
-    READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = step-include INTO source.
-
-    LOOP AT steps ASSIGNING FIELD-SYMBOL(<step>).
-      DATA(ind) = sy-tabix.
-      READ TABLE source-t_keytokens WITH KEY line = <step>-line INTO DATA(key).
-      IF prev IS NOT INITIAL.
-        IF ( key-name = 'ENDDO' OR key-name = 'ENDWHILE' OR key-name = 'ENDLOOP' OR key-name = 'ENDIF' )  AND
-           ( pre_key = 'DO' OR pre_key = 'LOOP'  OR pre_key = 'WHILE'  OR pre_key = 'IF' ).
-          <step>-first = 'D'."to delete
-          READ TABLE steps INDEX ind - 1 ASSIGNING FIELD-SYMBOL(<step_prev>).
-          <step_prev>-first = 'D'.
-        ENDIF.
-      ENDIF.
-      prev = <step>.
-      pre_key = key-name.
-    ENDLOOP.
-
-    DELETE steps WHERE first = 'D'.
-
-    SORT steps BY step DESCENDING.
-
-    "collecting dependents variables
-    LOOP AT steps INTO step.
-
-      READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = step-include INTO source.
-
-      LOOP AT source-t_calculated INTO DATA(calculated_var) WHERE line = step-line.
-        READ TABLE selected_var WITH KEY name = calculated_var-name TRANSPORTING NO FIELDS.
-        IF sy-subrc = 0.
-
-          LOOP AT source-t_composed INTO DATA(composed_var) WHERE line = step-line.
-            READ TABLE selected_var WITH KEY name = composed_var-name TRANSPORTING NO FIELDS.
-            IF sy-subrc <> 0.
-              APPEND INITIAL LINE TO  selected_var ASSIGNING <selected>.
-              <selected>-name = composed_var-name.
-            ENDIF.
-          ENDLOOP.
-        ENDIF.
-        "adding returning values
-*        LOOP AT source-t_params INTO DATA(param).
-*          READ TABLE mo_debugger->mt_selected_var WITH KEY name = param-param TRANSPORTING NO FIELDS.
-*          IF sy-subrc <> 0.
-*            APPEND INITIAL LINE TO  mo_debugger->mt_selected_var ASSIGNING <selected>.
-*            <selected>-name = param-param.
-*          ENDIF.
-*        ENDLOOP.
-      ENDLOOP.
-
-      READ TABLE source-t_keytokens WITH KEY line = step-line INTO keyword.
-      LOOP AT keyword-tt_calls INTO call.
-
-        READ TABLE selected_var WITH KEY name = call-outer TRANSPORTING NO FIELDS.
-        IF sy-subrc = 0.
-          APPEND INITIAL LINE TO  selected_var ASSIGNING <selected>.
-          <selected>-name = call-inner.
-        ENDIF.
-      ENDLOOP.
-
-    ENDLOOP.
-    SORT selected_var.
-    DELETE ADJACENT DUPLICATES FROM selected_var.
-
-    "collecting watchpoints
-    CLEAR mo_debugger->mo_window->mt_coverage.
-
-    LOOP AT  steps INTO step.
-
-      READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = step-include INTO source.
-      READ TABLE source-t_keytokens WITH KEY line = step-line INTO key.
-
-      CLEAR line-cond.
-      IF key-name = 'IF' OR key-name = 'ELSE' OR key-name = 'ENDIF' OR key-name = 'ELSEIF' OR
-         key-name = 'CASE' OR key-name = 'WHEN' OR key-name = 'ENDCASE' OR
-          key-name = 'DO' OR key-name = 'ENDDO'  OR key-name = 'LOOP'  OR key-name = 'ENDLOOP' OR key-name = 'WHILE' OR key-name = 'ENDWHILE'.
-        APPEND INITIAL LINE TO mo_debugger->mo_window->mt_watch ASSIGNING FIELD-SYMBOL(<watch>).
-
-        <watch>-program = step-program.
-        <watch>-line = line-line = step-line.
-
-        INSERT line INTO lines INDEX 1 ASSIGNING FIELD-SYMBOL(<line>).
-        <line>-cond = key-name.
-        <line>-event = step-eventname.
-        <line>-stack = step-stacklevel.
-        <line>-include = step-include.
-      ENDIF.
-      CLEAR ind.
-      LOOP AT  source-t_calculated INTO calculated_var WHERE line = step-line.
-        ADD 1 TO ind.
-        LOOP AT source-t_composed INTO composed_var WHERE line = step-line.
-          READ TABLE selected_var WITH KEY name = composed_var-name TRANSPORTING NO FIELDS.
-          IF sy-subrc = 0.
-            APPEND INITIAL LINE TO  selected_var ASSIGNING <selected>.
-            <selected>-name = composed_var-name.
-          ENDIF.
-        ENDLOOP.
-
-        READ TABLE selected_var WITH KEY name = calculated_var-name TRANSPORTING NO FIELDS.
-        IF sy-subrc = 0 OR mo_debugger->mt_selected_var IS INITIAL.
-
-          APPEND INITIAL LINE TO mo_debugger->mo_window->mt_watch ASSIGNING <watch>.
-          <watch>-program = step-program.
-          <watch>-line = line-line = step-line.
-
-          "should be commented for Smart debugger
-*          LOOP AT lines ASSIGNING <line> WHERE line = line-line AND event = step-eventname AND stack = step-stacklevel .
-*            <line>-del = abap_true.
-*          ENDLOOP.
-          IF ind = 1.
-            line-event = step-eventname.
-            line-stack = step-stacklevel.
-            line-include = step-include.
-            INSERT line INTO lines INDEX 1.
-          ENDIF.
-        ENDIF.
-
-      ENDLOOP.
-
-    ENDLOOP.
-
-    DELETE lines WHERE del = abap_true.
-
-    "getting code texts and calls params
-    LOOP AT lines ASSIGNING <line>.
-      ind = sy-tabix.
-
-      READ TABLE mo_debugger->mo_window->mt_source WITH KEY include = <line>-include INTO source.
-      READ TABLE source-t_keytokens WITH KEY line = <line>-line INTO keyword.
-      LOOP AT source-scan->tokens FROM keyword-from TO keyword-to INTO DATA(token).
-        IF token-str = 'USING' OR token-str = 'EXPORTING' OR token-str = 'IMPORTING' OR token-str = 'CHANGING'.
-          EXIT.
-        ENDIF.
-        IF <line>-code IS INITIAL.
-          <line>-code = token-str.
-        ELSE.
-          <line>-code = |{  <line>-code } { token-str }|.
-        ENDIF.
-      ENDLOOP.
-
-      IF keyword-to_evname IS NOT INITIAL.
-        SORT keyword-tt_calls BY outer.
-        DELETE ADJACENT DUPLICATES FROM keyword-tt_calls.
-        LOOP AT keyword-tt_calls INTO call.
-          IF sy-tabix <> 1.
-            <line>-arrow = |{ <line>-arrow }, |.
-          ENDIF.
-          <line>-arrow  = |{ <line>-arrow  } { call-outer } { call-type } { call-inner }|.
-          <line>-subname = call-name.
-          REPLACE ALL OCCURRENCES OF '''' IN <line>-subname WITH ''.
-          REPLACE ALL OCCURRENCES OF '"' IN  <line>-code WITH ''.
-        ENDLOOP.
-      ENDIF.
-      REPLACE ALL OCCURRENCES OF '''' IN <line>-subname WITH ''.
-      REPLACE ALL OCCURRENCES OF '(' IN <line>-arrow WITH ''.
-      REPLACE ALL OCCURRENCES OF ')' IN <line>-arrow WITH ''.
-      REPLACE ALL OCCURRENCES OF '(' IN <line>-subname WITH ''.
-      REPLACE ALL OCCURRENCES OF ')' IN <line>-subname WITH ''.
-    ENDLOOP.
-
-    "check subform execution steps existance and if/case structures build
-
-    DATA: if_depth   TYPE i,
-          when_count TYPE i.
-    LOOP AT lines ASSIGNING <line> WHERE code <> 'DO' AND code <> 'ENDDO' AND code <> 'WHILE' AND code <> 'ENDWHILE' AND code <> 'LOOP' AND code <> 'ENDLOOP' .
-      <line>-ind = sy-tabix.
-
-      FIELD-SYMBOLS: <if> TYPE ts_if.
-      IF <line>-cond = 'IF' OR  <line>-cond = 'CASE'.
-        ADD 1 TO if_depth.
-        CLEAR when_count.
-        APPEND INITIAL LINE TO mt_if  ASSIGNING <if>.
-        <if>-if_ind = <line>-ind.
-
-      ENDIF.
-
-      IF <line>-cond = 'ENDIF' OR <line>-cond = 'ENDCASE'.
-        "steps may start mid-block: ENDIF without a recorded IF must not dump
-        IF <if> IS ASSIGNED.
-          <if>-end_ind = <line>-ind.
-        ENDIF.
-        SUBTRACT 1 FROM if_depth.
-        UNASSIGN <if>.
-        LOOP AT mt_if  ASSIGNING <if> WHERE end_ind = 0.
-        ENDLOOP.
-      ENDIF.
-
-      IF <line>-cond = 'WHEN'.
-        ADD 1 TO when_count.
-      ENDIF.
-
-      IF <line>-cond = 'ELSE' OR <line>-cond = 'ELSEIF'.
-
-        <line>-els_before = els_before.
-        <line>-els_after = <line>-ind.
-        DATA(counter) = <line>-ind + 1.
-        DO.
-          READ TABLE lines INDEX counter INTO line.
-          IF sy-subrc <> 0.
-            CLEAR <line>-els_after.
-            EXIT.
-          ENDIF.
-
-          IF line-cond = 'ELSE' OR line-cond = 'ELSEIF'.
-            CLEAR <line>-els_after.
-            EXIT.
-          ELSEIF  line-cond <> 'DO' AND line-cond <> 'ENDDO' AND line-cond <> 'WHILE' AND line-cond <> 'ENDWHILE' AND line-cond <> 'LOOP' AND line-cond <> 'ENDLOOP'.
-            <line>-els_after = counter.
-            EXIT.
-          ELSE.
-            ADD 1 TO counter.
-
-          ENDIF.
-        ENDDO.
-        IF when_count = 1. "to refactor
-*          <if>-if_ind = els_before.
-*          CLEAR <line>-els_before.
-        ENDIF.
-      ENDIF.
-
-      IF <line>-cond = 'WHEN'.
-
-        <line>-els_before = els_before.
-        <line>-els_after = <line>-ind.
-        counter = <line>-ind + 1.
-        DO.
-          READ TABLE lines INDEX counter INTO line.
-          IF sy-subrc <> 0.
-            CLEAR <line>-els_after.
-            EXIT.
-          ENDIF.
-
-          IF line-cond = 'WHEN'.
-            CLEAR <line>-els_after.
-            EXIT.
-          ELSEIF  line-cond <> 'DO' AND line-cond <> 'ENDDO' AND line-cond <> 'WHILE' AND line-cond <> 'ENDWHILE' AND line-cond <> 'LOOP' AND line-cond <> 'ENDLOOP'.
-            <line>-els_after = counter.
-            EXIT.
-          ELSE.
-            ADD 1 TO counter.
-
-          ENDIF.
-        ENDDO.
-        IF when_count = 1 AND <if> IS ASSIGNED.
-          <if>-if_ind = els_before.
-          CLEAR <line>-els_before.
-        ENDIF.
-      ENDIF.
-
-      IF <line>-cond <> 'ELSE' AND <line>-cond <> 'ELSEIF' AND <line>-cond <> 'WHEN'.
-        els_before = <line>-ind.
-      ELSE.
-        CLEAR   els_before.
-      ENDIF.
-
-      READ TABLE lines WITH KEY event = <line>-subname TRANSPORTING NO FIELDS.
-      IF sy-subrc <> 0.
-        CLEAR <line>-arrow.
-      ENDIF.
-    ENDLOOP.
-
-    IF mt_if IS INITIAL AND ms_if-if_ind IS NOT INITIAL.
-      INSERT ms_if INTO mt_if INDEX 1.
-    ENDIF.
-
-    IF lines( lines ) > 0.
-      IF lines[ lines( lines ) ]-arrow IS NOT INITIAL.
-        CLEAR lines[ lines( lines ) ]-arrow .
-      ENDIF.
-    ENDIF.
-
-    "creating mermaid code
-    CHECK lines IS NOT INITIAL.
-
-    IF i_direction IS INITIAL.
-      IF lines( lines ) < 100.
-        direction = 'LR'.
-      ELSE.
-        direction = 'TB'.
-      ENDIF.
-    ELSE.
-      direction = i_direction.
-    ENDIF.
-
-    mm_string = |graph { direction }\n |.
-
-    LOOP AT lines INTO line WHERE cond <> 'ELSE' AND cond <> 'ELSEIF' AND  cond <> 'WHEN'.
-
-      ind = sy-tabix.
-
-      IF line-cond IS INITIAL.
-        box_s = '('.
-        box_e = ')'.
-      ELSE.
-        box_s = '{'.
-        box_e = '}'.
-      ENDIF.
-
-      IF pre_stack IS INITIAL.
-        pre_stack = line.
-      ENDIF.
-
-      IF ( pre_stack-stack > line-stack OR pre_stack-event <> line-event ) AND opened > 0 AND sub IS INITIAL.
-        IF pre_stack-stack = line-stack AND pre_stack-event <> line-event.
-          DATA(times) = 1.
-        ELSE.
-          times = pre_stack-stack - line-stack.
-        ENDIF.
-
-        DO times TIMES.
-          mm_string = |{ mm_string } end\n|.
-          SUBTRACT 1 FROM opened.
-          IF opened = 0.
-            EXIT.
-          ENDIF.
-        ENDDO.
-
-      ENDIF.
-      DATA: name TYPE string.
-      IF    line-cond = 'LOOP' OR line-cond = 'DO' OR line-cond = 'WHILE' OR line-arrow IS NOT INITIAL .
-        IF line-arrow IS NOT INITIAL.
-          mm_string = |{ mm_string }{ ind }{ box_s }"{ line-code }"{ box_e }\n|.
-          pre_stack = line.
-
-        ENDIF.
-
-        "IF strlen( line-code ) > 50.
-        "lv_name = line-code+0(50).
-        "ELSE.
-        name = line-code.
-        "ENDIF.
-        REPLACE ALL OCCURRENCES OF `PERFORM` IN name WITH `FORM` IN CHARACTER MODE.
-        REPLACE ALL OCCURRENCES OF `CALL FUNCTION` IN name WITH `FUNCTION` IN CHARACTER MODE.
-        REPLACE ALL OCCURRENCES OF `CALL METHOD` IN name WITH `METHOD` IN CHARACTER MODE.
-        REPLACE ALL OCCURRENCES OF `<` IN name WITH `` IN CHARACTER MODE.
-        REPLACE ALL OCCURRENCES OF '>' IN name WITH `` IN CHARACTER MODE.
-        REPLACE ALL OCCURRENCES OF `-` IN name WITH `~` IN CHARACTER MODE.
-        REPLACE ALL OCCURRENCES OF ` ` IN name WITH `&nbsp;` IN CHARACTER MODE.
-
-        mm_string = |{ mm_string } subgraph S{ ind }["{ name }"]\n  direction { direction }\n|.
-        ADD 1 TO opened.
-        start = ind.
-        CONTINUE.
-      ENDIF.
-
-      IF line-cond = 'ENDLOOP' OR line-cond = 'ENDDO' OR line-cond = 'ENDWHILE'.
-        SUBTRACT 1 FROM opened.
-        mm_string = |{ mm_string } end\n|.
-        CONTINUE.
-      ENDIF.
-
-      mm_string = |{ mm_string }{ ind }{ box_s }"{ line-code }"{ box_e }\n|.
-      pre_stack = line.
-
-    ENDLOOP.
-
-    DO opened TIMES.
-      mm_string = |{ mm_string } end\n|.
-      SUBTRACT 1 FROM opened.
-    ENDDO.
-
-    DATA: if_ind TYPE i.
-    CLEAR pre_stack.
-    LOOP AT lines INTO line WHERE cond <> 'LOOP' AND cond <> 'DO' AND cond <> 'WHILE' AND cond <> 'ENDLOOP' AND cond <> 'ENDDO' AND cond <> 'ENDWHILE'.
-
-      IF line-cond = 'IF' OR line-cond = 'CASE' .
-        ADD 1 TO if_ind.
-        READ TABLE mt_if INDEX if_ind INTO ms_if.
-      ENDIF.
-      IF pre_stack IS INITIAL.
-        IF line-cond = 'WHEN' OR line-cond = 'ELSE' OR line-cond = 'ELSEIF'.
-          IF <if> IS ASSIGNED AND <if>-if_ind > 0 AND <if>-if_ind <= lines( lines ).
-            pre_stack = lines[ <if>-if_ind ].
-          ELSE.
-            pre_stack = line. "no recorded opening IF/CASE - fall back safely
-          ENDIF.
-        ELSE.
-          pre_stack = line.
-
-          IF line-arrow IS NOT INITIAL.
-            sub = '|"' && line-arrow && '"|'.
-          ELSE.
-            CLEAR sub.
-          ENDIF.
-
-          CONTINUE.
-        ENDIF.
-
-      ENDIF.
-
-      IF line-cond = 'ELSE' OR line-cond = 'ELSEIF' OR line-cond = 'WHEN'.
-        bool = '|' && line-code && '|'.
-        IF line-els_after IS NOT INITIAL.
-          mm_string = |{ mm_string }{ ms_if-if_ind }-->{ bool }{ line-els_after }\n|.
-          DATA(diff) = ms_if-end_ind - line-els_after.
-          DATA(last_els) = line-els_after.
-          IF line-cond <> 'WHEN' AND line-cond <> 'ELSEIF'  AND  diff > 1 AND line-els_after <> ms_if-end_ind.
-            mm_string = |{ mm_string }{  line-els_after }-->{ ms_if-end_ind }\n|.
-          ENDIF.
-        ELSE.
-          mm_string = |{ mm_string }{ ms_if-if_ind }-->{ bool }{ ms_if-end_ind }\n|.
-        ENDIF.
-
-        IF line-els_before IS NOT INITIAL AND line-els_before <> ms_if-if_ind.
-          mm_string = |{ mm_string }{ line-els_before }-->{ ms_if-end_ind }\n|.
-        ENDIF.
-
-        IF lines[ line-ind + 1 ]-cond <> 'ENDIF' AND lines[ line-ind + 1 ]-cond <> 'ENDCASE'.
-          CLEAR pre_stack.
-        ENDIF.
-        CONTINUE.
-      ENDIF.
-
-      IF   pre_stack-cond NE 'ELSE' AND pre_stack-cond NE 'ELSEIF' AND pre_stack-cond NE 'WHEN' AND NOT ( last_els = line-ind ).
-
-        mm_string = |{ mm_string }{ pre_stack-ind }-->{ sub }{ line-ind }\n|.
-
-        IF line-arrow IS NOT INITIAL.
-          sub = '|"' && line-arrow && '"|'.
-        ELSE.
-          CLEAR sub.
-        ENDIF.
-
-      ENDIF.
-
-      pre_stack = line.
-
-      IF line-cond = 'ENDIF' OR line-cond = 'ENDCASE'.
-        DELETE mt_if INDEX if_ind.
-        SUBTRACT 1 FROM if_ind.
-        READ TABLE mt_if INDEX if_ind INTO ms_if.
-      ENDIF.
-
-    ENDLOOP.
-    mm_string = |{  mm_string }\n|.
-
-    open_mermaid( mm_string ).
+    open_mermaid( lv_mm ).
   ENDMETHOD.
 
   METHOD parse_call.
@@ -8451,6 +8016,315 @@ CLASS ZCL_SMD_COMMON IMPLEMENTATION.
   endmethod.
 ENDCLASS.
 
+CLASS zcl_smd_code_scheme IMPLEMENTATION.
+  METHOD build.
+
+    TYPES: BEGIN OF ts_prev,
+             depth TYPE i,
+             node  TYPE string,
+             line  TYPE i,
+           END OF ts_prev.
+    DATA lt_prev TYPE STANDARD TABLE OF ts_prev WITH EMPTY KEY.
+    DATA lv_edges TYPE string.
+
+    TYPES: BEGIN OF ts_sub,
+             endline TYPE i,
+           END OF ts_sub.
+    DATA lt_sub TYPE STANDARD TABLE OF ts_sub WITH EMPTY KEY.
+
+    DATA(lt_lines) = analyze( it_source = it_source it_kw = it_kw io_scan = io_scan ).
+
+    " Running count of plain statements, so the number of operations between
+    " two lines is one subtraction rather than a scan.
+    DATA lt_ops TYPE STANDARD TABLE OF i WITH EMPTY KEY.
+    DATA(lv_run) = 0.
+    LOOP AT lt_lines INTO DATA(ls_cnt).
+      IF ls_cnt-kind = 'P' AND ls_cnt-word IS NOT INITIAL.
+        lv_run = lv_run + 1.
+      ENDIF.
+      APPEND lv_run TO lt_ops.
+    ENDLOOP.
+
+    rv_mm = |flowchart LR\n|.
+
+    " A METHOD/FORM line is the root and carries the qualified name
+    DATA(lv_root) = 0.
+    LOOP AT lt_lines INTO DATA(ls_root)
+      WHERE kind = 'O' AND ( word = 'METHOD' OR word = 'FORM' OR word = 'MODULE' ).
+      lv_root = ls_root-line.
+      EXIT.
+    ENDLOOP.
+
+    DATA(lv_prev_node)  = ||.
+    DATA(lv_prev_depth) = 0.
+    DATA(lv_prev_line)  = 0.
+    IF lv_root = 0.
+      rv_mm = rv_mm && |  start(["{ scheme_label( i_title ) }"])\n|.
+      lv_prev_node = |start|.
+    ENDIF.
+
+    LOOP AT lt_lines INTO DATA(ls_line).
+
+      " Close every frame whose block ended before this line
+      WHILE lines( lt_sub ) > 0.
+        READ TABLE lt_sub INTO DATA(ls_sub) INDEX 1.
+        IF ls_sub-endline >= ls_line-line. EXIT. ENDIF.
+        rv_mm = rv_mm && |  end\n|.
+        DELETE lt_sub INDEX 1.
+      ENDWHILE.
+
+      CHECK ls_line-kind = 'O' OR ls_line-kind = 'B' OR ls_line-kind = 'S'.
+
+      DATA(lv_node)  = |n{ ls_line-line }|.
+      DATA(lv_label) = COND string(
+        WHEN ls_line-line = lv_root AND i_title IS NOT INITIAL
+        THEN scheme_label( i_title )
+        ELSE scheme_label( ls_line-text ) ).
+
+      " A loop is the frame around its body, not a node of its own
+      IF ls_line-kind = 'O' AND ls_line-all > ls_line-line
+        AND ( ls_line-word = 'LOOP' OR ls_line-word = 'DO' OR ls_line-word = 'WHILE' ).
+        rv_mm = rv_mm && |  subgraph g{ ls_line-line }["{ lv_label }"]\n|.
+        rv_mm = rv_mm && |  direction LR\n|.
+        INSERT VALUE #( endline = ls_line-all ) INTO lt_sub INDEX 1.
+        CONTINUE.
+      ENDIF.
+
+      DATA(lv_shape) = SWITCH string( ls_line-word
+        WHEN 'IF' OR 'CASE'                 THEN |{ lv_node }\{"{ lv_label }"\}|
+        WHEN 'METHOD' OR 'FORM' OR 'MODULE' THEN |{ lv_node }[["{ lv_label }"]]|
+        ELSE                                     |{ lv_node }("{ lv_label }")| ).
+      rv_mm = rv_mm && |  { lv_shape }\n|.
+
+      " Edge source: previous node of the same level, or the enclosing
+      " header when this is the first structure line of a block.
+      DATA(lv_from)      = lv_prev_node.
+      DATA(lv_from_line) = lv_prev_line.
+      LOOP AT lt_prev INTO DATA(ls_prev) WHERE depth = ls_line-depth.
+        lv_from      = ls_prev-node.
+        lv_from_line = ls_prev-line.
+      ENDLOOP.
+      IF ls_line-depth > lv_prev_depth.
+        lv_from      = lv_prev_node.
+        lv_from_line = lv_prev_line.
+      ENDIF.
+
+      IF lv_from IS NOT INITIAL.
+        DATA(lv_ops) = 0.
+        IF ls_line-line > lv_from_line + 1 AND lv_from_line > 0.
+          READ TABLE lt_ops INTO DATA(lv_to_cnt) INDEX ls_line-line - 1.
+          IF sy-subrc = 0.
+            READ TABLE lt_ops INTO DATA(lv_fr_cnt) INDEX lv_from_line.
+            IF sy-subrc = 0. lv_ops = lv_to_cnt - lv_fr_cnt. ENDIF.
+          ENDIF.
+        ENDIF.
+
+        IF lv_ops > 0.
+          DATA(lv_ops_node) = |o{ ls_line-line }|.
+          rv_mm = rv_mm && |  { lv_ops_node }["{ lv_ops } { COND string(
+            WHEN lv_ops = 1 THEN 'operation' ELSE 'operations' ) }"]\n|.
+          lv_edges = lv_edges && |  { lv_from } --> { lv_ops_node }\n|.
+          lv_edges = lv_edges && |  { lv_ops_node } --> { lv_node }\n|.
+        ELSE.
+          lv_edges = lv_edges && |  { lv_from } --> { lv_node }\n|.
+        ENDIF.
+      ENDIF.
+
+      DELETE lt_prev WHERE depth >= ls_line-depth.
+      APPEND VALUE #( depth = ls_line-depth node = lv_node line = ls_line-line ) TO lt_prev.
+      lv_prev_node  = lv_node.
+      lv_prev_depth = ls_line-depth.
+      lv_prev_line  = ls_line-line.
+    ENDLOOP.
+
+    WHILE lines( lt_sub ) > 0.
+      rv_mm = rv_mm && |  end\n|.
+      DELETE lt_sub INDEX 1.
+    ENDWHILE.
+
+    " Edges last: an edge written inside a subgraph pulls its nodes into
+    " that subgraph and the nesting falls apart.
+    rv_mm = rv_mm && lv_edges.
+
+  ENDMETHOD.
+  METHOD analyze.
+
+    FIELD-SYMBOLS <lv_src> TYPE any.
+    DATA lt_stmt  TYPE tt_stmt.
+    DATA lt_block TYPE tt_block.
+    DATA lv_depth TYPE i.
+
+    LOOP AT it_source ASSIGNING <lv_src>.
+      APPEND INITIAL LINE TO rt_lines ASSIGNING FIELD-SYMBOL(<ls_line>).
+      <ls_line>-line = sy-tabix.
+      <ls_line>-text = <lv_src>.
+      " 'P' rather than a blank: a string template drops trailing blanks
+      <ls_line>-kind = 'P'.
+    ENDLOOP.
+
+    " One entry per statement, in program order — several statements can
+    " share a line ("IF x. y. ENDIF." written on one line).
+    LOOP AT it_kw INTO DATA(ls_kw).
+      CHECK ls_kw-line > 0 AND ls_kw-line <= lines( rt_lines ).
+      APPEND VALUE #( index = ls_kw-index
+                      line  = ls_kw-line
+                      word  = to_upper( ls_kw-name ) ) TO lt_stmt.
+    ENDLOOP.
+    SORT lt_stmt BY index.
+
+    " The line's own word is the first statement starting on it
+    LOOP AT lt_stmt INTO DATA(ls_first).
+      READ TABLE rt_lines ASSIGNING <ls_line> INDEX ls_first-line.
+      CHECK sy-subrc = 0.
+      IF <ls_line>-word IS INITIAL. <ls_line>-word = ls_first-word. ENDIF.
+    ENDLOOP.
+
+    CHECK io_scan IS BOUND.
+
+    " Blocks straight from the scanner
+    LOOP AT io_scan->structures INTO DATA(ls_struc).
+      READ TABLE lt_stmt INTO DATA(ls_sf) WITH KEY index = ls_struc-stmnt_from.
+      CHECK sy-subrc = 0.
+      READ TABLE lt_stmt INTO DATA(ls_st) WITH KEY index = ls_struc-stmnt_to.
+      CHECK sy-subrc = 0.
+      " KEY_START is a flag (domain BOOLEAN), not the keyword — the opening
+      " word comes from the statement itself, which also filters out the
+      " structures that are not blocks at all.
+      DATA(lv_key) = ls_sf-word.
+      CHECK closer_of( lv_key ) IS NOT INITIAL.
+      " A block on one line holds nothing to fold but is still a branch
+      IF ls_sf-line = ls_st-line.
+        READ TABLE rt_lines ASSIGNING <ls_line> INDEX ls_sf-line.
+        IF sy-subrc = 0 AND <ls_line>-kind = 'P'. <ls_line>-kind = 'S'. ENDIF.
+        CONTINUE.
+      ENDIF.
+      APPEND VALUE #( open = ls_sf-line close = ls_st-line word = lv_key ) TO lt_block.
+    ENDLOOP.
+
+    " Depth as a running sum over the blocks, plus the opener/closer marks
+    DATA lt_delta TYPE STANDARD TABLE OF i WITH EMPTY KEY.
+    DO lines( rt_lines ) TIMES.
+      APPEND 0 TO lt_delta.
+    ENDDO.
+    LOOP AT lt_block INTO DATA(ls_block).
+      READ TABLE rt_lines ASSIGNING <ls_line> INDEX ls_block-open.
+      IF sy-subrc = 0. <ls_line>-kind = 'O'. ENDIF.
+      READ TABLE rt_lines ASSIGNING <ls_line> INDEX ls_block-close.
+      IF sy-subrc = 0. <ls_line>-kind = 'C'. ENDIF.
+      READ TABLE lt_delta ASSIGNING FIELD-SYMBOL(<lv_d>) INDEX ls_block-open + 1.
+      IF sy-subrc = 0. <lv_d> = <lv_d> + 1. ENDIF.
+      READ TABLE lt_delta ASSIGNING <lv_d> INDEX ls_block-close.
+      IF sy-subrc = 0. <lv_d> = <lv_d> - 1. ENDIF.
+    ENDLOOP.
+
+    LOOP AT rt_lines ASSIGNING <ls_line>.
+      READ TABLE lt_delta INTO DATA(lv_step) INDEX sy-tabix.
+      IF sy-subrc = 0. lv_depth = lv_depth + lv_step. ENDIF.
+      IF lv_depth < 0. lv_depth = 0. ENDIF.
+      <ls_line>-depth = lv_depth.
+    ENDLOOP.
+
+    " Branches, attached to the block that encloses them
+    DATA lt_owner TYPE STANDARD TABLE OF string WITH EMPTY KEY.
+    LOOP AT rt_lines ASSIGNING <ls_line>.
+      DATA(lv_line_no) = sy-tabix.
+      LOOP AT lt_block INTO ls_block WHERE open = lv_line_no.
+        INSERT ls_block-word INTO lt_owner INDEX 1.
+      ENDLOOP.
+      LOOP AT lt_block INTO ls_block WHERE close = lv_line_no.
+        DELETE lt_owner INDEX 1.
+      ENDLOOP.
+
+      CHECK <ls_line>-kind = 'P'.
+      CHECK <ls_line>-word IS NOT INITIAL.
+      CHECK c_branches CS | { <ls_line>-word } |.
+      READ TABLE lt_owner INDEX 1 INTO DATA(lv_owner).
+      CHECK sy-subrc = 0.
+      " ELSEIF/ELSE belong to IF, WHEN to CASE, CATCH/CLEANUP to TRY
+      DATA(lv_ok) = xsdbool(
+        (    ( <ls_line>-word = 'ELSEIF' OR <ls_line>-word = 'ELSE' ) AND lv_owner = 'IF' )
+        OR ( <ls_line>-word = 'WHEN' AND lv_owner = 'CASE' )
+        OR ( ( <ls_line>-word = 'CATCH' OR <ls_line>-word = 'CLEANUP' ) AND lv_owner = 'TRY' ) ).
+      CHECK lv_ok = abap_true.
+      <ls_line>-kind  = 'B'.
+      <ls_line>-depth = <ls_line>-depth - 1.
+      IF <ls_line>-depth < 0. <ls_line>-depth = 0. ENDIF.
+    ENDLOOP.
+
+    " For every header, the segment ends before the next line at the same
+    " depth that is a branch or a closer.
+    LOOP AT rt_lines ASSIGNING <ls_line> WHERE kind = 'O' OR kind = 'B'.
+      DATA(lv_start) = sy-tabix.
+      DATA(lv_end)   = <ls_line>-line.
+      DATA(lv_from)  = lv_start + 1.
+      LOOP AT rt_lines ASSIGNING FIELD-SYMBOL(<ls_next>) FROM lv_from.
+        IF <ls_next>-depth <= <ls_line>-depth
+          AND ( <ls_next>-kind = 'B' OR <ls_next>-kind = 'C' ).
+          EXIT.
+        ENDIF.
+        lv_end = <ls_next>-line.
+      ENDLOOP.
+      <ls_line>-end = lv_end.
+    ENDLOOP.
+
+    " Openers also get the whole-block extent
+    LOOP AT rt_lines ASSIGNING <ls_line> WHERE kind = 'O'.
+      DATA(lv_ostart) = sy-tabix.
+      DATA(lv_ofrom)  = lv_ostart + 1.
+      LOOP AT rt_lines ASSIGNING <ls_next> FROM lv_ofrom.
+        IF <ls_next>-kind = 'C' AND <ls_next>-depth = <ls_line>-depth.
+          <ls_line>-all = <ls_next>-line - 1.
+          EXIT.
+        ENDIF.
+      ENDLOOP.
+      IF <ls_line>-all < <ls_line>-line. <ls_line>-all = <ls_line>-line. ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
+  METHOD closer_of.
+    CASE i_word.
+      WHEN 'IF'.      r_closer = 'ENDIF'.
+      WHEN 'CASE'.    r_closer = 'ENDCASE'.
+      WHEN 'LOOP'.    r_closer = 'ENDLOOP'.
+      WHEN 'DO'.      r_closer = 'ENDDO'.
+      WHEN 'WHILE'.   r_closer = 'ENDWHILE'.
+      WHEN 'TRY'.     r_closer = 'ENDTRY'.
+      WHEN 'METHOD'.  r_closer = 'ENDMETHOD'.
+      WHEN 'FORM'.    r_closer = 'ENDFORM'.
+      WHEN 'MODULE'.  r_closer = 'ENDMODULE'.
+      WHEN 'SELECT'.  r_closer = 'ENDSELECT'.
+      WHEN 'AT'.      r_closer = 'ENDAT'.
+      WHEN 'PROVIDE'. r_closer = 'ENDPROVIDE'.
+    ENDCASE.
+  ENDMETHOD.
+  METHOD scheme_label.
+    r_text = condense( i_text ).
+    " The diagram source passes through HTML twice, so angle brackets are
+    " read as tags: FIELD-SYMBOL(<WATCH>) loses everything from the '<' on.
+    " Entities do not survive either — they decode back on the second pass —
+    " so the brackets are replaced outright.
+    REPLACE ALL OCCURRENCES OF '<>' IN r_text WITH ' NE '.
+    REPLACE ALL OCCURRENCES OF '<=' IN r_text WITH ' LE '.
+    REPLACE ALL OCCURRENCES OF '>=' IN r_text WITH ' GE '.
+    REPLACE ALL OCCURRENCES OF '->' IN r_text WITH '.'.
+    REPLACE ALL OCCURRENCES OF '=>' IN r_text WITH '.'.
+    REPLACE ALL OCCURRENCES OF '<' IN r_text WITH '('.
+    REPLACE ALL OCCURRENCES OF '>' IN r_text WITH ')'.
+    " Characters that would end a mermaid node or its label
+    REPLACE ALL OCCURRENCES OF '"' IN r_text WITH c_apos.
+    REPLACE ALL OCCURRENCES OF '[' IN r_text WITH '('.
+    REPLACE ALL OCCURRENCES OF ']' IN r_text WITH ')'.
+    REPLACE ALL OCCURRENCES OF '{' IN r_text WITH '('.
+    REPLACE ALL OCCURRENCES OF '}' IN r_text WITH ')'.
+    REPLACE ALL OCCURRENCES OF '|' IN r_text WITH '/'.
+    REPLACE ALL OCCURRENCES OF ';' IN r_text WITH ' '.
+    IF strlen( r_text ) > 80.
+      r_text = |{ r_text(77) }...|.
+    ENDIF.
+  ENDMETHOD.
+
+ENDCLASS.
+
 CLASS zcl_smd_appl IMPLEMENTATION.
 
   METHOD init_icons_table.
@@ -8618,8 +8492,8 @@ ENDCLASS.                    "lcl_debugger_script IMPLEMENTATION
 
 ****************************************************
 INTERFACE lif_abapmerge_marker.
-* abapmerge 0.16.7 - 2026-07-15T14:46:21.488Z
-  CONSTANTS c_merge_timestamp TYPE string VALUE `2026-07-15T14:46:21.488Z`.
+* abapmerge 0.16.7 - 2026-07-21T11:14:08.526Z
+  CONSTANTS c_merge_timestamp TYPE string VALUE `2026-07-21T11:14:08.526Z`.
   CONSTANTS c_abapmerge_version TYPE string VALUE `0.16.7`.
 ENDINTERFACE.
 ****************************************************
