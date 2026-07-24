@@ -81,10 +81,12 @@ def fix_order(path):
 
     event_re = re.compile(r"FOR\s+EVENT\s+\S+\s+OF\s+(\w+)", re.IGNORECASE)
     type_ref_re = re.compile(r"TYPE\s+(\w+)\s*=>", re.IGNORECASE)
+    inherit_re = re.compile(r"INHERITING\s+FROM\s+(\w+)", re.IGNORECASE)
 
     def dependencies_of(block_name, body):
         deps = set(m.lower() for m in event_re.findall(body))
         deps |= set(m.lower() for m in type_ref_re.findall(body))
+        deps |= set(m.lower() for m in inherit_re.findall(body))
         deps.discard(block_name)  # a class referencing its own type is not a dependency
         return deps
 

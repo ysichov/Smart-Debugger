@@ -15,6 +15,8 @@ CLASS zcl_smd_mermaid DEFINITION PUBLIC INHERITING FROM zcl_smd_popup CREATE PUB
                                    i_type      TYPE string,
 
       steps_flow IMPORTING i_direction TYPE ui_func OPTIONAL,
+      refresh,
+      hnd_live_close FOR EVENT close OF cl_gui_dialogbox_container,
       magic_search IMPORTING i_direction TYPE ui_func OPTIONAL,
       code_execution_scanner,
       parse_call IMPORTING i_program TYPE program i_index TYPE i i_stack TYPE i i_event TYPE string,
@@ -37,15 +39,33 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
 
     CHECK zcl_smd_appl=>is_mermaid_active = abap_true.
 
+    DATA: lv_width TYPE i VALUE 1000,
+          lv_hight TYPE i VALUE 300.
+
     CASE mv_type.
       WHEN 'DIAG'.
         text = 'Calls flow'.
       WHEN 'SMART'.
         text = 'Calculations sequence'.
+      WHEN 'LIVE'.
+        DATA lv_parts TYPE TABLE OF string.
+        DATA(ls) = mo_debugger->ms_stack.
+        DATA lv_loc TYPE string.
+        IF ls-eventtype = 'METHOD'.
+          SPLIT ls-program AT '=' INTO TABLE lv_parts.
+          lv_loc = |{ lv_parts[ 1 ] }->{ ls-eventname }|.
+        ELSEIF ls-eventtype = 'FUNCTION'.
+          lv_loc = |FUNCTION { ls-eventname }|.
+        ELSE.
+          lv_loc = |{ ls-program }:{ ls-eventname }|.
+        ENDIF.
+        text = |Live calls graph - step { mo_debugger->m_step }, stack { ls-stacklevel }, { lv_loc }|.
+        lv_width = 1200.
+        lv_hight = 600.
     ENDCASE.
 
     IF mo_box IS INITIAL.
-      mo_box = create( i_name = text i_width = 1000 i_hight = 300 ).
+      mo_box = create( i_name = text i_width = lv_width i_hight = lv_hight ).
       "save new popup ref
       APPEND INITIAL LINE TO zcl_smd_appl=>mt_popups ASSIGNING FIELD-SYMBOL(<popup>).
       <popup>-parent = mo_debugger->mo_window->mo_box.
@@ -91,8 +111,27 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
         steps_flow( ).
       WHEN 'SMART'.
         magic_search( ).
+      WHEN 'LIVE'.
+        "own close handler so the debugger can drop its persistent reference
+        SET HANDLER me->hnd_live_close FOR mo_box.
+        steps_flow( ).
     ENDCASE.
 
+  ENDMETHOD.
+
+  METHOD refresh.
+    "re-render the live graph from the current step trace (frame changed)
+    CHECK mo_box IS NOT INITIAL.
+    steps_flow( ).
+  ENDMETHOD.
+
+  METHOD hnd_live_close.
+    "user closed the live-graph window: drop the debugger's reference so the
+    "next long F6/F8 run recreates it instead of refreshing a freed control
+    CLEAR mo_box.
+    IF mo_debugger IS BOUND.
+      CLEAR mo_debugger->mo_live_graph.
+    ENDIF.
   ENDMETHOD.
 
   METHOD steps_flow.
@@ -120,6 +159,18 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
 
     DATA(copy) = mo_debugger->mt_steps.
 
+    "LIVE graph: skip standard SAP classes / function modules - we step straight
+    "out of them (F7), so they only clutter the call graph with transient nodes
+    IF mv_type = 'LIVE'.
+      DATA lt_keep LIKE copy.
+      LOOP AT copy INTO DATA(cstep).
+        IF mo_debugger->is_z_or_custom_code( cstep-program ) = abap_true.
+          APPEND cstep TO lt_keep.
+        ENDIF.
+      ENDLOOP.
+      copy = lt_keep.
+    ENDIF.
+
     LOOP AT copy ASSIGNING FIELD-SYMBOL(<copy>).
       IF <copy>-eventtype = 'METHOD'.
         SPLIT <copy>-program AT '=' INTO TABLE parts.
@@ -143,26 +194,80 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
       mm_string = |graph { i_direction }\n |.
     ENDIF.
 
-    LOOP AT copy INTO DATA(step2).
-      IF step IS INITIAL.
-        step = step2.
-        CONTINUE.
-      ENDIF.
-      IF step2-stacklevel > step-stacklevel.
+    "build call edges via a real frame stack so an edge is only drawn from the
+    "actual parent frame (one level up); this avoids the spurious "back" arrows
+    "that appear when the textually-previous step is a sibling that already
+    "returned (especially after standard-code frames were filtered out)
+    TYPES: BEGIN OF lty_frame,
+             level TYPE i,
+             name  TYPE string,
+           END OF lty_frame.
+    DATA: lt_frame TYPE TABLE OF lty_frame,
+          ls_frame TYPE lty_frame,
+          ls_top   TYPE lty_frame.
 
-        READ TABLE entities WITH KEY name = step-eventname TRANSPORTING NO FIELDS.
+    LOOP AT copy INTO DATA(step2).
+      DATA(lv_lvl) = step2-stacklevel.
+
+      "drop frames that have already returned (deeper than the current level)
+      DELETE lt_frame WHERE level > lv_lvl.
+
+      READ TABLE lt_frame INDEX lines( lt_frame ) INTO ls_top.
+      IF sy-subrc = 0 AND ls_top-level = lv_lvl AND ls_top-name = step2-eventname.
+        CONTINUE. "same frame, just another statement - no new edge
+      ENDIF.
+
+      "a different frame now occupies this level: drop the stale sibling first
+      IF sy-subrc = 0 AND ls_top-level = lv_lvl.
+        DELETE lt_frame INDEX lines( lt_frame ).
+      ENDIF.
+
+      "caller = whatever frame is now on top (the real parent, one level up)
+      READ TABLE lt_frame INDEX lines( lt_frame ) INTO DATA(ls_caller).
+      IF sy-subrc = 0.
+        READ TABLE entities WITH KEY name = ls_caller-name TRANSPORTING NO FIELDS.
         ind-from = sy-tabix.
         READ TABLE entities WITH KEY name = step2-eventname TRANSPORTING NO FIELDS.
         ind-to = sy-tabix.
         READ TABLE indexes WITH KEY from = ind-from to = ind-to TRANSPORTING NO FIELDS.
-        IF sy-subrc <> 0.
-          mm_string = |{ mm_string }{ ind-from }({ step-eventname }) --> { ind-to }({ step2-eventname })\n|.
+        "skip self-loops (same node id on both ends - e.g. recursion or a name
+        "collision) and already-drawn edges
+        IF sy-subrc <> 0 AND ind-from <> ind-to.
+          mm_string = |{ mm_string }{ ind-from }({ ls_caller-name }) --> { ind-to }({ step2-eventname })\n|.
           APPEND ind TO indexes.
         ENDIF.
       ENDIF.
-      step = step2.
+
+      "push the newly entered frame
+      ls_frame-level = lv_lvl.
+      ls_frame-name  = step2-eventname.
+      APPEND ls_frame TO lt_frame.
     ENDLOOP.
     mm_string = |{  mm_string }\n|.
+
+    "LIVE mode: header with live counters + green "active" node. The window
+    "caption is not redrawn mid-run (only the mermaid HTML refreshes), so the
+    "step/stack are shown as a header node inside the graph.
+    IF mv_type = 'LIVE'.
+      DATA(cs) = mo_debugger->ms_stack.
+
+      "header node with the live step counter (id 'hdr' never collides with the
+      "numeric node ids used for the call nodes)
+      mm_string = |{ mm_string }hdr["Step { mo_debugger->m_step } &#124; stack { cs-stacklevel }"]\n|.
+      mm_string = |{ mm_string }classDef hdrcls fill:#fff3cd,stroke:#856404,color:#000\n|.
+      mm_string = |{ mm_string }class hdr hdrcls\n|.
+
+      "green = the most recent custom-code frame that is actually drawn; the
+      "true stack top may be standard code, which is filtered out of the graph
+      READ TABLE copy INDEX lines( copy ) INTO DATA(last_step).
+      IF sy-subrc = 0.
+        READ TABLE entities WITH KEY name = last_step-eventname TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0.
+          mm_string = |{ mm_string }classDef active fill:#4caf50,stroke:#2e7d32,color:#fff\n|.
+          mm_string = |{ mm_string }class { sy-tabix } active\n|.
+        ENDIF.
+      ENDIF.
+    ENDIF.
 
     open_mermaid( mm_string ).
 
@@ -316,10 +421,21 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
   METHOD add_toolbar_buttons.
 
     DATA: button TYPE ttb_button,
+          steps  TYPE ttb_button,
           events TYPE cntl_simple_events,
           event  LIKE LINE OF events.
 
+    "Live-debug window drives the debugger itself with a single auto-run button:
+    "it single-steps (F5 into Z/custom code, F7 out of standard code), stops at
+    "breakpoints, and refreshes this graph on every stack change (see live_run)
+    IF mv_type = 'LIVE'.
+      steps = VALUE #(
+       ( function = 'LIVERUN' icon = CONV #( icon_execute_object ) quickinfo = 'Run and trace calls (stops at breakpoints)' text = 'Run' )
+       ( butn_type = 3  ) ).
+    ENDIF.
+
     button  = VALUE #(
+     ( LINES OF steps )
      ( function = 'TD' icon = CONV #( icon_view_expand_vertical ) quickinfo = 'Vertical' text = '' )
      ( function = 'LR' icon = CONV #( icon_view_expand_horizontal ) quickinfo = 'Horizontal' text = '' )
      ( butn_type = 3  )
@@ -340,6 +456,12 @@ CLASS zcl_smd_mermaid IMPLEMENTATION.
 
   METHOD hnd_toolbar.
 
+    "auto-run button of the live-debug window: trace calls, refreshing the graph
+    "on every stack change, until a breakpoint or the end of the program
+    IF fcode = 'LIVERUN'.
+      mo_debugger->live_run( ).
+      RETURN.
+    ENDIF.
 
     IF fcode = 'TEXT'.
       DATA: mm_string TYPE string,

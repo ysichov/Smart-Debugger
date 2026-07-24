@@ -346,8 +346,7 @@ CLASS zcl_smd_code_scheme IMPLEMENTATION.
     " Edges last: an edge written inside a subgraph pulls its nodes into
     " that subgraph and the nesting falls apart.
     IF lv_styles IS NOT INITIAL.
-      rv_mm = rv_mm && |classDef tryblk fill:#eaf6ea,stroke:#2e7d32,color:#000
-| && lv_styles.
+      rv_mm = rv_mm && |classDef tryblk fill:#eaf6ea,stroke:#2e7d32,color:#000\n| && lv_styles.
     ENDIF.
     rv_mm = rv_mm && lv_edges.
 

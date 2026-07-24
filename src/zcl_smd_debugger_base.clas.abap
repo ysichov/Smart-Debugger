@@ -49,6 +49,10 @@ CLASS zcl_smd_debugger_base DEFINITION PUBLIC ABSTRACT INHERITING FROM cl_tpda_s
           mv_stack_changed  TYPE xfeld,
           m_variable        TYPE REF TO data,
           m_quick           TYPE tpda_scr_quick_info,
+          mo_live_graph        TYPE REF TO zcl_smd_mermaid, "live calls-flow graph popup
+          mv_suppress_stack    TYPE xfeld, "skip the bottom stack ALV refresh during a multi-step run
+          m_action_start_step  TYPE i, "m_step captured when an F6/F8 command starts
+          m_action_start_stack TYPE i, "stack level captured when an F6/F8 command starts
           mr_statements     TYPE RANGE OF string.
 
     METHODS:
@@ -83,7 +87,15 @@ CLASS zcl_smd_debugger_base DEFINITION PUBLIC ABSTRACT INHERITING FROM cl_tpda_s
                                          i_quick           TYPE tpda_scr_quick_info
                                          i_parent          TYPE string OPTIONAL
                                RETURNING VALUE(e_root_key) TYPE salv_de_node_key,
-      show_step.
+      show_step,
+      "Auto-open/refresh the live calls-flow graph after a long F6/F8 run.
+      maybe_show_live_graph,
+      "Every 1000 executed operations, ask the user whether to keep running.
+      "Returns X when the user chose to stop here.
+      checkpoint_1000 IMPORTING i_ops TYPE i RETURNING VALUE(r_stop) TYPE xfeld,
+      "Live-debug auto-run: single-step (dive into Z, step out of standard),
+      "refresh the calls graph on each stack change, stop at breakpoints/end.
+      live_run.
 
   PRIVATE SECTION.
 
@@ -1705,7 +1717,18 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
       stop = abap_true.
     ENDIF.
 
-    IF m_counter MOD 10000 = 0.
+    "visualization: when the VIS button is on, follow execution with only a
+    "LIGHT per-step update - move the code view to the current line. The full
+    "show_step (variables, cl_salv_tree, stack ALV, live graph) must NOT run on
+    "every step: during a continuous run it is far too slow and, worse, mutating
+    "the debugger's own GUI controls while the debuggee is creating GUI controls
+    "(CREATE OBJECT cl_gui_*) deadlocks the frontend -> the "hang" on F8.
+    IF mo_window->m_visualization IS NOT INITIAL.
+      cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
+      mo_window->set_program( mo_window->m_prg-include ).
+      mo_window->set_program_line( mo_window->m_prg-line ).
+      cl_gui_cfw=>flush( ).
+    ELSEIF m_counter MOD 10000 = 0.
       show_step( ).
     ENDIF.
 
@@ -1756,12 +1779,18 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
 
   METHOD make_step.
 
-    DATA: stop TYPE xfeld.
+    DATA: stop    TYPE xfeld,
+          lv_ops  TYPE i.
 
     READ TABLE mo_window->mt_stack INDEX 1 INTO DATA(stack).
     IF mo_window->m_debug_button = 'F6' AND mo_window->m_history IS NOT INITIAL.
       m_f6_level = stack-stacklevel.
     ENDIF.
+
+    "suppress the bottom stack ALV refresh while stepping through the run;
+    "it is refreshed once at the final stop below (avoids per-step ALV redraw
+    "slowness, especially on F8 which single-steps to record history)
+    mv_suppress_stack = abap_true.
 
     WHILE stop IS INITIAL.
 
@@ -1800,7 +1829,15 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
       stop = hndl_script_buttons( mv_stack_changed ).
       READ TABLE mo_window->mt_stack INDEX 1 INTO stack.
 
+      "long uninterrupted runs (F6/F8) can spin through huge numbers of
+      "statements; every 1000 operations pause and ask whether to keep going
+      ADD 1 TO lv_ops.
+      IF stop IS INITIAL AND lv_ops MOD 1000 = 0.
+        stop = checkpoint_1000( lv_ops ).
+      ENDIF.
+
     ENDWHILE.
+    CLEAR mv_suppress_stack. "final stop: allow the stack ALV to refresh once
     show_step( ).
     me->break( ).
 
@@ -1815,18 +1852,155 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
 
   METHOD show_step.
 
-    show_variables( CHANGING it_var = mt_state ).
-    set_selected_vars( ).
+    "when the Vars History (VARHIST) button is off, do not touch the variable
+    "trees at all - neither recompute them nor refresh the cl_salv_tree controls
+    IF mo_window->m_varhist IS NOT INITIAL.
+      show_variables( CHANGING it_var = mt_state ).
+      set_selected_vars( ).
+    ENDIF.
     mo_window->set_program( mo_window->m_prg-include ).
     mo_window->set_program_line( mo_window->m_prg-line ).
     mo_window->show_stack( ).
-    mo_tree_imp->display( ).
-    mo_tree_local->display( ).
-    mo_tree_exp->display( ).
+    IF mo_window->m_varhist IS NOT INITIAL.
+      mo_tree_imp->display( ).
+      mo_tree_local->display( ).
+      mo_tree_exp->display( ).
+    ENDIF.
     IF mo_window->m_debug_button NE 'F5'.
       mo_window->m_show_step = abap_true.
     ENDIF.
     mo_window->raise_navigated( ). "let open table popups refresh their content
+    maybe_show_live_graph( ).
+
+  ENDMETHOD.
+
+  METHOD maybe_show_live_graph.
+    " F6 (step over) / F8 (continue) can run through thousands of statements in
+    " one click, so the source view alone hides what actually executed. When such
+    " a run covered many steps and the call stack changed, surface (or refresh)
+    " the live calls-flow graph so the user can see the dynamics as a graph.
+    CHECK zcl_smd_appl=>is_mermaid_active = abap_true.
+
+    "window already open (opened via the Live Debug button): keep it live on
+    "every stop, regardless of how far this step went
+    IF mo_live_graph IS NOT INITIAL.
+      mo_live_graph->refresh( ).
+      RETURN.
+    ENDIF.
+
+    "not open: auto-surface it after a long F6/F8 run that changed the frame
+    CHECK mo_window->m_debug_button = 'F6' OR mo_window->m_debug_button = 'F8'.
+    CHECK mo_window->m_direction IS INITIAL. "forward execution only, not history replay
+    CHECK m_step - m_action_start_step > 10.
+    CHECK ms_stack-stacklevel <> m_action_start_stack.
+
+    "constructor renders the first graph; on box close the handler nulls the ref
+    mo_live_graph = NEW zcl_smd_mermaid( io_debugger = me i_type = 'LIVE' ).
+  ENDMETHOD.
+
+  METHOD live_run.
+
+    DATA: stop        TYPE xfeld,
+          prev_stack  TYPE i,
+          guard       TYPE i.
+
+    "force "dive into Z only" behaviour so f5() steps into custom code and
+    "steps out of standard code; restore the user's setting afterwards
+    DATA(save_zcode) = mo_window->m_zcode.
+    mo_window->m_zcode = 'X'.
+    mo_window->m_debug_button = 'F5'.
+
+    prev_stack  = ms_stack-stacklevel.
+
+    WHILE stop IS INITIAL.
+      f5( ).          "advance one logical step (dive Z / step out standard)
+
+      "f5 sets is_step only when debug_step actually advanced; if it stays
+      "initial the debugger raised (end of program) - stop without recording
+      IF is_step IS INITIAL.
+        stop = abap_true.
+        EXIT.
+      ENDIF.
+
+      run_script( ).  "read the new position/stack and record the step
+
+      ADD 1 TO guard.
+
+      "stop when we land on a user breakpoint
+      READ TABLE mo_window->mt_breaks
+        WITH KEY inclnamesrc = mo_window->m_prg-include
+                 linesrc     = mo_window->m_prg-line TRANSPORTING NO FIELDS.
+      IF sy-subrc = 0.
+        stop = abap_true.
+      ENDIF.
+
+      "refresh only when the stack DEEPENED since the previous step - that is
+      "the only moment a new call node/edge can appear. Returns and further
+      "statements in the same frame add nothing, so we skip the (expensive)
+      "mermaid re-render for them. prev_stack is tracked every step so a call
+      "after a return is still detected.
+      IF mo_live_graph IS NOT INITIAL AND ms_stack-stacklevel > prev_stack.
+        mo_live_graph->refresh( ).
+        cl_gui_cfw=>flush( ).
+      ENDIF.
+      prev_stack = ms_stack-stacklevel.
+
+      "hard guard against a runaway trace
+      IF guard >= 100000.
+        stop = abap_true.
+      ENDIF.
+    ENDWHILE.
+
+    mo_window->m_zcode = save_zcode.
+    show_step( ).
+    me->break( ).
+
+  ENDMETHOD.
+
+  METHOD checkpoint_1000.
+
+    DATA: lv_answer TYPE c LENGTH 1,
+          lv_q      TYPE string,
+          lv_title  TYPE char70,
+          lv_loc    TYPE string,
+          lv_parts  TYPE TABLE OF string.
+
+    READ TABLE mo_window->mt_stack INDEX 1 INTO DATA(stack).
+
+    "current class->method (or program:event) for the title/question
+    IF stack-eventtype = 'METHOD'.
+      SPLIT stack-program AT '=' INTO TABLE lv_parts.
+      lv_loc = |{ lv_parts[ 1 ] }->{ stack-eventname }|.
+    ELSEIF stack-eventtype = 'FUNCTION'.
+      lv_loc = |FUNCTION { stack-eventname }|.
+    ELSE.
+      lv_loc = |{ stack-program }:{ stack-eventname }|.
+    ENDIF.
+
+    lv_title = |step { m_step }, stack { stack-stacklevel }, { lv_loc }|.
+
+    lv_q = |Executed { i_ops } operations.\n|
+        && |Now in { lv_loc }, line { mo_window->m_prg-line } (stack level { stack-stacklevel }).\n|
+        && |Continue running?|.
+
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        titlebar              = lv_title
+        text_question         = lv_q
+        text_button_1         = 'Continue'
+        text_button_2         = 'Stop here'
+        default_button        = '1'
+        display_cancel_button = space
+      IMPORTING
+        answer                = lv_answer
+      EXCEPTIONS
+        text_not_found        = 1
+        OTHERS                = 2.
+
+    "anything other than an explicit "Continue" stops the run at the current line
+    IF sy-subrc = 0 AND lv_answer <> '1'.
+      r_stop = abap_true.
+    ENDIF.
 
   ENDMETHOD.
 

@@ -362,9 +362,9 @@ CLASS zcl_smd_window IMPLEMENTATION.
           event  LIKE LINE OF events.
 
     button  = VALUE #(
-     "( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization switch' text = 'Visualization OFF' )
-     "( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'Stack History switch' text = 'History On' )
-     "( function = 'VARHIST' icon = CONV #( icon_graduate ) quickinfo = 'Variables History switch' text = 'Vars History On' )
+     ( function = 'VIS'  icon = CONV #( icon_flight ) quickinfo = 'Visualization switch' text = 'Visualization OFF' )
+     ( function = 'HIST' icon = CONV #( icon_graduate ) quickinfo = 'Stack History switch' text = 'History On' )
+     ( function = 'VARHIST' icon = CONV #( icon_graduate ) quickinfo = 'Variables History switch' text = 'Vars History On' )
      ( function = 'AI' icon = CONV #( icon_wizard ) quickinfo = 'AI debugger agent' text = 'AI' )
      ( function = 'AI_LOG' icon = CONV #( icon_list ) quickinfo = 'AI call/action log' text = 'AI Log' )
      ( butn_type = 3  )
@@ -380,6 +380,8 @@ CLASS zcl_smd_window IMPLEMENTATION.
      ( butn_type = 3  )
      ( COND #( WHEN zcl_smd_appl=>is_mermaid_active = abap_true
       THEN VALUE #( function = 'DIAGRAM' icon = CONV #( icon_workflow_process ) quickinfo = ' Calls Flow' text = 'Diagram' ) ) )
+     ( COND #( WHEN zcl_smd_appl=>is_mermaid_active = abap_true
+      THEN VALUE #( function = 'LIVEDBG' icon = CONV #( icon_workflow_process ) quickinfo = 'Live debug with calls graph' text = 'Live Debug' ) ) )
      ( function = 'SMART' icon = CONV #( icon_wizard ) quickinfo = 'Calculations sequence' text = 'Calculations Flow' )
      ( function = 'COVERAGE' icon = CONV #( icon_wizard ) quickinfo = 'Coverage ' text = 'Coverage' )
      ( butn_type = 3  )
@@ -896,7 +898,11 @@ CLASS zcl_smd_window IMPLEMENTATION.
 
       mo_salv_stack->display( ).
     ELSE.
-      mo_salv_stack->refresh( ).
+      "skip the per-step refresh while a multi-step run is in progress (F8 etc.);
+      "make_step clears the flag and refreshes once at the final stop
+      IF mo_debugger->mv_suppress_stack IS INITIAL.
+        mo_salv_stack->refresh( ).
+      ENDIF.
     ENDIF.
 
   ENDMETHOD.
@@ -1001,6 +1007,12 @@ CLASS zcl_smd_window IMPLEMENTATION.
     FIELD-SYMBOLS: <any> TYPE any.
     m_debug_button = fcode.
     READ TABLE mt_stack INDEX 1 INTO DATA(stack).
+    "snapshot step counter / stack at command start so the debugger can tell
+    "how far an F6/F8 run went and whether the frame changed (live calls graph)
+    IF fcode = 'F6' OR fcode = 'F8'.
+      mo_debugger->m_action_start_step  = mo_debugger->m_step.
+      mo_debugger->m_action_start_stack = stack-stacklevel.
+    ENDIF.
     CASE fcode.
 
 *      WHEN 'AI'.
@@ -1082,6 +1094,13 @@ CLASS zcl_smd_window IMPLEMENTATION.
 
       WHEN 'DIAGRAM'.
         DATA(o_mermaid) = NEW zcl_smd_mermaid( io_debugger = mo_debugger i_type =  'DIAG' ).
+
+      WHEN 'LIVEDBG'.
+        "pre-draw the live-debug window (own F5/6/7/8 buttons + calls graph);
+        "it then refreshes itself on every stop via maybe_show_live_graph
+        IF mo_debugger->mo_live_graph IS INITIAL.
+          mo_debugger->mo_live_graph = NEW zcl_smd_mermaid( io_debugger = mo_debugger i_type = 'LIVE' ).
+        ENDIF.
 
       WHEN 'SMART'.
         o_mermaid = NEW zcl_smd_mermaid( io_debugger = mo_debugger i_type =  'SMART' ).
