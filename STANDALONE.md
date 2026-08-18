@@ -51,14 +51,25 @@ abapmerge --version
 ## What Gets Merged
 
 The standalone program combines:
-- `z_smart_debugger.prog.abap` (main entry point)
-- All `zcl_smd_*.clas.abap` classes
+- `z_smart_debugger.prog.abap` (main entry point, renamed to `z_smart_debugger_script.prog.abap`
+  during the build so abapmerge matches its `REPORT z_smart_debugger_script.` statement)
+- All remaining `zcl_smd_*.clas.abap` classes
 - All interfaces and helper classes
 
 **Excluded:**
+- `zcl_smd_ai_agent` and `zcl_smd_aitool_breakpoint` — they depend on ~40 classes of the separate
+  ABAP-AI-Code repo. The AI wiring inside `zcl_smd_window` is stripped from the working copy by
+  `strip_ai_support.py`, so the merged program still compiles. **The standalone build has no AI support.**
 - `z_smart_debugger_standalone.prog.abap` itself
 - Documentation files
 - Test/example programs
+
+**Also patched during the build:**
+- The `clear_line_markers` call is removed — `cl_gui_abapedit` does not have it on 7.50
+- Classes are reordered by cross-references (`fix_class_ref_order.py`); abapmerge only orders by
+  `INHERITING FROM`
+
+Only the working copy under `/c/soft/GitHub/src` is touched — the repository files keep full AI support.
 
 ## Output
 
@@ -74,12 +85,14 @@ After generation:
 2. Header comments from `z_smart_debugger.prog.abap` should be preserved
 3. All class content should be concatenated in dependency order
 
-To verify class dependencies were resolved:
+To verify all classes were merged, count the implementation blocks (case-insensitive — some class
+files are serialized in lower case):
 ```bash
-grep -c "^CLASS zcl_smd" src/z_smart_debugger_standalone.prog.abap
+grep -cEi "^class +zcl_smd_[a-z_]+ +implementation" src/z_smart_debugger_standalone.prog.abap
 ```
 
-Should equal the number of classes in `src/zcl_smd_*.clas.abap`.
+Should equal the number of `src/zcl_smd_*.clas.abap` files **minus the two AI classes** that the
+build excludes (currently 17).
 
 ## Troubleshooting
 

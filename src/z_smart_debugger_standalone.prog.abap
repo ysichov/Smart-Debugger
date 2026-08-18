@@ -624,6 +624,8 @@ CLASS zcl_smd_debugger_base DEFINITION ABSTRACT INHERITING FROM cl_tpda_script_c
           m_quick           TYPE tpda_scr_quick_info,
           mo_live_graph        TYPE REF TO zcl_smd_mermaid, "live calls-flow graph popup
           mv_suppress_stack    TYPE xfeld, "skip the bottom stack ALV refresh during a multi-step run
+          mv_vis_include       TYPE program, "include currently loaded in the code viewer during a visualization run
+          mv_live_running      TYPE xfeld, "live_run auto-trace in progress - keep the main window untouched, only the graph updates
           m_action_start_step  TYPE i, "m_step captured when an F6/F8 command starts
           m_action_start_stack TYPE i, "stack level captured when an F6/F8 command starts
           mr_statements     TYPE RANGE OF string.
@@ -6998,17 +7000,23 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-    IF mo_tree_local->m_syst IS NOT INITIAL.
-      transfer_variable( EXPORTING i_name = 'SYST' i_type = 'SYST' ).
-    ELSE.
-      DELETE mo_tree_local->mt_vars WHERE leaf = 'SYST'.
-      DELETE mt_state WHERE leaf = 'SYST'.
-    ENDIF.
+    "SYST / LDB variable snapshots are also heavy transfer_variable calls -
+    "skip them too when Vars History is off, so the run does no per-step
+    "variable value computation at all (this is the residual cost that made
+    "the visualization run slow even with history switched off)
+    IF mo_window->m_varhist IS NOT INITIAL.
+      IF mo_tree_local->m_syst IS NOT INITIAL.
+        transfer_variable( EXPORTING i_name = 'SYST' i_type = 'SYST' ).
+      ELSE.
+        DELETE mo_tree_local->mt_vars WHERE leaf = 'SYST'.
+        DELETE mt_state WHERE leaf = 'SYST'.
+      ENDIF.
 
-    IF mo_tree_local->m_ldb IS NOT INITIAL.
-      LOOP AT globals INTO global WHERE parisval = 'L'.
-        transfer_variable( EXPORTING i_name = global-name i_type = 'LDB' ).
-      ENDLOOP.
+      IF mo_tree_local->m_ldb IS NOT INITIAL.
+        LOOP AT globals INTO global WHERE parisval = 'L'.
+          transfer_variable( EXPORTING i_name = global-name i_type = 'LDB' ).
+        ENDLOOP.
+      ENDIF.
     ENDIF.
 
     LOOP AT mt_state ASSIGNING FIELD-SYMBOL(<state>).
@@ -7348,10 +7356,19 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
     "(CREATE OBJECT cl_gui_*) deadlocks the frontend -> the "hang" on F8.
     IF mo_window->m_visualization IS NOT INITIAL.
       cl_tpda_script_abapdescr=>get_abap_src_info( IMPORTING p_prg_info = mo_window->m_prg ).
-      mo_window->set_program( mo_window->m_prg-include ).
+      "reload the whole source into the editor (SET_TEXT) ONLY when the include
+      "changed - doing it every step was the ST12 hot spot; within the same
+      "include just move the current line. No explicit cl_gui_cfw=>flush: the
+      "per-step frontend roundtrip it forced was 94% of the runtime.
+      IF mo_window->m_prg-include <> mv_vis_include.
+        mo_window->set_program( mo_window->m_prg-include ).
+        mv_vis_include = mo_window->m_prg-include.
+      ENDIF.
       mo_window->set_program_line( mo_window->m_prg-line ).
-      cl_gui_cfw=>flush( ).
-    ELSEIF m_counter MOD 10000 = 0.
+    ELSEIF m_counter MOD 10000 = 0 AND mv_live_running IS INITIAL.
+      "periodic full refresh - but NOT during a live_run: there the graph is the
+      "visualization and the main window (variables, trees, stack ALV) must stay
+      "untouched until the run stops
       show_step( ).
     ENDIF.
 
@@ -7439,12 +7456,11 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
           IF mo_window->m_history IS INITIAL.
             stop = f8( ).
           ELSE.
-
-            IF stack-stacklevel = mo_window->m_start_stack + mo_window->m_hist_depth.
-              stop = f6( ).
-            ELSE.
-              stop = f5( ).
-            ENDIF.
+            "always dive with F5 (which itself steps OUT of standard code via
+            "F7 only). The former depth cap did F6 (step over) beyond
+            "m_hist_depth, which stepped over - and thus dropped - Z methods
+            "deeper than the limit, leaving gaps in the call graph.
+            stop = f5( ).
           ENDIF.
 
       ENDCASE.
@@ -7524,7 +7540,7 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
   METHOD live_run.
 
     DATA: stop        TYPE xfeld,
-          prev_stack  TYPE i,
+          lv_last_key TYPE string,
           guard       TYPE i.
 
     "force "dive into Z only" behaviour so f5() steps into custom code and
@@ -7532,8 +7548,7 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
     DATA(save_zcode) = mo_window->m_zcode.
     mo_window->m_zcode = 'X'.
     mo_window->m_debug_button = 'F5'.
-
-    prev_stack  = ms_stack-stacklevel.
+    mv_live_running = abap_true. "keep the main window quiet during the trace
 
     WHILE stop IS INITIAL.
       f5( ).          "advance one logical step (dive Z / step out standard)
@@ -7557,16 +7572,19 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
         stop = abap_true.
       ENDIF.
 
-      "refresh only when the stack DEEPENED since the previous step - that is
-      "the only moment a new call node/edge can appear. Returns and further
-      "statements in the same frame add nothing, so we skip the (expensive)
-      "mermaid re-render for them. prev_stack is tracked every step so a call
-      "after a return is still detected.
-      IF mo_live_graph IS NOT INITIAL AND ms_stack-stacklevel > prev_stack.
-        mo_live_graph->refresh( ).
-        cl_gui_cfw=>flush( ).
+      "refresh only when the CURRENT Z/custom method changes (the graph's green
+      "active node). Wandering inside the same method, or in/through standard
+      "code (filtered out of the graph), leaves the active node unchanged - so
+      "we skip those refreshes/flushes. Entering a new method or returning to a
+      "different one changes the key and updates the graph.
+      IF mo_live_graph IS NOT INITIAL AND is_z_or_custom_code( ms_stack-program ) = abap_true.
+        DATA(lv_key) = |{ ms_stack-program }\|{ ms_stack-eventtype }\|{ ms_stack-eventname }|.
+        IF lv_key <> lv_last_key.
+          mo_live_graph->refresh( ).
+          cl_gui_cfw=>flush( ).
+          lv_last_key = lv_key.
+        ENDIF.
       ENDIF.
-      prev_stack = ms_stack-stacklevel.
 
       "hard guard against a runaway trace
       IF guard >= 100000.
@@ -7575,6 +7593,7 @@ CLASS zcl_smd_debugger_base IMPLEMENTATION.
     ENDWHILE.
 
     mo_window->m_zcode = save_zcode.
+    CLEAR mv_live_running. "run finished - allow the final full refresh
     show_step( ).
     me->break( ).
 
@@ -8989,8 +9008,8 @@ ENDCLASS.                    "lcl_debugger_script IMPLEMENTATION
 
 ****************************************************
 INTERFACE lif_abapmerge_marker.
-* abapmerge 0.16.7 - 2026-07-24T16:12:05.301Z
-  CONSTANTS c_merge_timestamp TYPE string VALUE `2026-07-24T16:12:05.301Z`.
+* abapmerge 0.16.7 - 2026-07-24T17:15:36.938Z
+  CONSTANTS c_merge_timestamp TYPE string VALUE `2026-07-24T17:15:36.938Z`.
   CONSTANTS c_abapmerge_version TYPE string VALUE `0.16.7`.
 ENDINTERFACE.
 ****************************************************
